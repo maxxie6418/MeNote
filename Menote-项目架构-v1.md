@@ -1,0 +1,715 @@
+# Menote 项目架构设计（v1）
+
+| 项 | 内容 |
+|---|---|
+| 文档版本 | v1（草案，待用户审核） |
+| 日期 | 2026-09-25 |
+| 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
+| 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
+| 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
+
+### 标注约定
+
+| 标注 | 含义 |
+|---|---|
+| 【依需求】 | 直接落实需求文档已定的内容 |
+| 【架构定】 | 需求文档未涉及的纯技术选择，本文给出方案 |
+| 【待确认】 | 会影响用户可感知行为、或需要用户拍板的技术选择；给出推荐项，确认后改为【已确认】 |
+| 【待核实】 | 依赖外部事实（平台限额、浏览器支持），开发早期实测或查证 |
+
+---
+
+## 一、环境约束与架构原则
+
+### 1.1 决定架构形状的硬约束
+
+| 约束 | 数值 | 对架构的影响 |
+|---|---|---|
+| Worker 每请求 CPU | 10 ms（HTTP 与 Cron 相同） | 服务端只做鉴权、条件读写、字节转发；一切计算型工作放浏览器（需求 1.2-5） |
+| Worker 启动时间 | 1 秒 | 全局作用域不做重型初始化；不引入大型 SDK；按路由懒加载模块 |
+| Worker 内存 | 128 MB | 大请求体一律流式处理，不整体缓冲 |
+| 外部子请求 | 50 次/请求 | 备份每轮文件数受限（Git 目标约 40 个） |
+| D1 每次调用查询数 | 50 次（免费版） | 单个请求的 SQL 语句总数（含 batch 内）控制在 50 以内 |
+| D1 单行 / 单值 | 2,000,000 字节 | 正文硬上限 1,900,000 字节，正文单独成表（需求 18.1） |
+| D1 单条 SQL | 100 KB | 正文一律参数绑定，不拼接进 SQL 文本 |
+| D1 行读写 | 读 500 万/天、写 10 万/天 | 查询必须命中以 `user_id` 开头的索引；派生写入只写变化部分 |
+| D1 单库 | 500 MB | 大体量数据（版本正文、附件、快照）放 R2 |
+| Cron Triggers | 每账户 5 个 | 全项目只用 1 个 Cron，在其中按时间片分派任务 |
+| R2 | 10 GB-月，A 类 100 万/月 | 附件按内容哈希去重；后台不调用 `ListObjects` |
+| 静态资源 | 免费、不限量 | 应用外壳与分享查看器都走 Static Assets，不经过 Worker |
+
+### 1.2 架构原则
+
+1. **胖客户端、瘦服务端**【依需求】：浏览器承担渲染、加解密、KDF、哈希、压缩、diff、搜索、ZIP；Worker 是“带鉴权的条件存储网关”。
+2. **本地优先**【依需求】：界面只读本地数据（IndexedDB）；网络只用于同步。所有写入先进 outbox。
+3. **服务端不解析大正文**【依需求】：正文作为不透明字节在 D1 与 R2 之间搬运；需要处理正文的服务端路径（MCP 按小节读写、表格按行操作）设大小门槛。
+4. **一份格式代码，前后端共享**【依需求】：Markdown 快照格式、YAML front matter 解析、表格编解码、标签与任务字段派生、接口校验规则写在共享包里，浏览器与 Worker 使用同一份实现。
+5. **每个写接口都是条件写**【依需求】：带 `rev` / `meta_rev` 条件，派生写入挂在主写入生效的条件上（mutation guard，需求 18.3）。
+6. **后台任务小批、可中断、可重入**【架构定】：Cron 每次只处理一小批，用游标与版本号条件保证中断后下一轮能接着做，重复执行无副作用。
+7. **可观测的 CPU 预算**【架构定】：每类接口在开发阶段记录 CPU 耗时，纳入测试门槛（见第十四节）。
+
+---
+
+## 二、总体架构
+
+### 2.1 部署拓扑
+
+一个 Worker 同时提供静态资源、业务 API、MCP 端点与分享接口，同源部署，不拆分多个 Worker【架构定】。理由：免费版额度按账户计，拆分不省额度；同源避免跨域 Cookie 与 CORS 预检（弱网下每次预检都是一次额外往返）。
+
+```mermaid
+flowchart LR
+    subgraph Browser["浏览器"]
+        UI["主线程：界面与编辑器"]
+        SW["Service Worker：外壳与附件缓存"]
+        WK["Web Worker：搜索、哈希、缩略图、压缩"]
+        CW["加密 Worker：KDF 与加解密"]
+        SHW["SharedWorker：会话级解锁密钥"]
+        IDB[("IndexedDB")]
+    end
+    subgraph CF["Cloudflare（单个 Worker）"]
+        AS["Static Assets：应用外壳、分享查看器"]
+        RT["路由入口"]
+        API["/api：业务接口"]
+        PUB["/api/public：分享访问"]
+        MCPE["/mcp：MCP 端点"]
+        CRON["scheduled：单一 Cron 分派器"]
+        D1[("D1")]
+        R2[("R2")]
+    end
+    EXT["外部备份：WebDAV / S3 / Git"]
+    AG["第三方 agent"]
+    VIS["分享访问者"]
+
+    UI --> IDB
+    UI --> WK
+    UI --> CW
+    CW -.-> SHW
+    UI -->|"HTTPS 同源"| RT
+    SW -.->|"预缓存"| AS
+    RT --> API
+    RT --> PUB
+    RT --> MCPE
+    API --> D1
+    API --> R2
+    PUB --> D1
+    PUB --> R2
+    MCPE --> D1
+    MCPE --> R2
+    CRON --> D1
+    CRON --> R2
+    CRON --> EXT
+    AG -->|"Bearer 令牌"| MCPE
+    VIS --> AS
+    VIS --> PUB
+```
+
+**Static Assets 路由规则**【架构定】：`not_found_handling = single-page-application`；只有 `/api/*`、`/mcp`、`/mcp/*` 先进入 Worker（`run_worker_first`），其余路径（含分享页 `/s/<分享ID>`）直接由静态资源返回，不消耗 Worker 请求数与 CPU。
+
+### 2.2 技术栈
+
+| 层 | 选型 | 理由 | 状态 |
+|---|---|---|---|
+| 语言 | TypeScript（严格模式），前后端统一 | 共享包需要同一语言 | 【架构定】 |
+| 前端框架 | React 19 + Vite | 与 Inkstone 同栈，参照其实现最直接；生态（虚拟列表、CodeMirror 封装）最全 | 【待确认】备选 Preact（体积约为 React 的十分之一，API 兼容）、Vue、Solid |
+| 状态管理 | Zustand（界面状态）+ IndexedDB 作为数据真相 | 轻量；数据状态不放内存 store，避免两份真相 | 【架构定】 |
+| 样式 | Tailwind CSS 4 | 与 Inkstone 相同；原子类利于按需裁剪体积 | 【架构定】 |
+| 编辑器 | CodeMirror 6 + `@codemirror/lang-markdown`（Lezer 语法树） | 需求 7.1 已定 | 【依需求】 |
+| Markdown 渲染 | markdown-it（+ task-lists、footnote 等插件）+ DOMPurify | 速度快、插件全；DOMPurify 防止笔记与分享内容中的 XSS | 【架构定】 |
+| 表格虚拟滚动 | TanStack Virtual | 需求 10.10-4 要求虚拟滚动；框架无关 | 【架构定】 |
+| 本地数据库 | Dexie（IndexedDB 封装） | 事务、索引、批量写，比 idb-keyval 适合结构化数据 | 【架构定】 |
+| 本地搜索 | MiniSearch + `Intl.Segmenter` + 二元组兜底 | 需求 13.1 已定 | 【依需求】 |
+| 加密 | WebCrypto（AES-256-GCM、AES-KW、HKDF）+ hash-wasm（Argon2id） | 原生 API 性能好；hash-wasm 的 Argon2id 体积小、可在 Worker 中运行 | 【架构定】 |
+| 压缩 / ZIP | 原生 `CompressionStream`；fflate 打 ZIP | 需求 12.4、16.2 | 【依需求】 |
+| PWA | vite-plugin-pwa（Workbox，injectManifest 模式，自写缓存策略） | 预缓存外壳，附件缓存规则需自定义 | 【架构定】 |
+| 服务端路由 | Hono | 体积小、启动快，Inkstone 同款 | 【架构定】 |
+| 接口校验 | Valibot（前后端共享 schema） | 体积和初始化开销都远小于 Zod，适合 1 秒启动限制 | 【架构定】 |
+| MCP | 手写无状态 JSON-RPC 分发（不引入官方 SDK） | 需求 17.1：无状态、轻量；官方 SDK 体积与初始化成本偏高 | 【依需求】 |
+| S3 签名 | aws4fetch（`UNSIGNED-PAYLOAD`） | 需求 16.3；体积小 | 【依需求】 |
+| 构建部署 | Vite + `@cloudflare/vite-plugin` + Wrangler | 一套构建同时产出前端资源与 Worker | 【架构定】 |
+| 测试 | Vitest；Worker 与 D1 用 `@cloudflare/vitest-pool-workers`；端到端用 Playwright | 需求 21.2：从开发之初就有测试与 CI | 【依需求】 |
+| CI | GitHub Actions：类型检查、单元测试、Worker 集成测试、构建、包体积检查 | 同上 | 【依需求】 |
+
+### 2.3 仓库目录结构【待确认：代码是否放在同一个 MeNote 仓库】
+
+推荐在现有仓库中采用 pnpm workspace 单仓多包结构，需求文档保留在根目录不动：
+
+```
+MeNote/
+├── Menote-设计文档-v7.4.md        # 需求文档（只读基准，不改动）
+├── docs/
+│   ├── Menote-项目架构-v1.md       # 本文
+│   └── adr/                        # 架构决定记录（每个【待确认】项确认后留一条）
+├── prototype/                      # 现有原型，保留
+├── apps/
+│   ├── web/                        # PWA 客户端
+│   │   ├── src/app/                # 路由、布局、功能栏
+│   │   ├── src/features/           # notes / tables / memos / tasks / search / settings / share-viewer ...
+│   │   ├── src/data/               # Dexie 模式、仓储、outbox、同步引擎
+│   │   ├── src/crypto/             # 密钥服务客户端（调用加密 Worker）
+│   │   ├── src/workers/            # search.worker / media.worker / crypto.worker / session.sharedworker
+│   │   └── src/sw/                 # Service Worker
+│   └── worker/                     # Cloudflare Worker
+│       ├── src/routes/             # api / public / mcp
+│       ├── src/services/           # 领域服务：items、folders、versions、attachments、shares、tokens、backup ...
+│       ├── src/db/                 # SQL 语句、batch 组装、迁移与自愈
+│       ├── src/jobs/               # Cron 任务：snapshot、backup、maintenance
+│       └── src/adapters/           # webdav / s3 / git 备份适配器
+├── packages/
+│   ├── shared/                     # 前后端共享：类型、Valibot schema、错误码、常量（上限、阈值）
+│   ├── mdcore/                     # front matter、标签与任务字段派生、表格编解码、快照格式、附件引用改写
+│   └── crypto-format/              # 密文信封格式的编码与解析（纯函数，不含密钥操作）
+├── wrangler.jsonc
+└── .github/workflows/ci.yml
+```
+
+依赖方向：`apps/*` 可以依赖 `packages/*`；`packages/*` 之间只允许 `shared` 被其他包依赖；`packages/*` 不依赖任何浏览器或 Worker 专有 API，保证两端都能运行、都能单测。
+
+---
+
+## 三、前端架构
+
+### 3.1 分层
+
+```mermaid
+flowchart TB
+    subgraph L1["界面层（React 组件）"]
+        V1["功能栏与布局"]
+        V2["编辑器：CodeMirror 6 三种模式"]
+        V3["表格与图册、Memo 时间轴与瀑布流、清单列表与看板"]
+        V4["设置子页面、解锁框、同步状态"]
+    end
+    subgraph L2["应用服务层"]
+        S1["ItemService：新建、保存、移动、回收站"]
+        S2["LockService：解锁档位、锁定清理、隐私浏览门禁"]
+        S3["ConvertService：批量加密与解密任务"]
+        S4["ShareService、ExportService、VersionService"]
+    end
+    subgraph L3["领域层（packages/mdcore）"]
+        D1["front matter 与标签、任务字段派生"]
+        D2["表格编解码与行 ID 规整"]
+        D3["快照格式与附件引用提取"]
+    end
+    subgraph L4["数据层"]
+        R1["本地仓储：Dexie"]
+        R2["outbox 与同步引擎"]
+        R3["大小计量与补丁生成"]
+    end
+    subgraph L5["传输层"]
+        T1["API 客户端：超时、退避、错误码映射"]
+    end
+    subgraph WK["独立线程"]
+        W1["crypto.worker：KDF、加解密"]
+        W2["session.sharedworker：会话级密钥"]
+        W3["search.worker：MiniSearch 索引"]
+        W4["media.worker：哈希、缩略图、压缩"]
+        W5["Service Worker：外壳与附件缓存"]
+    end
+    L1 --> L2
+    L2 --> L3
+    L2 --> L4
+    L4 --> L5
+    L2 --> WK
+```
+
+规则【架构定】：
+- 界面层只调用应用服务层，不直接访问 Dexie 或网络。
+- 数据的唯一真相是 IndexedDB；界面通过 Dexie 的 `liveQuery` 订阅变化，Zustand 只放纯界面状态（当前视图、面板开合、选中项）。
+- 所有 CPU 密集型工作（KDF、加解密 2MB 正文、SHA-256、缩略图、gzip、建索引）放在独立 Worker，主线程保持输入流畅。
+
+### 3.2 本地数据库（IndexedDB，Dexie）【架构定】
+
+| 表 | 主键 / 索引 | 内容 |
+|---|---|---|
+| `items` | `id`；`[folderId+updatedAt]`、`memoAt`、`syncSeq`、`isTask` | 条目元数据（与服务端 `items` 同构；加密空间内标题存密文） |
+| `bodies` | `itemId` | 正文缓存：明文字符串或密文 `ArrayBuffer`；带 `rev`、`contentHash` |
+| `drafts` | `itemId` | 未上传的编辑稿（每 2 秒写一次；加密条目先加密再写） |
+| `folders` | `id`；`parentId`、`syncSeq` | 文件夹树 |
+| `dataKeys` | `id`；`ownerId` | 包裹后的数据密钥（密文，可离线解锁） |
+| `userCrypto` | 单行 | KDF 参数、盐、包裹的主钥 |
+| `settings` | 单行 | 用户设置与其 `rev` |
+| `outbox` | 自增 `seq`；`[entity+entityId]` | 待上传操作（见 6.3） |
+| `convertJobs` | `id` | 批量加密/解密任务进度（需求 6.4） |
+| `attachmentsMeta` | `id`；`sha256` | 附件元数据；上传中的附件带本地 Blob |
+| `searchIndex` | 单行 | 明文 MiniSearch 索引的序列化结果 |
+| `syncState` | 单行 | `cursor`（最近的 `sync_seq`）、上次同步时间、设备 ID |
+| `deviceKey` | 单行 | “当前设备长期”档位下不可导出的主钥 CryptoKey（需求 6.8） |
+
+- Dexie 的模式版本随客户端发布递增；本地库只是缓存，遇到无法迁移的情况可以清空后从服务端重建（outbox 中未上传的数据先导出为本地备份文件再清空）。
+- 解密后的明文不写入以上任何表（需求 6.8）。
+
+### 3.3 编辑器【依需求 7.1，实现细节为架构定】
+
+- 三种模式共用一个 CodeMirror 6 `EditorState`，切换模式不重建文档，只切换扩展与布局：
+  - 双栏：CodeMirror + 预览面板（markdown-it 渲染，按滚动位置同步）。
+  - 仅编辑 / 仅预览：隐藏其一。
+  - 即时渲染：基于 Lezer 语法树的装饰（`Decoration.replace` / `widget`），只对视口内的节点计算装饰，光标所在行显示源码。
+- 大小计量：编辑器维护当前正文的 UTF-8 字节数（增量计算：只对变更区间重新计数），状态栏常驻“x MB / 2 MB”，软上限 1MB 变色提示，硬上限 1,900,000 字节阻止保存（需求 10.10）。加密条目在计量上加上密文信封开销（固定 45 字节，见 7.3）。
+- 补丁生成：从上次成功保存起累积 `ChangeSet`，保存时合并为“按码点计的替换区间”列表（需求 15.7）；码点换算在 `packages/mdcore` 中实现并有专门测试。
+- 大文档：正文超过 256 KB 时防抖放宽到 5 秒、最长 60 秒上传一次（需求 15.7）；表格编辑器超过一定行数启用 TanStack Virtual。
+
+### 3.4 Markdown 渲染与安全【架构定】
+
+- 预览、Memo 时间轴、分享查看器共用一个渲染模块：markdown-it（关闭原生 HTML 或只放行白名单标签）+ DOMPurify 清洗输出。
+- 附件引用（`_attachments/<hash>.jpg` 或附件 ID）在渲染时改写为受控地址：明文附件指向 `/api/attachments/...`，加密附件在解锁后解密为 `blob:` 地址，锁定时统一撤销（需求 6.8）。
+- 大文档预览按块增量渲染（按顶级块切分，只重新渲染变化的块），避免 2MB 文档每次按键全量渲染。
+
+### 3.5 搜索【依需求 13】
+
+- `search.worker` 持有两个 MiniSearch 实例：
+  - 持久索引：明文笔记、表格、Memo；序列化后存 `searchIndex`，按 `sync_seq` 增量更新。
+  - 内存索引：解锁期间加入的加密内容；锁定时整个实例丢弃（需求 6.10）。
+- 分词：`Intl.Segmenter('zh', {granularity: 'word'})` + 中文二元组兜底。
+- 隐私浏览锁定时，查询结果在返回界面前过滤掉 Memo（需求 8.9）。
+- 本地索引未建完时，搜索框回退到服务端兜底接口 `/api/search`（需求 13.2）。
+
+### 3.6 Service Worker 与缓存策略【架构定】
+
+| 资源 | 策略 |
+|---|---|
+| 应用外壳（HTML、JS、CSS、字体、wasm） | 构建时预缓存；新版本后台下载，提示“有新版本”后下次打开生效（需求 15.6） |
+| 明文附件与缩略图（`/api/attachments/h/<sha256>`） | Cache First，永久缓存（内容哈希不变） |
+| 加密附件（密文） | 只用浏览器 HTTP 缓存（`Cache-Control: private`），Service Worker 不缓存 |
+| `/api/*` 其他接口 | 不缓存，直接走网络（离线数据来自 IndexedDB） |
+| 分享查看器 `/s/*` | 预缓存查看器外壳；分享内容不缓存 |
+
+---
+
+## 四、Worker 架构
+
+### 4.1 请求处理链
+
+```mermaid
+flowchart LR
+    A["请求进入"] --> B{"路径"}
+    B -->|"/api/public/*"| P["分享接口：不需要登录"]
+    B -->|"/mcp、/mcp/k/令牌"| M["MCP：令牌鉴权"]
+    B -->|"/api/*"| C["会话鉴权：Cookie 查 sessions"]
+    C --> D["CSRF 校验：Origin 与自定义请求头"]
+    D --> E["参数校验：Valibot"]
+    E --> F["服务层"]
+    M --> MR["令牌范围与权限、限速"]
+    MR --> F
+    P --> PV["分享有效性与密码校验"]
+    PV --> F
+    F --> G["仓储层：组装 D1 batch 与条件写"]
+    G --> H[("D1 / R2")]
+```
+
+### 4.2 分层与约定【架构定】
+
+| 层 | 职责 | 约定 |
+|---|---|---|
+| 路由（Hono） | 路径匹配、中间件、把请求转给服务 | 按前缀懒加载子路由模块（动态 `import()`），降低冷启动开销 |
+| 中间件 | 会话、CSRF、令牌、限速、错误统一格式 | 会话查询每请求 1 次 D1 读；`last_seen_at` 每天最多写 1 次 |
+| 服务 | 业务规则：条件、配额、跨表一致性 | 不直接拼 SQL；每个写操作产出一个“语句列表”交给仓储 |
+| 仓储 | SQL 常量、batch 组装、mutation guard、受影响行数判定 | 所有语句用参数绑定；每个请求的语句总数在代码中计数，超过 45 条直接报错（留余量给 50 条上限） |
+| 适配器 | R2、外部备份（WebDAV / S3 / Git） | 子请求计数器：每个请求最多 50 个外部子请求 |
+
+### 4.3 错误码【架构定】
+
+统一 JSON 错误体 `{ code, message, detail? }`，客户端按 `code` 处理：
+
+| HTTP | code | 含义 | 客户端处理 |
+|---|---|---|---|
+| 401 | `unauthenticated` | 会话失效 | 跳转登录，outbox 保留 |
+| 403 | `forbidden` / `csrf` | 无权或 CSRF 校验失败 | 提示并记录 |
+| 404 | `not_found` | 条目不存在或已永久删除 | 本地标记为已删除 |
+| 409 | `rev_conflict` | 版本冲突，附带服务端当前 `rev`、`content_hash`，正文按需另取 | 进入冲突处理（需求 15.5） |
+| 409 | `meta_conflict` | 元数据冲突，附带当前元数据 | 在最新状态上重新应用意图 |
+| 413 | `too_large` | 超过 1,900,000 字节或 256 KB（MCP） | 提示拆分 |
+| 422 | `invalid` | 参数不合法 | 丢弃该 outbox 项并提示 |
+| 429 | `rate_limited` | 限速 | 按 `Retry-After` 退避 |
+| 503 | `retry_later` | CPU 超限（1102）、D1 暂时不可用 | 退避重试；大文档全文保存改走补丁（需求 19.6） |
+
+---
+
+## 五、数据架构
+
+### 5.1 D1 表结构
+
+以需求 18.2 的 DDL 草案为准。实现时需要以下技术补充【待确认】，均不改变产品行为，只补足需求中已描述的机制所需的存储：
+
+| 补充 | 原因（对应需求） | 草案 |
+|---|---|---|
+| 新增 `tombstones` 表 | 需求 15.2 用 `deleted_at` 表示删除，但永久删除（14.4）会删掉 `items` 行，其他设备的增量同步收不到“已删除”信号，本地会残留条目 | `(user_id, entity, entity_id, sync_seq, deleted_at)`，索引 `(user_id, sync_seq)`；保留 180 天，过期清理 |
+| `users` 增加 `tombstone_floor` | 墓碑清理后，游标早于清理点的设备必须全量重同步 | 整数：已清理墓碑中最大的 `sync_seq`；客户端游标小于它时触发全量重建 |
+| 新增 `r2_gc_queue` 表 | 需求 14.4“登记待清理的 R2 对象，由 Cron 分批删除”，DDL 中没有这张表 | `(r2_key PRIMARY KEY, reason, due_at)`；也用作上传意图登记（见 5.3） |
+| `data_keys`、`user_crypto`、`user_settings`、`attachments` 增加 `sync_seq` | 需求 15.2 只列了条目和文件夹的增量同步；数据密钥、设置、附件元数据也需要在多设备间同步，否则新设备无法离线解锁、看不到设置变化 | 各加 `sync_seq` 列与 `(user_id, sync_seq)` 索引；`data_keys` 另加 `deleted_at` |
+| `attachment_refs` 增加版本引用 | 需求 14.3 规定“保留中的历史版本”引用的附件不算孤儿，但 `attachment_refs` 只记录条目引用 | 增加 `version_id` 列（NULL 表示当前稿引用），主键改为 `(item_id, version_id, attachment_id)` 的等价唯一约束 |
+| 新增 `rate_counters` 表（条件启用） | 需求 17.3：Rate Limiting 绑定在免费版不可用时，用 D1 按分钟计数 | `(key, window_start, count)`；可用绑定时不建 |
+| `items` 增加 `last_edit_at`、`last_device` | 需求 12.2-3 的“跨会话”判断需要知道上次编辑时间与设备 | 两列，随正文保存写入（同一条 UPDATE，不增加行写入） |
+
+### 5.2 R2 对象布局
+
+| 前缀 | 内容 | 写入方 | 缓存头 |
+|---|---|---|---|
+| `a/{uid}/{sha256}` | 明文附件原图 | 客户端流式上传 | `private, max-age=31536000, immutable` |
+| `a/{uid}/{sha256}.t` | 明文缩略图 | 同上 | 同上 |
+| `e/{uid}/{id}` | 加密附件或缩略图（密文） | 同上 | `private, max-age=31536000` |
+| `v/{uid}/{item_id}/{version_id}` | 版本正文（gzip 或原样；加密条目为密文） | 客户端或 Worker | 不缓存 |
+| `snap/{uid}/...` | md 快照目录（需求 3.2 的结构） | Cron | 不缓存 |
+
+【待核实】需求 14.1 中缩略图的对象键没有单独约定；上表用 `.t` 后缀是架构草案。
+
+### 5.3 R2 与 D1 的一致性【架构定】
+
+R2 与 D1 之间没有事务，采用“先登记、后操作、再确认”避免泄漏，且全程不需要列举 R2：
+
+- **上传**：Worker 先插入一行 `r2_gc_queue(r2_key, reason='pending_upload', due_at=now+24h)`；写 R2 成功后，在同一个 batch 中插入附件或版本元数据并删除这行登记。中途失败时，登记在 24 小时后到期，Cron 删除残留对象。
+- **删除**：在删除 D1 记录的同一个 batch 中登记 `r2_gc_queue(reason='delete', due_at=now)`；Cron 按 `due_at` 分批删除 R2 对象，删除成功后删登记。R2 删除是幂等的，重复执行无害。
+- 这一机制覆盖了需求 14.4 中“没有对应元数据的版本对象”这类残留的来源。需求 19.5 要求后台不调用 `ListObjects`，因此每日孤儿检查只核对 D1 内部的引用关系（附件引用、版本元数据、快照登记），不列举 R2。
+
+### 5.4 容量估算（与需求 19.3 一致）
+
+D1 以元数据和当前稿为主，个人使用多年仍在百 MB 以内；R2 以附件为主。本文不重复需求第十九节的估算。
+
+---
+
+## 六、同步引擎
+
+### 6.1 接口形态【架构定】
+
+| 方向 | 接口 | 说明 |
+|---|---|---|
+| 拉取 | `GET /api/sync?cursor=N` | 返回 `sync_seq > N` 的元数据变化：条目、文件夹、数据密钥、设置、附件元数据、墓碑；每类合计最多 200 行，带 `next_cursor`、`has_more`；游标小于 `tombstone_floor` 时返回 `full_resync: true`。**不含正文** |
+| 取正文 | `GET /api/items/:id/body` | 响应体为原文（`text/markdown`）或密文（`application/octet-stream`），`ETag` 为 `content_hash`，支持 `If-None-Match` 返回 304 |
+| 新建 | `PUT /api/items/:id`（客户端生成 ID） | 请求体为正文原文；元数据放在 `X-Menote-Meta` 请求头（base64url 编码的 JSON：类型、标题、文件夹、标签、任务字段、`content_hash`、附件引用）。重复提交幂等（需求 15.3） |
+| 全文保存 | `PUT /api/items/:id/body` | 请求头 `If-Match: <base_rev>`、`X-Menote-Hash`、`X-Menote-Refs`（附件引用有变化时才带） |
+| 补丁保存 | `PATCH /api/items/:id/body` | JSON：`{ base_rev, ops: [[start, end, text]...], hash, bytes, chars }`，位置按码点计（需求 15.7） |
+| 元数据 | `PATCH /api/items/:id/meta` | `{ base_meta_rev, title?, folder_id?, tags?, pinned?, starred? }` |
+| 批量元数据 | `POST /api/batch` | 多个小型元数据操作合并为一个请求（移动、置顶、文件夹改名等），每个操作独立判定冲突，逐个返回结果；单批语句总数不超过 45 条 |
+| 回收站 | `POST /api/items/:id/trash`、`/restore`；`DELETE /api/items/:id`（永久删除） | 永久删除按需求 14.4 执行（见 12.3） |
+
+设计要点：
+- 拉取接口只返回元数据，保证首屏只需“元数据增量 + 当前条目”（需求 15.6）；正文按需获取，开启“全部离线缓存”时后台以并发 3–4 逐条拉取。
+- 同一次拉取返回的多类数据共用同一个 `sync_seq` 序列（每个用户一个计数器），客户端按单一游标推进，不会漏拉。
+
+### 6.2 保存与冲突处理流程
+
+```mermaid
+sequenceDiagram
+    participant E as 编辑器
+    participant O as outbox（IndexedDB）
+    participant S as 同步主标签页
+    participant W as Worker
+    participant D as D1
+    E->>O: 防抖后写入草稿与待上传项（同一条目合并，保留最早的 base_rev）
+    S->>O: 取队首
+    alt 明文且不小于 64 KB 且改动小
+        S->>W: PATCH 正文补丁（base_rev）
+    else 其他情况
+        S->>W: PUT 正文原文（If-Match: base_rev）
+    end
+    W->>D: 条件 batch（主写入以 rev 为条件，其余语句挂在主写入生效之上）
+    alt 主写入生效
+        D-->>W: 新 rev、实际码点数与字节数
+        W-->>S: 200
+        S->>O: 删除该项，本地 rev 更新
+    else 版本冲突
+        W-->>S: 409 rev_conflict（服务端 rev 与 content_hash）
+        alt 服务端哈希等于本地待上传内容的哈希
+            S->>O: 视为已成功（上次响应丢失）
+        else 内容不同
+            S->>W: 取服务端正文，采纳为原条目当前稿
+            S->>O: 本地内容另存为冲突副本（新 ID，新建请求）
+            S->>E: 通知栏提示：对比两者 / 保留某一份
+        end
+    end
+```
+
+冲突前服务端版本的封存（需求 15.5-3，原因 `conflict`）由 Worker 在返回 409 之前完成：在同一请求内把当前正文转存为版本（不超过 256 KB 时压缩，否则原样），同一条目 10 分钟内最多一次。
+
+### 6.3 outbox 设计【架构定】
+
+- 每项记录：`entity`（item / folder / setting / key / attachment / version）、`entityId`、`op`、`baseRev`、载荷引用（正文不复制，指向 `drafts`）、重试次数、下次重试时间、最后错误。
+- 合并规则：同一条目的正文保存只保留最新一份并保留最早的 `baseRev`；连续补丁合并为一个补丁，合并后超过正文 25% 或 20 个操作时改为全文（需求 15.7）。
+- 依赖顺序：新建文件夹先于移入该文件夹的条目；附件上传先于引用它的正文保存（未上传完成时正文照常保存，引用在附件上传成功后补报）。
+- 退避与超时按需求 15.3：15 秒超时、1/2/4/8… 秒指数退避加抖动、最长 60 秒；`online`、标签页可见时立即重试。
+- 持续失败（例如 422）的项移入“上传失败”列表，界面可查看、重试或导出为文件，不会阻塞队列中其他条目的上传。
+
+### 6.4 多标签页【依需求 15.4】
+
+- `navigator.locks.request('menote-sync')` 选出同步主标签页；其他标签页通过 BroadcastChannel 接收“某条目已更新”“游标已推进”等消息。
+- 所有标签页都可以写本地 IndexedDB 和 outbox；只有主标签页上传与拉取。
+- 同一条目在两个标签页同时编辑：以 IndexedDB 中的 `drafts` 为准，后写入的标签页收到广播后提示“已在其他标签页修改”，不静默覆盖编辑器内容。
+
+---
+
+## 七、隐私锁的实现
+
+### 7.1 密钥保管组件【架构定】
+
+所有密钥操作集中在一个“密钥库”接口后面，界面与应用服务只提交密文、拿回明文，从不接触密钥对象：
+
+```mermaid
+flowchart LR
+    UI["界面与应用服务"] -->|"decrypt / encrypt 请求"| KV{"当前解锁档位"}
+    KV -->|"仅本次查看、N 分钟"| DW["crypto.worker：本标签页内的专用 Worker，内存持有主钥或数据密钥"]
+    KV -->|"本次浏览器会话"| SH["session.sharedworker：所有标签页共享，内存持有主钥"]
+    KV -->|"当前设备长期"| IDB["IndexedDB 中不可导出的主钥 CryptoKey，由 crypto.worker 读取使用"]
+    DW --> WC["WebCrypto：AES-256-GCM、AES-KW、HKDF"]
+    SH --> WC
+    IDB --> WC
+```
+
+- 所有 CryptoKey 均以 `extractable: false` 创建或解包（需求 6.6）。
+- KDF（Argon2id 64 MiB / 3 / 1，兜底 PBKDF2 600,000 次）在 `crypto.worker` 中运行；hash-wasm 在第一次需要时才加载。
+- “N 分钟”计时由主线程统计用户操作，定时通知 Worker 丢弃密钥；锁定清理步骤（需求 6.8）由 LockService 统一编排：先把未保存改动加密写入 outbox，再通知密钥库清除密钥、撤销 `blob:` 地址、丢弃内存搜索索引、关闭明文视图。
+- 【待核实】SharedWorker 在部分移动浏览器上的支持情况。【待确认】不支持时，“本次浏览器会话”档位按“每个标签页各自解锁、各自计时”处理，并在设置页说明。
+
+### 7.2 数据密钥的使用【依需求 6.6】
+
+| 对象 | 用哪把密钥加密 | AAD |
+|---|---|---|
+| 单篇加密或加密空间内文章的正文 | 该文章的 DEK | `item:<id>` + `key_id` + 格式版本 |
+| 上述文章的附件与缩略图 | 该文章的 DEK | `att:<attachment_id>` + `key_id` + 格式版本 |
+| 上述文章的版本正文（先 gzip 再加密） | 该文章的 DEK | `ver:<version_id>` + `key_id` + 格式版本 |
+| 加密空间内的标题、文件夹名 | 空间密钥 DEK_s | `title:<item_id>` 或 `folder:<folder_id>` + `key_id` + 格式版本 |
+| DEK、DEK_s | 主钥 MK（AES-KW 包裹） | — |
+| MK | 隐私密码派生的 KEK、恢复码派生的包裹钥 | — |
+
+AAD 中包含对象 ID，因此把一段密文挪到另一条目上会解密失败，服务端无法调换密文。
+
+### 7.3 密文信封格式【架构定】
+
+`packages/crypto-format` 定义，前后端共用解析代码（服务端只读取头部，不解密）：
+
+| 偏移 | 长度 | 字段 |
+|---|---|---|
+| 0 | 1 字节 | 格式版本（当前为 1） |
+| 1 | 16 字节 | `key_id`（UUID 的二进制形式） |
+| 17 | 12 字节 | IV（每次加密新随机生成） |
+| 29 | 可变 | 密文 |
+| 末尾 | 16 字节 | GCM 认证标签 |
+
+固定开销 45 字节。当前稿的正文不压缩直接加密，使“硬上限 1,900,000 字节”对明文和密文的含义几乎一致（需求 18.1）；版本正文先压缩再加密（需求 6.11）。
+
+### 7.4 批量转换任务【依需求 6.4】
+
+- 任务存 IndexedDB `convertJobs`：目标（加密 / 解密、移入 / 移出加密空间）、条目列表、每篇的阶段。
+- 每篇的阶段：①封存 `pre_convert` 版本；②转换正文并以 `base_rev` 条件上传（正文、`enc_self` / `in_enc_space`、`key_id`、标题字段在同一个请求中提交，服务端在一个 batch 中完成，保证“要么完整明文、要么完整密文”）；③处理附件（生成加密或明文副本并替换引用）；④处理旧版本（下载、转换、替换，或按用户选择删除）；⑤撤销相关分享（在第 ② 步的同一个 batch 中完成）。
+- 移动操作最后提交；中断后在下次解锁时从记录的阶段继续。
+- 服务端对 MCP 的可见性由 `enc_self` / `in_enc_space` 决定；为满足“转换期间立即对 MCP 不可见”（需求 6.4），任务开始时先提交一个只改标记的请求（`items.enc_pending = 1`）【待确认：需要在 `items` 增加 `enc_pending` 列】，MCP 的查询条件同时排除该标记。
+
+### 7.5 Memo 隐私浏览【依需求 8.9】
+
+纯界面门禁：LockService 暴露 `memoGateOpen` 状态，时间轴、瀑布流、清单视图和搜索结果据此决定显示内容或占位。不涉及密钥，也不影响存储与同步。
+
+---
+
+## 八、附件管线【依需求 14，接口为架构定】
+
+```mermaid
+sequenceDiagram
+    participant U as 编辑器
+    participant M as media.worker
+    participant W as Worker
+    participant R as R2
+    participant D as D1
+    U->>M: 文件（粘贴或选择）
+    M->>M: SHA-256、缩略图（最长边约 400 px，WebP）、加密条目则加密原图与缩略图
+    M-->>U: 本地 blob 地址先显示
+    U->>W: POST /api/attachments/check（一批哈希）
+    W->>D: 查已存在的哈希
+    W-->>U: 需要上传的列表
+    U->>W: PUT 原图与缩略图（流式请求体，附 SHA-256）
+    W->>D: 登记 pending_upload
+    W->>R: put(流, sha256 校验)
+    W->>D: 同一 batch：插入 attachments 行，删除登记
+    W-->>U: 附件 ID
+    U->>W: 下次保存正文时上报引用（X-Menote-Refs）
+```
+
+- 引用上报：服务端用两条语句完成集合更新，与引用数量无关：删除“当前稿引用中不在新列表里的”，再 `INSERT OR IGNORE ... SELECT FROM json_each(?)` 插入新增的；避免每条查询最多 100 个参数的限制。
+- 读取：`GET /api/attachments/h/:sha256`（明文，`immutable`）、`GET /api/attachments/e/:id`（密文，`private`）；两者都先校验会话用户与附件归属，再从 R2 流式返回，支持 `Range`。
+- 孤儿标记：由每日维护任务按游标分批处理（见 12.2），保存路径上不做孤儿判断，保持保存请求轻量。
+
+---
+
+## 九、版本历史【依需求 12，实现为架构定】
+
+| 操作 | 接口 | 服务端处理 |
+|---|---|---|
+| 客户端封存 | `POST /api/items/:id/versions`（请求体为已压缩、必要时已加密的正文；请求头带 `rev`、`reason`、`content_hash`、`codec`） | 与最近一个版本哈希相同则直接返回（去重）；否则登记 pending、流式写 R2、插入元数据、更新 `sealed_rev`；随后对该条目做一次稀疏化（只读该条目的版本元数据），多余版本登记到 `r2_gc_queue` |
+| 服务端封存 | MCP 写入前、冲突前、恢复前 | 从 D1 读正文转存 R2；不超过 256 KB 时 `CompressionStream` 压缩，否则 `codec = 'none'`（需求 12.4） |
+| 列表 | `GET /api/items/:id/versions` | 只返回元数据 |
+| 读取 | `GET /api/versions/:vid` | 从 R2 流式返回原始字节，客户端解压、解密 |
+| 恢复 | `POST /api/items/:id/restore` | 先封存 `pre_restore`，再按普通全文保存写入 |
+| 保留 / 备注 | `PATCH /api/versions/:vid` | 修改 `keep`、`label` |
+
+**idle 封存的兜底**【待确认】：需求 12.2-1 规定“最后一次改动后 10 分钟无新改动即封存”，由在线的客户端执行（标签页隐藏或关闭时立即封存）。客户端离线、崩溃或直接关机时，这一步可能漏掉。建议 Cron 每轮扫描少量 `sealed_rev < rev` 且 `updated_at` 早于 10 分钟前的条目，由服务端转存封存；加密条目的密文原样转存（`encrypted = 1`，服务端不解密）。
+
+---
+
+## 十、分享【依需求 16.1，实现为架构定】
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/shares` | 创建：单篇或 Memo 合集。服务端在同一语句中校验条目“非加密、不在加密空间、未删除”，不满足则拒绝 |
+| `GET /api/shares`、`PATCH /api/shares/:id`、`DELETE /api/shares/:id` | 我的分享：修改密码或过期时间、撤销 |
+| `GET /api/public/shares/:sid` | 访客读取分享状态：是否有效、是否需要密码（附盐与 KDF 参数）、形态与标题 |
+| `POST /api/public/shares/:sid/unlock` | 访客浏览器派生校验值后提交；服务端 HMAC 比对，成功后返回有效期 1 小时的访问令牌（HMAC 签名，无状态，不写库）；失败按 `share:<sid>:<ip>` 计次限速 |
+| `GET /api/public/shares/:sid/content` | 单篇返回正文原文；Memo 合集按 50 条分页返回 |
+| `GET /api/public/shares/:sid/att/:attId` | 校验该附件属于被分享条目的当前稿引用后，从 R2 流式返回 |
+
+- 每次访问实时检查分享与条目状态（撤销、过期、条目进回收站、条目被加密），任一不满足即返回“链接已失效”（需求 16.1）。
+- 分享查看器是 Static Assets 中的独立入口页（`/s/<分享ID>`），只加载渲染模块，不包含编辑器与同步代码；渲染结果经 DOMPurify 清洗；页面设置 `Referrer-Policy: no-referrer`，避免分享 ID 经外链泄露。
+- 访问令牌的签名密钥由 `AUTH_PEPPER` 经 HKDF 派生（标签 `menote-share-v1`），不新增 Secret。
+
+---
+
+## 十一、MCP【依需求 17，实现为架构定】
+
+- 端点：`POST /mcp`（令牌在 `Authorization` 请求头）与 `POST /mcp/k/<令牌>`（仅当该令牌允许 URL 方式）；`GET /mcp` 返回 405（无 SSE）。
+- 协议：无状态 JSON-RPC，支持 `initialize`、`notifications/initialized`（返回 202）、`ping`、`tools/list`、`tools/call`。工具的 JSON Schema 在构建时生成静态常量，运行时不做 schema 编译。
+- 每次调用的处理顺序：令牌哈希查询（SHA-256 由 WebCrypto 计算）、过期与撤销检查、限速、权限位检查、范围过滤、执行、审计与幂等记录（与写入在同一个 batch 中）。`last_used_at` 最多每 10 分钟写一次。
+- 范围过滤作为每条查询的固定 SQL 片段：`enc_self = 0 AND in_enc_space = 0`（加密内容不可见，需求 6.13）；文件夹范围用 `folder_id IN (SELECT id FROM folders WHERE user_id = ? AND (id IN (SELECT value FROM json_each(?)) OR parent_id IN (SELECT value FROM json_each(?))))`（文件夹最多两层，需求 4.5）；`include_memos = 0` 时排除 Memo。
+- 大条目处理完全按需求 17.4：区间读取与搜索片段用 `substr()` / `instr()`；追加用 `body = body || ?`；小节解析、`replace_section` 等只对 512 KB 以内的条目开放。【待核实】512 KB 小节解析在 10 ms 内的实际耗时，开发早期实测，必要时下调门槛。
+- 追加类写入的条件重试（需求 17.4）在同一个请求内最多一次，保证单请求的 D1 语句数可控。
+
+---
+
+## 十二、后台任务（Cron）
+
+### 12.1 单一 Cron 分派器【架构定】
+
+只配置一个 Cron：`*/15 * * * *`（免费版每账户最多 5 个，留给其他项目）。每次触发只有 10 ms CPU 和有限的子请求，因此每轮按固定配额依次推进各任务，配额以“处理条数”计（Workers 中 `Date.now()` 只在 I/O 之后推进，无法用于精确计时）：
+
+| 顺序 | 任务 | 每轮配额（草案，待实测调整） | 依据 |
+|---|---|---|---|
+| 1 | 注册开关到期自动关闭 | 1 次条件更新 | 需求 5.2 |
+| 2 | R2 待删对象（`r2_gc_queue` 中已到期的） | 20 个对象 | 需求 14.4 |
+| 3 | 快照队列（`export_queue`） | 10 个文件 | 需求 16.3 |
+| 4 | idle 封存兜底（若确认启用） | 3 条 | 需求 12.2 |
+| 5 | 外部备份：轮到的一个目标 | 20 个文件（Git 目标一次提交最多 40 个） | 需求 16.3 |
+| 6 | 每日维护：推进一步 | 一个步骤 | 见 12.2 |
+
+各任务的进度游标存在 `app_meta`；一轮没做完的下一轮继续，重复执行无副作用。
+
+### 12.2 每日维护状态机【架构定】
+
+每天第一次进入维护窗口（凌晨，按实例所有者时区）时开始，之后每轮推进一步，一天之内做完：
+
+1. 回收站到期条目：取一小批，按 12.3 执行永久删除。
+2. 版本稀疏化：按条目游标处理跨越年龄档位的旧版本（需求 12.3）。
+3. 附件孤儿标记与到期删除（孤儿超过 30 天，需求 14.3）。
+4. 引用一致性检查：没有元数据的版本记录、所属条目已不存在的版本与快照登记（需求 14.4）。
+5. 清理：审计日志（90 天）、MCP 幂等记录（7 天）、过期会话、`auth_throttle` 过期行、墓碑（180 天，并推进 `tombstone_floor`）。
+
+### 12.3 永久删除【依需求 14.4】
+
+一个 D1 batch 内完成：删除 `items`、`item_bodies`、`attachment_refs`、`data_keys`、`shares` / `share_items` 中的相关行，删除 `item_versions` 并把它们的 R2 键登记到 `r2_gc_queue`，写入墓碑，写入快照队列（删除快照文件，Memo 则重写月份文件）。不再被引用的附件由每日维护任务标记与删除。条目数量多（例如清空回收站）时，由客户端按每批 10 条分多个请求提交，保证每个请求的语句数在上限以内。
+
+### 12.4 快照与外部备份【依需求 16.3】
+
+- 快照：每个队列项读取条目元数据与正文，用 `packages/mdcore` 的快照格式生成文件写入 `snap/{uid}/`，按 `rev` 条件删除队列项。Memo 的月份文件由该月全部 Memo 拼成；月份键由客户端按用户时区算好随写入提交，服务端不做时区换算；用户修改时区后，客户端提交一次“重建全部 Memo 快照”的请求。
+- 外部备份：适配器统一接口 `put(path, stream)`、`delete(path)`、`commit()`（仅 Git 用）：
+  - WebDAV：`PUT` / `DELETE`，按需 `MKCOL`。
+  - S3：aws4fetch 签名，`UNSIGNED-PAYLOAD`。
+  - Git：托管平台的 git data API，一批文件为 N 次 blob 创建 + 1 次 tree + 1 次 commit + 1 次 ref 更新，一批最多约 40 个文件，受 50 个子请求限制；不使用 contents API（每个文件一次提交）。
+- “立即备份”和首次全量备份由浏览器循环调用 `POST /api/backup/:target/run`，每次一批，显示进度（需求 16.3）。
+- 备份凭据用 `BACKUP_CRED_KEY` 以 AES-GCM 加密存 D1，只在 Worker 内存中解密使用。
+
+---
+
+## 十三、认证与安全
+
+### 13.1 认证接口【依需求 5.4】
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/auth/prelogin` | 返回盐与 KDF 参数；不存在的用户名返回 `HMAC(AUTH_PEPPER, 用户名)` 生成的假盐 |
+| `POST /api/auth/login` | 提交浏览器派生的登录密钥；服务端 `HMAC-SHA256(AUTH_PEPPER, 登录密钥)` 常量时间比对；失败按“用户名 + IP”计数 |
+| `POST /api/auth/register` | 单条 `INSERT ... SELECT ... WHERE` 语句同时判定“库中无用户”或“注册开关开启且未到期”，并在库中无用户时写入 `role = 'owner'`，避免两个并发的首次注册都成为 owner |
+| `POST /api/auth/logout`、`GET /api/auth/me` | 会话管理 |
+| `POST /api/auth/password` | 修改登录密码：旧密钥校验后写入新盐、新 KDF 参数与新校验值 |
+| `GET/PUT /api/admin/registration`、`GET /api/admin/usage` | 仅 owner：注册开关（含到期时间）、实例用量概览 |
+
+### 13.2 Web 安全【架构定】
+
+- **CSRF**：Cookie 为 `SameSite=Lax`；所有非 GET 请求要求自定义请求头 `X-Menote: 1`，并校验 `Origin` 与部署域名一致。
+- **CSP**（通过 Static Assets 的 `_headers` 文件下发）：`default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`。`style-src` 需要 `'unsafe-inline'` 是因为 CodeMirror 6 运行时注入样式；脚本不允许内联。
+- **XSS**：所有用户内容渲染经 DOMPurify；markdown-it 不直接放行原始 HTML；链接统一加 `rel="noopener noreferrer"`。
+- **其他响应头**：`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`（分享页为 `no-referrer`）、`Permissions-Policy` 关闭不需要的能力。
+- **Secrets**：`AUTH_PEPPER`、`BACKUP_CRED_KEY`（需求 18.2）；分享访问令牌签名密钥由 `AUTH_PEPPER` 派生。
+- **多用户隔离**：仓储层的每条 SQL 都必须包含 `user_id` 条件（需求 18.1），并在测试中用“两个用户互相访问对方 ID”的用例覆盖所有接口。
+
+---
+
+## 十四、性能与 CPU 预算
+
+### 14.1 前端性能预算【架构定】
+
+| 项 | 预算 |
+|---|---|
+| 首屏 JS（gzip） | ≤ 200 KB（界面框架 + 布局 + 列表 + Dexie） |
+| 按需加载的模块 | 编辑器、表格编辑器、Markdown 渲染、搜索 Worker、加密 Worker（含 Argon2 wasm）、设置页、分享查看器各自独立分包 |
+| 冷启动到可操作（已缓存外壳） | 中端手机 1.5 秒内显示本地列表，不等待网络 |
+| 输入延迟 | 2MB 文档中连续输入无可感知卡顿：大小计量与补丁生成增量计算，预览按块增量渲染 |
+| 加解密 2MB 正文 | 在 Worker 中执行，不阻塞主线程 |
+
+CI 中加入包体积检查，首屏包超预算即构建失败。
+
+### 14.2 Worker CPU 预算（估计值，开发早期实测）
+
+| 接口 | 主要开销 | 估计 | 防护 |
+|---|---|---|---|
+| 会话鉴权 | 1 次 SHA-256 + 1 次 D1 读 | < 0.5 ms | — |
+| 增量拉取（200 行元数据） | JSON 序列化 | 1–2 ms | 每页 200 行上限 |
+| 读取或全文保存 2MB 正文 | UTF-8 编解码、参数传递 | 数毫秒（需求 19.6） | 原文作为请求体与响应体，不用 JSON；1102 时客户端改用补丁或延长重试 |
+| 补丁保存 | 几 KB JSON | < 1 ms | 最多 20 个操作 |
+| 附件与版本上传、下载 | 流式转发 | < 1 ms | 不缓冲请求体 |
+| MCP 区间读取、搜索片段 | SQL 截取 | < 2 ms | 结果条数与字符数上限 |
+| MCP 小节解析（≤ 512 KB） | 标题扫描 | 待实测 | 超过门槛返回“条目过大” |
+| 服务端版本压缩（≤ 256 KB） | `CompressionStream` | 待实测 | 超过 256 KB 不压缩 |
+| Cron 每轮 | 多个小任务 | 按配额控制 | 配额可调，每轮可中断 |
+
+实测方法：部署测试环境，用脚本构造 64 KB、512 KB、1 MB、1.9 MB 的明文与密文，逐个接口压测，从 Workers 日志读取每次调用的 CPU 时间；结论写回本节，并据此确认需求 19.6 的备选方案是否需要启用。
+
+---
+
+## 十五、工程化：测试、CI、环境与迁移
+
+### 15.1 测试分层【依需求 21.2】
+
+| 层 | 工具 | 必测内容 |
+|---|---|---|
+| 共享包单元测试 | Vitest | 码点换算（emoji、代理对、组合字符）；表格编解码往返与容错（随机生成的表格做往返测试）；front matter 与标签、任务字段派生；快照格式；密文信封解析 |
+| Worker 集成测试 | Vitest + `@cloudflare/vitest-pool-workers`（本地 D1 / R2） | 条件 batch 与冲突判定；补丁在 D1 中拼接的结果与客户端一致；1,900,000 字节 `CHECK`；永久删除的完整范围；多用户隔离；MCP 权限、范围与加密内容不可见；幂等 `operation_id` |
+| 加密测试 | Vitest（浏览器环境） | 包裹与解包、AAD 篡改检测、改隐私密码后恢复码仍可用、锁定后内存中无密钥 |
+| 端到端测试 | Playwright | 离线编辑后恢复网络、两端同时编辑产生冲突副本、多标签页选主与接任、锁定时明文视图关闭、分享链接在条目加密后立即失效 |
+| 性能测试 | 自写脚本 + 测试环境 | 14.2 的 CPU 实测 |
+
+### 15.2 CI（GitHub Actions）
+
+每次推送和 PR：类型检查、lint、单元测试、Worker 集成测试、构建、包体积检查；主分支额外运行端到端测试。发布由打标签触发 `wrangler deploy`。
+
+### 15.3 环境【架构定】
+
+| 环境 | 组成 |
+|---|---|
+| 本地开发 | Vite 开发服务器 + `@cloudflare/vite-plugin`（本地模拟 Worker、D1、R2） |
+| 测试环境 | 独立的 Worker、D1、R2（同一免费账户内另建一套），用于 CPU 实测与发布前验证 |
+| 生产环境 | 用户自己的 Cloudflare 账户；部署说明另写（需求“后续深入设计清单”第 1 项涉及域名） |
+
+### 15.4 数据库迁移【依需求 18.1】
+
+- 迁移脚本放在 `apps/worker/src/db/migrations/`，按序号命名，每个脚本幂等（`CREATE TABLE IF NOT EXISTS` 等），单个脚本的语句数不超过 45 条。
+- 每个 isolate 首次请求读取 `app_meta.schema_version`；低于代码期望值时，先用条件更新抢占 `app_meta` 中的迁移锁（带过期时间，防止并发执行），再按序执行迁移并校验必需的表与索引，最后写入新版本号。
+- 需要数据回填的迁移（例如补 `sync_seq`）拆成分批任务，由 Cron 推进，不在请求路径中一次做完。
+
+---
+
+## 附：待确认与待核实事项索引
+
+| # | 事项 | 位置 | 推荐 |
+|---|---|---|---|
+| 1 | 前端框架 | 2.2 | React 19（与 Inkstone 同栈）；备选 Preact |
+| 2 | 代码是否放在 MeNote 仓库，以及目录结构 | 2.3 | 同一仓库，pnpm workspace |
+| 3 | D1 表结构的技术补充（墓碑、R2 待删队列、更多表进入增量同步、附件的版本引用、限速计数、跨会话字段） | 5.1 | 按 5.1 补充 |
+| 4 | 不支持 SharedWorker 时“本次浏览器会话”档位的退化方式 | 7.1 | 每个标签页各自解锁、各自计时 |
+| 5 | 转换开始时先打 `enc_pending` 标记，保证转换期间对 MCP 不可见 | 7.4 | 增加该列 |
+| 6 | idle 封存由服务端兜底 | 9 | 启用 |
+| 7 | SharedWorker 的移动端支持 | 7.1 | 待核实 |
+| 8 | 缩略图的 R2 对象键 | 5.2 | 待核实 |
+| 9 | MCP 小节解析门槛、服务端压缩门槛、2MB 全文读写的 CPU 实测 | 11、14.2 | 待实测 |

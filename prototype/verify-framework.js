@@ -97,6 +97,77 @@ step('区块总数统计', () => {
   console.log('       （字典共 ' + all.size + ' 个区块）');
 });
 
+step('顶栏页：账户头像已移出（只剩 5 块）', () => {
+  click($$('.fw-tab')[1]);
+  if ($('#canvas [data-b="fnAccount"]')) throw new Error('顶栏仍存在账户块');
+  const n = $$('#canvas .blk-strip > [data-b]').length;
+  if (n !== 5) throw new Error('顶栏区块数 ' + n);
+});
+
+step('功能栏页：新建笔记 / 笔记本新建入口 / 底部账户与设置', () => {
+  click($$('.fw-tab')[2]);
+  ['newBtn', 'nbAdd', 'fnAccount'].forEach(id => {
+    if (!$('#canvas [data-b="' + id + '"]')) throw new Error('缺区块 ' + id);
+  });
+  if (!$('#canvas [data-b="newBtn"]').textContent.includes('新建笔记'))
+    throw new Error('新建按钮未直连笔记');
+  if ($('#canvas [data-b="fnFoot"]')) throw new Error('底部仍有独立回收站 / 设置区块');
+});
+
+step('待办已与 Memo 合并：导航无独立待办项（7.4 / 9.4）', () => {
+  click($$('.fw-tab')[2]);
+  if ($('#canvas [data-b="navTask"]')) throw new Error('导航仍有独立待办项');
+  const nav = $('#canvas [data-b="navMain"] .blk-note').textContent;
+  if (nav.includes('待办')) throw new Error('主导航描述仍含待办：' + nav);
+  click($$('.fw-tab')[5]);   // 05 Memo 页
+  const tabs = $('#canvas [data-b="memoMode"] .blk-note').textContent;
+  if (!tabs.includes('清单')) throw new Error('Memo 视图缺清单 tab：' + tabs);
+});
+
+step('快速录入框：模式为 Memo / 待办 / 笔记 三档', () => {
+  click($$('.fw-tab')[2]);
+  const s = $('#canvas [data-b="modeTabs"] .blk-note').textContent;
+  ['Memo', '待办', '笔记'].forEach(m => {
+    if (!s.includes(m)) throw new Error('模式缺 ' + m + '：' + s);
+  });
+});
+
+step('模式附加项：锁定只占一排（26px），切换不推挤', () => {
+  click($$('.fw-tab')[2]);
+  const n = $('#canvas [data-b="composerExtra"] .blk-note').textContent;
+  if (!n.includes('锁定')) throw new Error('附加项未标注为锁定一排：' + n);
+  if (!n.includes('一排')) throw new Error('附加项未标注排数：' + n);
+  const style = $('#canvas [data-b="composerExtra"]').getAttribute('style') || '';
+  if (!/height:\s*26px/.test(style)) throw new Error('附加项容器不是一排高度：' + style);
+});
+
+step('录入框已压缩：取消独立发布行，发布按钮与模式选择同行', () => {
+  click($$('.fw-tab')[2]);
+  if ($('#canvas [data-b="composerFoot"]')) throw new Error('独立发布行仍在');
+  const row = $('#canvas [data-b="modeTabs"]').parentElement;
+  const pub = $('#canvas [data-b="composerPublish"]');
+  if (!pub) throw new Error('缺发布按钮');
+  if (pub.parentElement !== row) throw new Error('发布按钮未与模式选择同行');
+  const order = Array.from(row.children).map(el => el.dataset.b);
+  if (order.join('/') !== 'modeTabs/composerPublish') throw new Error('行内顺序不对：' + order.join('/'));
+  if (!pub.textContent.includes('发布')) throw new Error('发布按钮文案不对');
+});
+
+step('设置页：含版本与回收站子页面', () => {
+  click($$('.fw-tab')[8]);
+  if (!$('#canvas [data-b="setTrash"]')) throw new Error('设置页无「版本与回收站」');
+});
+
+step('笔记本正文：加密状态条与尺寸提示条已并入状态栏', () => {
+  click($$('.fw-tab')[4]);
+  ['secBar', 'sizeWarn'].forEach(id => {
+    if ($('#canvas [data-b="' + id + '"]')) throw new Error('仍存在独立块 ' + id);
+  });
+  const st = $('#canvas [data-b="docStatus"]');
+  if (!st) throw new Error('缺正文状态栏');
+  if (!st.textContent.includes('唯一一条')) throw new Error('状态栏未标注为合并后唯一一条');
+});
+
 step('点击线框块 → 说明面板切到块详情', () => {
   click($$('.fw-tab')[1]);                       // 顶栏页
   click($('#canvas [data-b="capsule"]'));

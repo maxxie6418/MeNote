@@ -8,8 +8,9 @@
      npm install jsdom
      NODE_PATH=<node_modules 路径> node verify-prototype.js
 
-   覆盖：导航路由 / 笔记本双栏 / 编辑器尺寸提示 / Memo 三视图 /
-         清单列表与看板 / 快速录入框三模式 / 滑出详情侧栏 /
+   覆盖：导航路由 / 账户入口唯一性 / 笔记本双栏 / 正文层级归并 /
+         Memo 三视图 / 清单列表与看板 / 快速录入框两模式 + 独立待办按钮 /
+         新建直连笔记 / 笔记本新建入口 / 滑出详情侧栏 /
          隐私锁锁定与解锁 / Memo 隐私门禁 / 恢复码流程 /
          搜索 / 表格视图切换 / 菜单
    ============================================================ */
@@ -61,15 +62,99 @@ step('导航含「笔记本」且可点（7.4 导航项）', () => {
   if (!$('.nav-item[data-fn="notebook"]')) throw new Error('笔记本不是导航项');
 });
 
+step('账户入口：全站只有一个头像，且位于功能栏底部（7.4 修订）', () => {
+  const avatars = $$('.avatar');
+  if (avatars.length !== 1) throw new Error('头像数量 ' + avatars.length);
+  const acc = $('#fnAccount');
+  if (!acc) throw new Error('功能栏底部无账户区');
+  if (!acc.closest('.fn-foot')) throw new Error('账户区不在功能栏底部');
+  if (!acc.contains(avatars[0])) throw new Error('头像不在账户区内');
+});
+
+step('底部已无独立的回收站 / 设置入口（7.4 修订）', () => {
+  if ($('.nav-item[data-fn="trash"]')) throw new Error('底部仍有独立回收站入口');
+  if ($('.nav-item[data-fn="settings"]')) throw new Error('底部仍有独立设置入口');
+});
+
+step('录入框模式为 Memo / 待办 / 笔记 三档', () => {
+  const modes = $$('#composerModes button').map(b => b.dataset.mode);
+  if (modes.join('/') !== 'memo/task/note') throw new Error('模式为 ' + modes.join('/'));
+});
+
+step('模式附加项：锁定一排（26px），三档都不隐藏、不换行（7.4 修订）', () => {
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const rule = css.match(/\.composer-extra\{[^}]*\}/);
+  if (!rule) throw new Error('未找到 .composer-extra 规则');
+  if (!/height:\s*26px/.test(rule[0])) throw new Error('附加项未锁定为一排：' + rule[0]);
+  if (!/flex-wrap:\s*nowrap/.test(rule[0])) throw new Error('附加项仍允许换行：' + rule[0]);
+  const extra = $('#composerExtra');
+  ['memo', 'task', 'note'].forEach(m => {
+    click($('#composerModes button[data-mode="' + m + '"]'));
+    if (extra.classList.contains('hidden')) throw new Error(m + ' 模式下被隐藏，会推挤下方 UI');
+  });
+  click($('#composerModes button[data-mode="note"]'));
+  if (!extra.textContent.includes('首行作标题')) throw new Error('笔记附加项文案未收短：' + extra.textContent);
+});
+
+step('录入框已压缩：取消发布行，发布按钮与模式选择同行（7.4 修订）', () => {
+  if ($('.composer-foot')) throw new Error('仍存在独立的发布行');
+  if ($('#composerTip')) throw new Error('仍存在独立的快捷键提示元素');
+  const row = $('.mode-row');
+  if (!row) throw new Error('缺模式行');
+  const kids = Array.from(row.children).map(el => el.id);
+  if (kids.join('/') !== 'composerModes/composerPublish') throw new Error('行内顺序不对：' + kids.join('/'));
+  click($('#composerModes button[data-mode="task"]'));
+  if (!$('#composerPublish').title) throw new Error('发布按钮未承接快捷键提示');
+  click($('#composerModes button[data-mode="memo"]'));
+});
+
+step('待办与 Memo 已合并为一个导航项（7.4 / 9.4）', () => {
+  if ($('.nav-item[data-fn="task"]')) throw new Error('导航仍有独立待办项');
+  click($('.nav-item[data-fn="memo"]'));
+  if (!$$('.memo-item').length) throw new Error('Memo 默认未落在时间轴');
+  const tabs = $$('#memoMode button').map(b => b.dataset.m);
+  if (tabs.join('/') !== 'timeline/waterfall/tasks') throw new Error('Memo 视图 tab 不是三档：' + tabs.join('/'));
+});
+
+step('Memo 视图内的「清单」tab 即待办（7.4 / 9.4）', () => {
+  click($('#memoMode button[data-m="tasks"]'));
+  if (!$$('.task-row').length) throw new Error('清单为空');
+  if (!$('.pane-head .sub').textContent.includes('清单不是独立类型'))
+    throw new Error('未说明清单与 Memo 的归属关系');
+  click($('#memoMode button[data-m="timeline"]'));
+  if (!$$('.memo-item').length) throw new Error('返回时间轴失败');
+});
+
+step('账户与设置：点击底部入口进入设置（7.4 修订）', () => {
+  click($('#fnAccount'));
+  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
+  if (!$('#fnAccount').classList.contains('active')) throw new Error('账户入口未高亮');
+});
+
+step('设置内含「版本与回收站」，可打开回收站（7.4 修订）', () => {
+  if (!$('#openTrash')) throw new Error('设置里没有回收站入口');
+  click($('#openTrash'));
+  if (!$('.pane-head h1').textContent.includes('回收站')) throw new Error('未进入回收站');
+  if (!$('#trashBack')) throw new Error('回收站缺返回设置的入口');
+  click($('#trashBack'));
+  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未返回设置');
+});
+
 step('切到笔记本 → 列表 + 正文双栏', () => {
   click($('.nav-item[data-fn="notebook"]'));
   if (!$$('#paneList .item-row').length) throw new Error('左侧列表为空');
   if (!$('#edSource')) throw new Error('右侧正文未渲染');
 });
 
-step('点开加密日记（已解锁态）', () => {
+step('点开加密日记（已解锁态）：加密信息已并入状态栏', () => {
   click($$('#paneList .item-item, #paneList .item-row').find(r => r.dataset.id === 'n3'));
-  if (!$('#docSecBar')) throw new Error('加密状态条未出现');
+  if (!$('.doc-head .enc-mark')) throw new Error('正文头未显示加密标识');
+  if ($$('#paneDoc .doc-status').length !== 1) throw new Error('正文状态栏不是唯一一条');
+  const st = $('#paneDoc .doc-status');
+  if (!st.querySelector('#edTimer')) throw new Error('状态栏未含解锁倒计时');
+  if (!st.querySelector('#docLockNow')) throw new Error('状态栏未含「立即锁定」');
+  if ($('#paneDoc .sec-bar')) throw new Error('仍存在独立的加密状态条');
+  if ($('#paneDoc .size-warn')) throw new Error('仍存在独立的尺寸提示条');
 });
 
 step('编辑器输入 → 预览渲染 + 尺寸统计', () => {
@@ -106,7 +191,7 @@ step('清单勾选完成', () => {
   click($('[data-tcheck]'));
 });
 
-step('录入框：待办模式发布（带优先级）', () => {
+step('录入框：待办模式发布（带优先级，日期与优先级为模式附加项）', () => {
   click($('#composerModes button[data-mode="task"]'));
   click($('span[data-pri="低"]'));
   input($('#composerInput'), '测试待办一条 #测试');
@@ -184,15 +269,17 @@ step('忘记密码 → 恢复码流程', () => {
   if (!$('#lockCapsule').textContent.includes('已解锁')) throw new Error('未解锁');
 });
 
-step('回收站：恢复一条', () => {
-  click($('.nav-item[data-fn="trash"]'));
+step('回收站：从设置进入并恢复一条（7.4 修订）', () => {
+  click($('#fnAccount'));
+  click($('#openTrash'));
   const before = $$('.trash-row').length;
   click($('[data-restore]'));
   if ($$('.trash-row').length !== before - 1) throw new Error('未移除');
 });
 
 step('设置：改档位 → 胶囊跟随', () => {
-  click($('.nav-item[data-fn="settings"]'));
+  click($('#fnAccount'));
+  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
   click($('#timeoutSet .radio-opt[data-min="-1"]'));
   if (!$('#lockCapsule').textContent.includes('本次会话')) throw new Error('胶囊未跟随档位');
 });
@@ -233,17 +320,25 @@ step('表格：状态单元格循环', () => {
   if ($('[data-bstatus]').textContent === before) throw new Error('状态未变化');
 });
 
-step('新建菜单：笔记 / 表格 / 文件夹', () => {
+step('新建按钮：一次点击直接新建笔记（7.4 修订）', () => {
   click($('#btnNew'));
+  if (!$('#edSource')) throw new Error('未直接打开编辑器');
+  if (!$('#docTitle').value.includes('未命名笔记')) throw new Error('新建的不是笔记：' + $('#docTitle').value);
+  if ($$('#paneDoc .doc-status').length !== 1) throw new Error('新笔记的状态栏不是唯一一条');
+});
+
+step('笔记本新建入口：文件夹 / 表格（表格不在录入框里）', () => {
+  click($('#nbAdd'));
   if (!doc.querySelector('.menu-item[data-new="folder"]')) throw new Error('缺文件夹项');
   click(doc.querySelector('.menu-item[data-new="table"]'));
   if (!$('table.data')) throw new Error('未进入表格');
 });
 
-step('头像菜单', () => {
-  click($('#avatar'));
-  if (!doc.querySelector('.menu')) throw new Error('菜单未出现');
-  click(doc.querySelector('.menu-item'));
+step('账户与设置入口不弹菜单，直接进设置（7.4 修订）', () => {
+  click($('.nav-item[data-fn="recent"]'));
+  click($('#fnAccount'));
+  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
+  if (doc.querySelector('.menu')) throw new Error('账户入口仍在弹菜单，与「合并为一个入口」不符');
 });
 
 console.log('\n=== 结果：通过 ' + pass + ' / 失败 ' + fail + ' ===');

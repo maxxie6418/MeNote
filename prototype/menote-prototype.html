@@ -129,6 +129,24 @@ a{color:inherit;text-decoration:none}
 .fn-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 12px 14px}
 .fn-foot{flex:none;border-top:1px solid var(--line);padding:8px 12px 10px}
 
+/* 账户区（7.4 修订：由顶栏移到功能栏底部，全站唯一账户入口） */
+.fn-account{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:9px;cursor:pointer;transition:.14s;margin-bottom:4px}
+.fn-account:hover{background:var(--panel)}
+.fn-account .acc-meta{display:flex;flex-direction:column;line-height:1.25;min-width:0;flex:1}
+.fn-account .acc-meta b{font-size:12.5px;font-weight:600}
+.fn-account .acc-meta span{font-size:10.5px;color:var(--muted)}
+.fn-account .chev{margin-left:auto;width:13px;height:13px;color:var(--muted);opacity:.7}
+.fn-account.active{background:var(--primary-soft)}
+.fn-account.active .acc-meta b{color:var(--primary-2)}
+.fn-account.active .chev{color:var(--primary-2);opacity:1}
+
+/* 笔记本节点右侧的新建入口（表格 / 文件夹走这里，7.4） */
+.nb-head{display:flex;align-items:center;gap:4px}
+.nb-head .nav-item{flex:1;min-width:0}
+.icon-btn{flex:none;width:24px;height:24px;display:grid;place-items:center;border-radius:6px;color:var(--muted);transition:.14s}
+.icon-btn:hover{background:var(--panel-3);color:var(--text)}
+.icon-btn .ic{width:13px;height:13px}
+
 .btn-new{
   width:100%;height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;
   border-radius:9px;background:linear-gradient(140deg,#4f7ff0,#6d5ce8);color:#fff;
@@ -137,24 +155,30 @@ a{color:inherit;text-decoration:none}
 .btn-new:hover{filter:brightness(1.1)}
 .btn-new .chev{margin-left:auto;opacity:.8;width:14px;height:14px}
 
-.composer{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:10px 11px;transition:.16s}
+.composer{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:9px 10px;transition:.16s}
 .composer:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
-.composer textarea{width:100%;min-height:50px;max-height:180px;resize:vertical;font-size:13px;line-height:1.65;background:transparent}
-.composer textarea::placeholder{color:var(--muted)}
-.mode-tabs{display:flex;gap:3px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px;margin-top:9px}
-.mode-tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;height:25px;
-  border-radius:6px;font-size:11.5px;color:var(--muted);transition:.14s}
+.composer textarea{width:100%;min-height:40px;max-height:180px;resize:vertical;font-size:13px;line-height:1.6;background:transparent}
+.composer textarea::placeholder{color:var(--muted);font-size:12.5px}
+/* 7.4 修订：模式选择（左）与发布按钮（右）同一行，取消独立发布行 */
+.mode-row{display:flex;align-items:center;gap:7px;margin-top:8px}
+.mode-row>#composerPublish{flex:none;height:27px;padding:0 11px;font-size:11.5px}
+.mode-tabs{flex:1;min-width:0;display:flex;gap:3px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px}
+.mode-tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;height:23px;
+  border-radius:6px;font-size:11.5px;color:var(--muted);transition:.14s;white-space:nowrap}
 .mode-tabs button:hover{color:var(--text-2)}
 .mode-tabs button.on{background:var(--panel-3);color:var(--text);font-weight:600}
 .mode-tabs .ic{width:12px;height:12px}
-.composer-extra{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
-.composer-foot{display:flex;align-items:center;gap:8px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
-.composer-foot .tip{font-size:10.5px;color:var(--muted)}
-.composer-foot .tip kbd{font-family:var(--mono);font-size:10px;background:var(--panel-3);padding:1px 4px;border-radius:3px}
-.composer-foot .right{margin-left:auto}
+/* 7.4 修订：附加项锁定为「一排」高度，切换模式只换内容不换高度，绝不推挤下方导航。
+   内容按 248px 可用宽度排布（功能栏 294 - 左右内边距 46），实测两模式均约 212px，留有余量。
+   若日后新增标签导致超宽，这里允许横向滚动而不换行，避免撑高。 */
+.composer-extra{display:flex;align-items:center;gap:5px;margin-top:6px;
+  flex-wrap:nowrap;height:26px;overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none}
+.composer-extra::-webkit-scrollbar{height:0}
 
-.sw{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;
-  border:1px solid var(--line-2);border-radius:6px;height:22px;padding:0 7px;transition:.14s}
+.sw{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;user-select:none;
+  border:1px solid var(--line-2);border-radius:6px;height:20px;padding:0 6px;transition:.14s;
+  white-space:nowrap;flex:none}
 .sw:hover{color:var(--text-2);border-color:var(--primary)}
 .sw.on{color:var(--primary-2);border-color:var(--primary);background:var(--primary-soft)}
 .sw .ic{width:11px;height:11px}
@@ -270,18 +294,16 @@ a{color:inherit;text-decoration:none}
 .size-tag.soft{color:var(--amber)}
 .size-tag.hard{color:var(--red)}
 
-.sec-bar{flex:none;display:flex;align-items:center;gap:9px;padding:7px 22px;font-size:12.5px;
-  background:var(--amber-soft);color:var(--amber);border-bottom:1px solid rgba(242,181,68,.22)}
-.sec-bar.danger{background:var(--red-soft);color:var(--red);border-bottom-color:rgba(242,100,110,.24)}
-.sec-bar .ic{width:14px;height:14px}
-.sec-bar .right{margin-left:auto;display:flex;gap:8px}
-.sec-bar .timer{font-family:var(--mono);font-variant-numeric:tabular-nums}
-
-.size-warn{display:none;align-items:center;gap:8px;padding:7px 22px;font-size:12px;
-  background:var(--amber-soft);color:var(--amber);border-bottom:1px solid rgba(242,181,68,.22)}
-.size-warn .ic{width:14px;height:14px;flex:none}
-.size-warn.show{display:flex}
-.size-warn.hard{background:var(--red-soft);color:var(--red);border-bottom-color:rgba(242,100,110,.24)}
+/* 正文状态栏内的合并样式（7.4 修订：原加密状态条与尺寸提示条均已并入此栏） */
+.doc-status .timer{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.doc-status .btn.sm{height:21px;padding:0 8px;font-size:11px}
+.size-hint{display:none;font-size:11.5px}
+.size-hint.show{display:inline}
+.size-hint.soft{color:var(--amber)}
+.size-hint.hard{color:var(--red)}
+.enc-mark{display:inline-flex;align-items:center;gap:5px;flex:none;height:23px;padding:0 9px;border-radius:6px;
+  background:var(--amber-soft);color:var(--amber);font-size:11.5px;font-weight:600}
+.enc-mark .ic{width:12px;height:12px}
 
 .ed-body{flex:1;display:flex;overflow:hidden;min-height:0}
 .ed-pane{flex:1;overflow-y:auto;min-width:0}
@@ -586,6 +608,7 @@ table.data tbody tr:hover{background:var(--panel-2)}
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M16.5 5.5l2 2M14 8l2 2"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 14v5.5H4.5V6H10"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.8 20c0-3.6 3.2-6 7.2-6s7.2 2.4 7.2 6"/></symbol>
 </svg>
 
 <div class="shell">
@@ -615,8 +638,6 @@ table.data tbody tr:hover{background:var(--panel-2)}
       <span>已解锁</span>
       <span class="timer" id="lockTimer">4:32</span>
     </div>
-
-    <div class="avatar" id="avatar">M</div>
   </header>
 
   <div class="body-row">
@@ -624,24 +645,24 @@ table.data tbody tr:hover{background:var(--panel-2)}
     <!-- ==================== 功能栏 ==================== -->
     <aside class="fnbar">
       <div class="fn-top">
+        <!-- 新建区（7.4 修订）：新建笔记一次点击直达，不再先展开类型菜单 -->
         <button class="btn-new" id="btnNew">
-          <svg class="ic"><use href="#i-plus"/></svg>新建
-          <svg class="ic chev"><use href="#i-chev-d"/></svg>
+          <svg class="ic"><use href="#i-plus"/></svg>新建笔记
         </button>
 
-        <!-- 快速录入框（7.4：Memo 默认 / 待办 / 笔记） -->
+        <!-- 快速录入框（7.4：Memo 默认 / 待办 / 笔记 三档） -->
         <div class="composer">
-          <textarea id="composerInput" placeholder="记点什么……"></textarea>
-          <div class="mode-tabs" id="composerModes">
-            <button data-mode="memo" class="on"><svg class="ic"><use href="#i-clock"/></svg>Memo</button>
-            <button data-mode="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办</button>
-            <button data-mode="note"><svg class="ic"><use href="#i-note"/></svg>笔记</button>
+          <textarea id="composerInput" placeholder="记点什么……  Ctrl+Enter 发布"></textarea>
+          <!-- 7.4 修订：模式选择与发布按钮并为一行，取消原来的独立发布行，整体更紧凑 -->
+          <div class="mode-row">
+            <div class="mode-tabs" id="composerModes">
+              <button data-mode="memo" class="on"><svg class="ic"><use href="#i-clock"/></svg>Memo</button>
+              <button data-mode="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办</button>
+              <button data-mode="note"><svg class="ic"><use href="#i-note"/></svg>笔记</button>
+            </div>
+            <button class="btn primary sm" id="composerPublish" title="Ctrl+Enter 发布">发布</button>
           </div>
-          <div class="composer-extra hidden" id="composerExtra"></div>
-          <div class="composer-foot">
-            <span class="tip" id="composerTip"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发布</span>
-            <div class="right"><button class="btn primary sm" id="composerPublish">发布</button></div>
-          </div>
+          <div class="composer-extra" id="composerExtra"></div>
         </div>
       </div>
 
@@ -654,7 +675,10 @@ table.data tbody tr:hover{background:var(--panel-2)}
         </nav>
 
         <div class="group">
-          <a class="nav-item" data-fn="notebook"><svg class="ic"><use href="#i-folder"/></svg>笔记本<span class="count">8</span></a>
+          <div class="nb-head">
+            <a class="nav-item" data-fn="notebook"><svg class="ic"><use href="#i-folder"/></svg>笔记本<span class="count">8</span></a>
+            <button class="icon-btn" id="nbAdd" title="新建文件夹 / 表格"><svg class="ic"><use href="#i-plus"/></svg></button>
+          </div>
           <ul class="tree" id="folderTree">
             <li>
               <div class="tree-row" data-toggle="f1">
@@ -715,10 +739,12 @@ table.data tbody tr:hover{background:var(--panel-2)}
       </div>
 
       <div class="fn-foot">
-        <nav class="nav">
-          <a class="nav-item" data-fn="trash"><svg class="ic"><use href="#i-trash"/></svg>回收站<span class="count">4</span></a>
-          <a class="nav-item" data-fn="settings"><svg class="ic"><use href="#i-settings"/></svg>设置</a>
-        </nav>
+        <!-- 账户与设置（7.4 修订）：由顶栏移来并与设置合并，全站唯一入口；回收站移入设置 -->
+        <div class="fn-account" id="fnAccount" title="账户与设置">
+          <div class="avatar">M</div>
+          <div class="acc-meta"><b>owner</b><span>账户与设置</span></div>
+          <svg class="ic chev"><use href="#i-settings"/></svg>
+        </div>
       </div>
     </aside>
 
@@ -1111,6 +1137,9 @@ function go(fn, opts){
   if(opts.tag !== undefined) state.tag = opts.tag;
 
   $$('.nav-item[data-fn]').forEach(n => n.classList.toggle('active', n.dataset.fn === fn));
+  // 7.4 修订：账户与设置合并为一个入口，进设置或回收站时它保持高亮
+  const acc = $('#fnAccount');
+  if(acc) acc.classList.toggle('active', fn === 'settings' || fn === 'trash');
   $$('#folderTree .tree-row[data-folder]').forEach(r => r.classList.toggle('active', r.dataset.folder === state.folder));
 
   const crumb = $('#crumb');
@@ -1134,6 +1163,8 @@ function render(){
   list.classList.remove('wide','hidden');
   doc.classList.remove('center','hidden');
 
+  // 7.4 / 9.4：清单不是独立类型，是加在 Memo 上的标记 —— 待办与 Memo 合并为同一个导航项，
+  // 待办即 Memo 视图内的「清单」tab（见 memoPanel 的 memoMode）。
   if(fn === 'memo'){ list.classList.add('hidden'); doc.innerHTML = memoPanel(); bindMemo(); return; }
   if(fn === 'vault'){ list.classList.add('hidden'); doc.innerHTML = vaultPanel(); bindVault(); return; }
   if(fn === 'trash'){ list.classList.add('hidden'); doc.innerHTML = trashPanel(); bindTrash(); return; }
@@ -1227,32 +1258,36 @@ function docPanel(n){
 
   const body = bodyOf(n);
 
+  // 7.4 修订：正文区只保留「正文头 + 底部状态栏」两条。
+  // 原加密状态条、尺寸提示条的内容全部并入状态栏。
   return '<div class="doc-head">'
     + '<input class="doc-title" id="docTitle" value="' + esc(n.title) + '">'
+    + (n.enc ? '<span class="enc-mark" title="此笔记已加密">' + icon('i-lock') + '已加密</span>' : '')
     + '<div class="actions">'
-    +   '<button class="btn sm" id="docEncBtn">' + icon('i-lock') + (n.enc ? '加密中' : '加密') + '</button>'
-    +   '<button class="btn sm" id="docVersionBtn">' + icon('i-clock') + '版本 ' + n.versions + '</button>'
-    +   '<button class="btn sm" id="docShareBtn">' + icon('i-share') + '分享</button>'
     +   '<div class="seg" id="docMode">'
     +     '<button data-mode="edit">' + icon('i-pencil') + '编辑</button>'
     +     '<button data-mode="split" class="on">' + icon('i-columns') + '分屏</button>'
     +     '<button data-mode="preview">' + icon('i-eye') + '预览</button>'
     +   '</div>'
-    +   '<button class="btn ghost sm">' + icon('i-more') + '</button>'
+    +   '<button class="btn sm" id="docMoreBtn">' + icon('i-more') + '更多</button>'
     + '</div>'
     + '</div>'
-    + (n.enc ? '<div class="sec-bar" id="docSecBar">' + icon('i-unlock')
-        + '<span>加密笔记 · 已解锁 · <span class="timer" id="edTimer">' + fmt(state.remaining) + '</span> 后自动锁定</span>'
-        + '<div class="right"><button class="btn sm" id="docLockNow">立即锁定</button></div></div>' : '')
-    + '<div class="size-warn" id="sizeWarn">' + icon('i-alert') + '<span id="sizeWarnText"></span></div>'
     + '<div class="ed-body mode-split" id="edBody">'
     +   '<div class="ed-pane edit"><textarea id="edSource" spellcheck="false">' + esc(body) + '</textarea></div>'
     +   '<div class="ed-pane preview"><div class="md" id="edPreview"></div></div>'
     + '</div>'
     + '<div class="doc-status">'
     +   '<span class="sync-tag ok" id="docSync">' + icon('i-cloud-ok') + '已同步</span>'
-    +   (n.enc ? '<span class="sync-tag enc">' + icon('i-lock') + '已加密保存</span>' : '')
-    +   '<div class="right"><span id="docWords">—</span><span class="size-tag" id="docSize">—</span></div>'
+    +   (n.enc
+        ? '<span class="sync-tag enc">' + icon('i-unlock') + '加密笔记 · 已解锁 · <span class="timer" id="edTimer">'
+            + fmt(state.remaining) + '</span> 后自动锁定</span>'
+          + '<button class="btn sm" id="docLockNow">立即锁定</button>'
+        : '')
+    +   '<div class="right">'
+    +     '<span class="size-hint" id="docSizeHint"></span>'
+    +     '<span id="docWords">—</span>'
+    +     '<span class="size-tag" id="docSize">—</span>'
+    +   '</div>'
     + '</div>';
 }
 
@@ -1326,14 +1361,21 @@ function bindDoc(){
     eb.classList.add('mode-' + b.dataset.mode);
   }));
 
-  const encBtn = $('#docEncBtn');
-  if(encBtn) encBtn.addEventListener('click', () => toast('加密标记：勾选后正文与附件在浏览器端加密，旧明文版本与附件需一并处理（6.11）', 'info'));
-  const vBtn = $('#docVersionBtn');
-  if(vBtn) vBtn.addEventListener('click', () => toast('版本历史：' + n.versions + ' 个版本，正文压缩后存 R2，元数据存 D1（第十二节）', 'info'));
-  const sBtn = $('#docShareBtn');
-  if(sBtn) sBtn.addEventListener('click', () => {
-    if(n.enc){ toast('加密内容不可分享：按钮置灰并说明原因（16.1）', 'warn'); return; }
-    toast('已创建只读分享链接（原型不实现）', 'ok');
+  // 7.4 修订：加密 / 版本 / 分享三个按钮收进「更多」菜单，正文头只留模式切换
+  const moreBtn = $('#docMoreBtn');
+  if(moreBtn) moreBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    showMenu(moreBtn,
+      '<div class="menu-item" data-doc="enc">' + icon('i-lock') + (n.enc ? '取消加密' : '加密此笔记') + '</div>'
+      + '<div class="menu-item" data-doc="ver">' + icon('i-clock') + '版本历史<span class="hint">' + n.versions + ' 个</span></div>'
+      + '<div class="menu-item" data-doc="share">' + icon('i-share') + '分享' + (n.enc ? '<span class="hint">加密内容不可分享</span>' : '') + '</div>',
+      item => {
+        const k = item.dataset.doc;
+        if(k === 'enc') toast('加密标记：勾选后正文与附件在浏览器端加密，旧明文版本与附件需一并处理（6.11）', 'info');
+        else if(k === 'ver') toast('版本历史：' + n.versions + ' 个版本，正文压缩后存 R2，元数据存 D1（第十二节）', 'info');
+        else if(n.enc) toast('加密内容不可分享：菜单项标注原因并置灰（16.1）', 'warn');
+        else toast('已创建只读分享链接（原型不实现）', 'ok');
+      }, 'right');
   });
   const lockNow = $('#docLockNow');
   if(lockNow) lockNow.addEventListener('click', () => lockNowFn());
@@ -1369,15 +1411,17 @@ function updateStats(){
   el.classList.toggle('soft', bytes >= SOFT_LIMIT && bytes < HARD_LIMIT);
   el.classList.toggle('hard', bytes >= HARD_LIMIT);
 
-  const w = $('#sizeWarn');
-  if(bytes >= HARD_LIMIT){
-    w.classList.add('show','hard');
-    $('#sizeWarnText').textContent = '已达硬上限 ' + humanSize(bytes) + '（1,900,000 字节）——这是 D1 单行的物理限制，已阻止保存。请拆分为多篇。';
-  } else if(bytes >= SOFT_LIMIT){
-    w.classList.add('show'); w.classList.remove('hard');
-    $('#sizeWarnText').textContent = '文档内容过大（已超过软上限 1 MB），建议按年份或类别拆分；仍可继续编辑与保存。';
-  } else {
-    w.classList.remove('show','hard');
+  // 7.4 修订：尺寸提示不再单独占一条，改为在状态栏内变色 + 追加提示文字
+  const hint = $('#docSizeHint');
+  if(hint){
+    const soft = bytes >= SOFT_LIMIT && bytes < HARD_LIMIT;
+    const hard = bytes >= HARD_LIMIT;
+    hint.classList.toggle('show', soft || hard);
+    hint.classList.toggle('soft', soft);
+    hint.classList.toggle('hard', hard);
+    hint.textContent = hard
+      ? '已达硬上限（1,900,000 字节）· D1 单行物理限制，已阻止保存，请拆分为多篇'
+      : (soft ? '内容过大（超过软上限 1 MB）· 建议拆分，仍可继续保存' : '');
   }
 }
 
@@ -1456,8 +1500,13 @@ function memoPanel(){
     + '<button data-m="waterfall"' + (state.memoView==='waterfall'?' class="on"':'') + '>' + icon('i-image') + '瀑布流</button>'
     + '<button data-m="tasks"' + (state.memoView==='tasks'?' class="on"':'') + '>' + icon('i-check-sq') + '清单</button></div>';
 
+  // 7.4 / 9.4：待办与 Memo 已合并为一个入口，清单只是 Memo 的第三个 tab
+  const taskTab = state.memoView === 'tasks';
   const head = '<div class="pane-head"><div><h1>Memo</h1>'
-    + '<div class="sub">碎片流水 · 明文存储 · 写入免密' + (locked ? ' · 隐私浏览门禁已开启' : '') + '</div></div>'
+    + '<div class="sub">' + (taskTab
+        ? '清单视图 · 清单不是独立类型，是加在 Memo 上的标记（9.1）'
+        : '碎片流水 · 明文存储 · 写入免密' + (locked ? ' · 隐私浏览门禁已开启' : ''))
+    + '</div></div>'
     + '<div class="actions">' + seg + '</div></div>';
 
   if(locked){
@@ -1604,8 +1653,10 @@ function bindVault(){
 }
 
 function trashPanel(){
-  return '<div class="pane-head"><div><h1>回收站</h1>'
-    + '<div class="sub">保留 30 天后永久删除 · 永久删除会一并清理版本、R2 快照与不再被引用的附件</div></div>'
+  // 7.4 修订：回收站改为设置的子页面，从功能栏底部独立入口移入
+  return '<div class="pane-head"><div><button class="btn sm" id="trashBack" style="margin-bottom:7px">← 返回设置</button>'
+    + '<h1>回收站</h1>'
+    + '<div class="sub">设置 · 版本与回收站 · 保留 30 天后永久删除，永久删除会一并清理版本、R2 快照与不再被引用的附件</div></div>'
     + '<div class="actions"><button class="btn sm danger">清空回收站</button></div></div>'
     + '<div class="doc-scroll"><div class="pane-pad" style="max-width:700px">'
     + TRASH.map((t, i) => '<div class="trash-row">' + icon(t.k === 'table' ? 'i-table' : 'i-note')
@@ -1615,6 +1666,8 @@ function trashPanel(){
     + '</div></div>';
 }
 function bindTrash(){
+  const back = $('#trashBack');
+  if(back) back.addEventListener('click', () => go('settings'));
   $$('[data-restore]').forEach(el => el.addEventListener('click', () => {
     const it = TRASH.splice(+el.dataset.restore, 1)[0]; render(); toast('已恢复「' + it.t + '」', 'ok');
   }));
@@ -1624,8 +1677,17 @@ function bindTrash(){
 }
 
 function settingsPanel(){
-  return '<div class="pane-head"><div><h1>设置</h1><div class="sub">隐私锁 / Memo 隐私浏览 / MCP 令牌 / 备份目标 / 我的分享</div></div></div>'
+  // 7.5：按功能域分子页面。7.4 修订后，账户入口（功能栏底部）与本页合并，回收站也并入本页。
+  return '<div class="pane-head"><div><h1>设置</h1><div class="sub">账户与安全 / 隐私锁 / Memo 隐私浏览 / MCP 令牌 / 备份目标 / 我的分享 / 版本与回收站</div></div></div>'
   + '<div class="doc-scroll"><div class="pane-pad"><div class="set-grid">'
+
+  + '<div class="set-card"><div class="set-head">' + icon('i-user') + '<h3>账户与安全</h3>'
+  + '<div class="right"><span class="chip green">owner</span></div></div><div class="set-body">'
+  + '<div class="set-row"><div><div class="lbl">owner</div><div class="desc">每人独立空间，互不可见；无共享、无团队、无邀请（5.1）</div></div>'
+  + '<div class="right"><button class="btn sm">修改登录密码</button></div></div>'
+  + '<div class="set-row"><div><div class="lbl">登录设备与会话</div><div class="desc">后续深入设计清单第 4 项，暂只占位</div></div>'
+  + '<div class="right"><button class="btn sm">退出登录</button></div></div>'
+  + '</div></div>'
 
   + '<div class="set-card"><div class="set-head">' + icon('i-lock') + '<h3>隐私锁</h3>'
   + '<div class="right"><span class="chip green">已启用</span></div></div><div class="set-body">'
@@ -1679,6 +1741,16 @@ function settingsPanel(){
   + '<div class="right"><span class="chip blue">公开标记</span><button class="btn sm">撤销</button></div></div>'
   + '</div></div>'
 
+  // 7.4 修订：回收站由功能栏底部的独立入口并入设置（7.5 已列有「版本与回收站」）
+  + '<div class="set-card"><div class="set-head">' + icon('i-trash') + '<h3>版本与回收站</h3>'
+  + '<div class="right"><button class="btn sm" id="openTrash">' + icon('i-trash') + '打开回收站<span class="count" style="margin-left:5px">' + TRASH.length + '</span></button></div></div>'
+  + '<div class="set-body">'
+  + '<div class="set-row"><div><div class="lbl">回收站保留天数</div><div class="desc">默认保留 30 天后永久删除；永久删除会一并清理版本、R2 快照与不再被引用的附件（7.1）</div></div>'
+  + '<div class="right"><span class="keycap">30 天</span><button class="btn sm">修改</button></div></div>'
+  + '<div class="set-row"><div><div class="lbl">版本封存与保留策略</div><div class="desc">24 小时内全留、1–7 天每 6 小时、7–30 天每天、30 天–1 年每周、1 年以上每月；每条最多 100 个（12.3）</div></div>'
+  + '<div class="right"><button class="btn sm">调整</button></div></div>'
+  + '</div></div>'
+
   + '</div></div></div>';
 }
 function bindSettings(){
@@ -1696,6 +1768,8 @@ function bindSettings(){
     toast(state.privacyBrowse ? 'Memo 浏览已开启隐私密码门禁（存储不变，仅界面行为）'
       : '已关闭门禁：Memo 与普通内容一样随时可见', 'info');
   });
+  const ot = $('#openTrash');
+  if(ot) ot.addEventListener('click', () => go('trash'));
 }
 
 function searchPanel(){
@@ -1799,12 +1873,15 @@ function openDrawer(id){
 function closeDrawer(){ $('#drawer').classList.remove('open'); state.drawerId = null; }
 
 /* ============================================================
-   10. 快速录入框（7.4：Memo 默认 / 待办 / 笔记）
+   10. 快速录入框（7.4：Memo 默认 / 待办 / 笔记 三档）
+       模式选择与发布按钮同一行；附加项固定两排高度
    ============================================================ */
 function syncComposer(){
   const m = state.composerMode;
   const extra = $('#composerExtra');
-  const tip = $('#composerTip');
+  const pub = $('#composerPublish');
+  // 7.4 修订：原来独立发布行里的快捷键提示，改为写进发布按钮的 title
+  const hint = t => { if(pub) pub.title = t; };
 
   if(m === 'task'){
     extra.classList.remove('hidden');
@@ -1812,20 +1889,22 @@ function syncComposer(){
       + '<span class="sw" data-pri="高"' + (state.taskMeta.pri==='高'?' style="color:var(--primary-2);border-color:var(--primary)"':'') + '>高</span>'
       + '<span class="sw" data-pri="中"' + (state.taskMeta.pri==='中'?' style="color:var(--primary-2);border-color:var(--primary)"':'') + '>中</span>'
       + '<span class="sw" data-pri="低"' + (state.taskMeta.pri==='低'?' style="color:var(--primary-2);border-color:var(--primary)"':'') + '>低</span>';
-    tip.innerHTML = '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发布为清单条目';
+    hint('Ctrl+Enter 发布为清单条目');
     extra.querySelectorAll('[data-pri]').forEach(el => el.addEventListener('click', () => {
       state.taskMeta.pri = el.dataset.pri; syncComposer();
     }));
   } else if(m === 'note'){
     extra.classList.remove('hidden');
-    extra.innerHTML = '<span class="sw">' + icon('i-note') + '首行作为标题</span>'
-      + '<span class="sw">' + icon('i-folder') + '存入：根目录</span>'
-      + '<span class="sw">' + icon('i-lock') + '单篇加密</span>';
-    tip.innerHTML = '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 新建并打开编辑器';
+    // 7.4 修订：附加项锁定一排，文案相应收短，确保一排放得下
+    extra.innerHTML = '<span class="sw">' + icon('i-note') + '首行作标题</span>'
+      + '<span class="sw">' + icon('i-folder') + '根目录</span>'
+      + '<span class="sw">' + icon('i-lock') + '加密</span>';
+    hint('Ctrl+Enter 新建并打开编辑器');
   } else {
-    extra.classList.add('hidden');
+    // 7.4 修订：Memo 模式保留等高空位（不隐藏容器），切换模式时下方导航不位移
+    extra.classList.remove('hidden');
     extra.innerHTML = '';
-    tip.innerHTML = '<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发布到时间轴';
+    hint('Ctrl+Enter 发布到时间轴');
   }
 }
 
@@ -2004,9 +2083,13 @@ function showMenu(anchor, html, onPick, align){
   menu.style.position = 'fixed';
   menu.innerHTML = html;
   document.body.appendChild(menu);
-  const r = anchor.getBoundingClientRect(), w = menu.offsetWidth;
-  menu.style.top = (r.bottom + 8) + 'px';
-  menu.style.left = (align === 'left' ? r.left : Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12))) + 'px';
+  const r = anchor.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+  // 7.4 修订：账户区移到功能栏底部后，锚点可能贴着窗口下沿 —— 下方放不下就向上翻。
+  const flipUp = r.bottom + 8 + h > window.innerHeight - 8;
+  menu.style.top = (flipUp ? Math.max(8, r.top - 8 - h) : r.bottom + 8) + 'px';
+  menu.style.left = (align === 'left'
+    ? Math.max(12, r.left)
+    : Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12))) + 'px';
   openMenuEl = menu;
   menu.addEventListener('click', ev => {
     const item = ev.target.closest('.menu-item');
@@ -2076,40 +2159,38 @@ $('#lockCapsule').addEventListener('click', e => {
   });
 });
 
-/* 头像 */
-$('#avatar').addEventListener('click', e => {
-  e.stopPropagation();
-  showMenu($('#avatar'),
-    '<div class="menu-label">owner</div>'
-    + '<div class="menu-item">' + icon('i-settings') + '用户设置</div>'
-    + '<div class="menu-item">' + icon('i-share') + '我的分享</div>'
-    + '<div class="menu-item">' + icon('i-download') + '导出全部内容</div>'
-    + '<div class="menu-sep"></div>'
-    + '<div class="menu-item">' + icon('i-lock') + '退出登录</div>',
-    () => toast('原型不实现该功能', 'info'));
+/* 账户与设置（7.4 修订：位于功能栏底部，与设置合并为同一个入口） */
+$('#fnAccount').addEventListener('click', () => {
+  go('settings');
 });
 
-/* 新建菜单（7.4：笔记 / 表格 / 文件夹） */
-$('#btnNew').addEventListener('click', e => {
+/* 新建笔记（7.4 修订：一次点击直达，不再先展开类型菜单） */
+$('#btnNew').addEventListener('click', () => {
+  const id = 'n' + (Date.now() % 100000);
+  const title = '未命名笔记';
+  NOTES.unshift({ id, kind:'note', title, folder:'（根目录）', tags:[], star:false, pin:false, enc:false,
+    date:'刚刚', words:0, versions:1, created:'刚刚', share:null, snippet:'（空笔记）' });
+  NOTES_BODIES[id] = '---\ntags: []\n---\n\n# ' + title + '\n\n';
+  state.activeId = id;
+  state.folder = null;
+  go('notebook');
+  toast('已新建笔记并打开编辑器（7.4 修订：一次点击直达）', 'ok');
+});
+
+/* 笔记本里的新建入口：表格与文件夹走这里（7.4） */
+$('#nbAdd').addEventListener('click', e => {
   e.stopPropagation();
-  showMenu($('#btnNew'),
-    '<div class="menu-item" data-new="note">' + icon('i-note') + '笔记</div>'
-    + '<div class="menu-item" data-new="table">' + icon('i-table') + '表格</div>'
-    + '<div class="menu-item" data-new="folder">' + icon('i-folder') + '文件夹</div>'
-    + '<div class="menu-sep"></div>'
-    + '<div class="menu-item" data-new="memo">' + icon('i-clock') + 'Memo<span class="hint">用录入框</span></div>',
+  showMenu($('#nbAdd'),
+    '<div class="menu-item" data-new="folder">' + icon('i-folder') + '新建文件夹</div>'
+    + '<div class="menu-item" data-new="table">' + icon('i-table') + '新建表格<span class="hint">先定义列结构</span></div>',
     item => {
       const k = item.dataset.new;
-      if(k === 'memo'){ state.composerMode = 'memo'; syncComposer(); syncModeTabs(); $('#composerInput').focus();
-        toast('表格不在快速录入框中：需先定义列结构，走笔记本中的新建入口（7.4）', 'info'); return; }
       if(k === 'table'){ toast('新建表格：先定义列结构，再写入一篇 type: table 的 md（10.2）', 'info'); state.activeId = 't1'; go('notebook', { folder:'学习' }); return; }
-      if(k === 'folder'){ toast('文件夹最多三层：根目录 / 第一层 / 第二层 / 条目；第二层不再提供新建入口（4.5）', 'info'); return; }
-      state.composerMode = 'note'; syncComposer(); syncModeTabs(); $('#composerInput').focus();
-      toast('在录入框写内容，首行将作为笔记标题', 'info');
+      toast('文件夹最多三层：根目录 / 第一层 / 第二层 / 条目；第二层不再提供新建入口（4.5）', 'info');
     }, 'left');
 });
 
-/* 录入框 */
+/* 录入框（7.4：Memo 默认 / 待办 / 笔记 三档） */
 $$('#composerModes button').forEach(b => b.addEventListener('click', () => {
   state.composerMode = b.dataset.mode;
   syncModeTabs(); syncComposer();
@@ -2128,7 +2209,7 @@ $('#composerInput').addEventListener('input', e => {
     // 9.2：正文写了 - [ ] 时提示"设为清单？"，由用户确认
     if(!$('#composerInput').dataset.hinted){
       $('#composerInput').dataset.hinted = '1';
-      toast('检测到复选框语法 — 设为清单条目？可在模式里切到「待办」', 'info');
+      toast('检测到复选框语法 — 设为清单条目？可点功能栏的「待办」按钮', 'info');
     }
   }
 });

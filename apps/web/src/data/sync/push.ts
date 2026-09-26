@@ -46,6 +46,7 @@ import {
   markOutboxFailure,
   markSettingsSynced,
   putCachedBody,
+  recordConflict,
   removeOutbox,
   type OutboxRow,
 } from "../db";
@@ -315,6 +316,8 @@ async function handleConflict(
     },
     ctx.now(),
   );
+  // 记下副本出自哪条：对比 UI 靠这条关联（不依赖标题，改名/重名都不会指错）
+  await recordConflict(copyId, row.entity_id, ctx.now());
 
   // 原条目采纳服务端版本：正文缓存失效，等下次按需重取
   await markItemSynced(row.entity_id, {

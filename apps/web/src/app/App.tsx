@@ -551,6 +551,15 @@ export default function App() {
                 snapshot={workspace.snapshot}
                 initialMode={userSettings.settings.editor_mode}
                 remoteChanged={workspace.remoteChanged}
+                conflict={workspace.conflictCopy}
+                onOpenConflictCopy={() => {
+                  void workspace.openConflictCopy();
+                }}
+                onResolveConflict={(keep) => {
+                  void workspace.resolveConflict(keep).then(() => {
+                    pushToast(keep === "mine" ? "已保留你的版本" : "已保留服务端版本", "success");
+                  });
+                }}
                 onReload={() => {
                   void workspace.reloadSelected();
                 }}

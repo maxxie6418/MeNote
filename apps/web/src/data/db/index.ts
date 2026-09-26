@@ -3,6 +3,7 @@
  *
  * 界面层只从这里读写数据，不直接碰 Dexie（架构 §3.1：界面层不直接访问 Dexie 或网络）。
  */
+export * from "./conflicts";
 export * from "./database";
 export * from "./repository";
 export * from "./schema";

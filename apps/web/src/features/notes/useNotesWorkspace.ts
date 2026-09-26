@@ -8,6 +8,7 @@ import { newUlid } from "@menote/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildDocument, deriveTags, deriveTaskFields } from "@menote/mdcore";
 import {
+  clearConflict,
   countItemsByFolder,
   createLocalFolder,
   createLocalItem,
@@ -15,6 +16,7 @@ import {
   db,
   enqueueBodySave,
   enqueueMetaPatch,
+  findConflictForOriginal,
   getCachedBody,
   getDraft,
   getLocalItem,
@@ -121,6 +123,17 @@ export interface NotesWorkspace {
   notifyConflict: () => void;
   /** 打开着的这条被别的标签页改过（M2-9 的事前提示；保存仍会走冲突副本路径） */
   remoteChanged: boolean;
+  /** 打开着的这条的冲突副本（M2-9 对比 UI）；`null` = 没有冲突 */
+  conflictCopy: { copyId: string; copyTitle: string } | null;
+  /** 查看冲突副本（在正文区打开它，便于与当前版本对照） */
+  openConflictCopy: () => Promise<void>;
+  /**
+   * 处理冲突：
+   * - `mine`：把副本的内容写回原条目（原条目产生新版本，副本作为普通笔记保留，便于事后核对）；
+   * - `server`：保留服务端版本，副本作为普通笔记保留。
+   * 两种都清掉冲突关联。**删除副本要等 M4 的回收站**——现在删就是不可逆。
+   */
+  resolveConflict: (keep: "mine" | "server") => Promise<void>;
   /** 放弃本地改动、按服务端最新内容重新打开 */
   reloadSelected: () => Promise<void>;
   /** 同步跑完后按本地库的真实状态重算编辑器的保存态 */
@@ -139,11 +152,35 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [memos, setMemos] = useState<LocalItem[]>([]);
   const [memoContents, setMemoContents] = useState<Record<string, MemoContent>>({});
-  /** 打开着的这条是否被别的标签页改过（事前提示；M2-9） */
+  /**
+   * 打开着的这条是否被别的标签页改过（事前提示；M2-9）
+   */
   const [remoteChanged, setRemoteChanged] = useState(false);
+  /** 打开着的这条的冲突副本（M2-9 对比 UI）：`null` = 没有冲突 */
+  const [conflictCopy, setConflictCopy] = useState<{ copyId: string; copyTitle: string } | null>(
+    null,
+  );
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;
+
+  /**
+   * 冲突提示的取值（M2-9 对比 UI）：按本地 `conflicts` 关联算出"当前条目有没有副本"。
+   * `refresh` 与 `open` 都会调它——打开一条有副本的笔记时就该看见提示。
+   */
+  const syncConflictState = useCallback(async (id: string | null) => {
+    if (id === null) {
+      setConflictCopy(null);
+      return;
+    }
+    const conflict = await findConflictForOriginal(id);
+    if (!conflict) {
+      setConflictCopy(null);
+      return;
+    }
+    const copy = await getLocalItem(conflict.copy_id);
+    setConflictCopy({ copyId: conflict.copy_id, copyTitle: copy?.title ?? "冲突副本" });
+  }, []);
 
   /** 内容没变就不要替换数组：每次同步都塞新数组会让下游依赖无谓地变身份 */
   const refresh = useCallback(async () => {
@@ -173,7 +210,9 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       const cached = await getCachedBody(selectedId);
       if (cached && cached.body !== initialBody) setRemoteChanged(true);
     }
-  }, [initialBody, selectedId]);
+    // 冲突提示：\`refresh\` 与 \`open\` 都要算（打开一条有副本的笔记时就该看见）
+    await syncConflictState(selectedId);
+  }, [initialBody, selectedId, syncConflictState]);
 
   // 首次加载：setState 放在 then 回调里，不在 effect 体内同步触发（react-hooks/set-state-in-effect）
   useEffect(() => {
@@ -202,9 +241,10 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       setInitialBody(body);
       setSelectedId(id);
       setRemoteChanged(false);
+      await syncConflictState(id);
       editor.start();
     },
-    [onLocalWrite],
+    [onLocalWrite, syncConflictState],
   );
 
   const createNote = useCallback(
@@ -224,6 +264,37 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     await refresh();
     await open(selectedId);
   }, [open, refresh, selectedId]);
+
+  /** 打开冲突副本（对照看用） */
+  const openConflictCopy = useCallback(async () => {
+    if (!conflictCopy) return;
+    await open(conflictCopy.copyId);
+  }, [conflictCopy, open]);
+
+  /** 处理冲突：把选中的那一份定为原条目的内容（或什么都不改），并清掉关联 */
+  const resolveConflict = useCallback(
+    async (keep: "mine" | "server") => {
+      const conflict = conflictCopy;
+      if (!selectedId || !conflict) return;
+
+      if (keep === "mine") {
+        const item = await getLocalItem(selectedId);
+        const draft = await getDraft(conflict.copyId);
+        const body = draft?.body ?? (await getCachedBody(conflict.copyId))?.body ?? "";
+        if (item && body !== "") {
+          // 写回原条目：走草稿 + 入队，等于"把副本的内容当成这一条的新版本"
+          await saveDraft(selectedId, body, Date.now());
+          await enqueueBodySave(selectedId, item.rev, Date.now());
+          await db.items.update(selectedId, { updated_at: Date.now() });
+        }
+      }
+
+      await clearConflict(conflict.copyId);
+      await refresh();
+      onLocalWrite?.();
+    },
+    [conflictCopy, onLocalWrite, refresh, selectedId],
+  );
 
   const changeTitle = useCallback(async (title: string) => {
       if (!selectedId) return;
@@ -442,6 +513,9 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       togglePinned,
       toggleStarred,
       remoteChanged,
+      conflictCopy,
+      openConflictCopy,
+      resolveConflict,
       reloadSelected,
       input: (text: string) => editorRef.current?.onInput(text),
       notifyUploaded: () => {
@@ -476,6 +550,9 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       refresh,
       reloadSelected,
       remoteChanged,
+      conflictCopy,
+      openConflictCopy,
+      resolveConflict,
       renameFolder,
       moveFolder,
       selected,

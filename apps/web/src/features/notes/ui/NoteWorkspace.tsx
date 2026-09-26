@@ -36,6 +36,10 @@ export interface NoteWorkspaceProps {
   initialMode?: DocMode;
   /** 这条被别的标签页改过（M2-9）：显示事前提示，避免"以为没冲突" */
   remoteChanged?: boolean;
+  /** 这条有冲突副本（M2-9 对比 UI）：显示处理入口 */
+  conflict?: { copyId: string; copyTitle: string } | null;
+  onOpenConflictCopy?: () => void;
+  onResolveConflict?: (keep: "mine" | "server") => void;
   /** 放弃本地改动、按最新内容重新载入 */
   onReload?: () => void;
   onInput: (text: string) => void;
@@ -48,6 +52,9 @@ export function NoteWorkspace({
   snapshot,
   initialMode,
   remoteChanged = false,
+  conflict = null,
+  onOpenConflictCopy,
+  onResolveConflict,
   onReload,
   onInput,
   onTitleChange,
@@ -71,6 +78,39 @@ export function NoteWorkspace({
 
   return (
     <div className="docpane">
+      {conflict ? (
+        <div className="banner banner--warn" role="status">
+          <span>
+            这条笔记有冲突副本（{conflict.copyTitle}）：另一处也改过同一篇，你的版本已另存。保留哪一份？
+          </span>
+          {onOpenConflictCopy ? (
+            <button type="button" className="btn btn--sm" onClick={onOpenConflictCopy}>
+              查看副本
+            </button>
+          ) : null}
+          {onResolveConflict ? (
+            <>
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => onResolveConflict("mine")}
+                title="把副本的内容写回这条（副本仍作为普通笔记保留）"
+              >
+                保留我的版本
+              </button>
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => onResolveConflict("server")}
+                title="保留当前这条的内容（副本仍作为普通笔记保留）"
+              >
+                保留服务端版本
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       {remoteChanged ? (
         <div className="banner banner--warn" role="status">
           <span>

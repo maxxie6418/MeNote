@@ -112,6 +112,19 @@ export interface SettingsRow {
   pending: "put_settings" | null;
 }
 
+/**
+ * 冲突关联（M2-9 的对比 UI 用）：**副本 id → 原条目 id**。
+ *
+ * 为什么要单独记：M1 只把出处写进副本标题（`原标题（冲突副本 09-26 12:00 · 设备）`），
+ * 一旦改名就对不上、标题重名还会指错原条目。这张表是**纯本地**的加工信息——
+ * 不改服务端模型，也不进同步。
+ */
+export interface ConflictRow {
+  copy_id: string;
+  original_id: string;
+  created_at: number;
+}
+
 export class MenoteDatabase extends Dexie {
   items!: EntityTable<LocalItem, "id">;
   bodies!: EntityTable<BodyRow, "item_id">;
@@ -121,6 +134,7 @@ export class MenoteDatabase extends Dexie {
   syncState!: EntityTable<SyncStateRow, "key">;
   searchIndex!: EntityTable<SearchIndexRow, "item_id">;
   settings!: EntityTable<SettingsRow, "key">;
+  conflicts!: EntityTable<ConflictRow, "copy_id">;
 
   constructor(name = "menote") {
     super(name);
@@ -152,6 +166,18 @@ export class MenoteDatabase extends Dexie {
       syncState: "key",
       searchIndex: "item_id, sync_seq, updated_at",
       settings: "key",
+    });
+    // 4：新增冲突关联（M2-9 的对比 UI）。纯本地加工信息，服务端只认两个普通条目。
+    this.version(4).stores({
+      items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+      bodies: "item_id",
+      drafts: "item_id",
+      folders: "id, parent_id, sync_seq",
+      outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+      syncState: "key",
+      searchIndex: "item_id, sync_seq, updated_at",
+      settings: "key",
+      conflicts: "copy_id, original_id",
     });
   }
 }

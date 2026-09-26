@@ -1,9 +1,10 @@
 # CHANGELOG
 
-> 每次改动在最上方追加；日期用小标题，同一天条目不重复写日期。应用版本号启用前以「预开发」占位。
+> 每次改动在最上方追加；日期用小标题，同一天条目不重复写日期。版本号规范见 AGENTS.md「版本号规范」：主版本号仅用户主动提出变更；次版本号随里程碑收口 +0.1；修复/优化/小功能 +0.0.1（同一问题分批调整可合并后一次 +0.0.1）；纯文档改动沿用当前版本号。
 
 ## 2026-09-26
 
+- v0.1.0 / 5fce691 — 版本号规范落进 AGENTS.md（主版本号仅用户主动变更；次版本号随里程碑 +0.1；修订号 +0.0.1，分批可合并）；根 package.json 同步为 0.1.0
 - v0.1.0 / 7a8d42b — 重写 README：特性与技术栈（含已接入/规划状态）、快速开始、目录结构、常用命令、部署（Deploy 按钮 + Workers Builds）、文档导航与冲突优先级
 - v0.1.0 / 5b371c6 — M0 工程骨架：pnpm workspace（apps/web + apps/worker + packages/shared）、Worker /api/health、Vite 8 + React 19 前端、wrangler 部署链路（D1 自动供给 + SPA 静态资源 + CSP 头）、CI（lint / typecheck / 测试 / 构建 / 体积检查）、本地开发指南 wiki/guides/local-dev.md
 - 预开发 — 新增 docs/todo/Menote-开发计划-v1.md（前置准备评估 + M0-M6 里程碑规划，草案待确认）

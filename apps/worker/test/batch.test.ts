@@ -202,7 +202,7 @@ describe("POST /api/batch", () => {
   });
 
   it("超过单批上限（10 个操作）返回 422", async () => {
-    const ops = Array.from({ length: BATCH_MAX_OPS + 1 }, (_, index) => ({
+    const ops = Array.from({ length: BATCH_MAX_OPS + 1 }, () => ({
       kind: "create" as const,
       id: newUlid(),
       meta: {} as ItemWriteMeta,

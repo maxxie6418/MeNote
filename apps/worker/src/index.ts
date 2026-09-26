@@ -4,6 +4,7 @@ import { apiErrorBody } from "@menote/shared";
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { DomainError } from "./errors";
+import { configGuard } from "./middleware/config-guard";
 import { csrfGuard } from "./middleware/csrf";
 import { schemaGuard } from "./middleware/schema";
 import { applySecurityHeaders, securityHeaders } from "./middleware/security-headers";
@@ -17,10 +18,13 @@ import type { AppEnv, EnvBindings } from "./types";
 
 const app = new Hono<AppEnv>();
 
-// 中间件顺序即处理顺序：安全头 → 表结构就绪（§15.4）→ CSRF（§13.2）
+// 中间件顺序即处理顺序：安全头 → 表结构就绪（§15.4）→ CSRF（§13.2）→ 必备机密存在性
 app.use("/api/*", securityHeaders);
 app.use("/api/*", schemaGuard);
 app.use("/api/*", csrfGuard);
+// 需要 AUTH_PEPPER 的接口：缺失时 fail-closed（不用空密钥算 HMAC）
+app.use("/api/auth/*", configGuard);
+app.use("/api/admin/*", configGuard);
 
 app.route("/api", health);
 app.route("/api", auth);

@@ -24,10 +24,9 @@
   ],
   "observability": {
     "enabled": true
-  },
-  // 机密（架构 §13.2/§15.5）：部署页据此逐项提示填值。
-  // 本地开发放 .dev.vars（格式见 .dev.vars.example）；只有 AUTH_PEPPER 一个，无 SESSION_SECRET。
-  "secrets": {
-    "required": ["AUTH_PEPPER"]
   }
+  // 注意：**不要**在这里写 "secrets": { "required": [...] }。
+  // 该字段是 deploy 的硬门禁（不是"提示"）：机密没设时 `wrangler deploy` 直接失败，
+  // 而首次部署时 Worker 还不存在、无法先设机密 —— 会把一键部署/Workers Builds 彻底堵死。
+  // 机密清单改用文档 + .dev.vars.example 说明；运行时缺机密由 middleware/config-guard.ts 明确报 503。
 }

@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1.1（草案修订，待用户审核） |
-| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1 修订） |
+| 文档版本 | v1.9（草案修订，待用户审核） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.9 修订） |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
@@ -21,6 +21,7 @@
 | v1.6 | 2026-09-26 | docs/ 扩充【已定·用户确认】：新增 todo/ 专项计划目录（一个功能/任务一份实施计划，做完归档）与 scratch.md 草稿文件（临时讨论追加区，定期清理）；AGENTS.md「文档放哪」同步 |
 | v1.7 | 2026-09-26 | 草稿改为目录【已定·用户确认】：docs/scratch.md 改为 docs/scratch/ 文件夹——临时讨论与方案草稿一份讨论一份文件（`<主题>-<日期>.md`），定稿搬走、过时件清理；AGENTS.md 同步 |
 | v1.8 | 2026-09-26 | 文件位置迁移执行完毕【已定·用户确认】：三份主线文档移入 `wiki/`，功能拆解 v1 移入 `docs/archive/`，根目录新增 `README.md`；本文路径变为 `wiki/Menote-项目架构-v1.md` |
+| v1.9 | 2026-09-26 | M1 开工前同步【已定·用户确认 2026-09-26】：①§15.4/§15.5 迁移机制统一为**运行时自愈**，删除部署脚本里的 `wrangler d1 migrations apply` 写法（该命令在全新账户上会因查不到库而失败、且对 Workers Builds 通道无效）；②§5.1 建表改指向新隐私模型权威 DDL（`docs/modules/Menote-数据模型与迁移设计-v1.md` §3，需求 18.2 原文勿直接照抄）；③§6.1/§6.3 清理 v1.0 遗留（拉取实体清单里的“数据密钥”、outbox 的 `key` 实体）；④§15.5 机密清单删 `SESSION_SECRET`（会话令牌随机 256 位、库里只存 SHA-256，不需要服务端密钥）；⑤§2.3.2 补落点行（`/api/health`、`services/auth.ts`、`/api/admin/*` 归 `routes/settings.ts`）并在目录树补 `middleware/`；⑥表头文档版本由 v1.1 更正为 v1.9 |
 
 ### 标注约定
 
@@ -177,6 +178,7 @@ MeNote/
 │   └── worker/                     # Cloudflare Worker
 │       └── src/
 │           ├── index.ts            # 装配：Hono 实例、挂载子路由、scheduled 分发（见 2.3.1）
+│           ├── middleware/         # session / csrf / 表结构守卫（§4.1、§15.4）
 │           ├── routes/             # api / public / mcp：校验参数后立刻转服务，不写业务
 │           ├── services/           # 领域服务：items、folders、versions、attachments、shares、tokens、backup ...
 │           ├── db/                 # SQL 常量、batch 组装、迁移与自愈
@@ -213,14 +215,15 @@ Worker 侧（`apps/worker/src/`）：
 
 | 功能 | 路由 routes/ | 服务 services/ | 其他落点 |
 |---|---|---|---|
-| 注册 / 登录 / 会话 | `auth.ts` | `tokens.ts`、`sessions.ts` | middleware/session.ts |
+| 健康检查（`GET /api/health`，存活探针，不依赖 D1） | `health.ts` | — | — |
+| 注册 / 登录 / 会话 | `auth.ts` | `auth.ts`、`tokens.ts`、`sessions.ts` | middleware/session.ts、middleware/csrf.ts |
 | 条目与文件夹（增删改查、移动、回收站、批量标记） | `items.ts`、`folders.ts` | `items.ts`、`folders.ts`、`trash.ts` | db/tables.ts（SQL 常量） |
 | 增量同步（拉取 / 推送 / 墓碑） | `sync.ts` | `sync.ts` | — |
 | 版本历史 | `versions.ts` | `versions.ts` | — |
 | 附件上传 / 下载 / GC | `attachments.ts` | `attachments.ts` | adapters/r2.ts、jobs/gc.ts |
 | 分享（创建 / 公开访问 / 撤销） | `shares.ts`、`public.ts` | `shares.ts` | — |
 | MCP | `mcp.ts` | `mcp.ts` | middleware/ 下令牌与限速 |
-| 设置与隐私标记 | `settings.ts` | `settings.ts` | — |
+| 设置与隐私标记（含 `GET/PUT /api/admin/registration`、`GET /api/admin/usage`） | `settings.ts` | `settings.ts` | — |
 | Cron：快照 / 外部备份 / 维护 | —（无路由） | `jobs.ts` 调度 | jobs/snapshot.ts、jobs/backup.ts、jobs/maintenance.ts；adapters/webdav.ts、s3.ts、git.ts |
 | 迁移与自愈 | — | — | db/migrations/、db/selfheal.ts |
 
@@ -350,7 +353,7 @@ flowchart TB
 | `syncState` | 单行 | `cursor`（最近的 `sync_seq`）、上次同步时间、设备 ID |
 
 - Dexie 的模式版本随客户端发布递增；本地库只是缓存，遇到无法迁移的情况可以清空后从服务端重建（outbox 中未上传的数据先导出为本地备份文件再清空）。
-- 【v1.1 模型修订】隐私条目内容明文落库（用户确认的边界）：锁定只由界面门禁过滤显示，不改变存储；登出清除本机缓存仍按需求 15.1 执行。
+- 【v1.1 模型修订】隐私条目内容明文落库（用户确认的边界）：锁定只由界面门禁过滤显示，不改变存储；登出**不清除**本机缓存的明文数据，只清会话态（Q22 已定·用户确认 2026-09-26）——清缓存会让重新登录后首屏显著变慢，且本机 IndexedDB 里可能还有 outbox 未上传内容要保留。
 
 ### 3.3 编辑器【依需求 7.1，实现细节为架构定】
 
@@ -441,7 +444,7 @@ flowchart LR
 
 ### 5.1 D1 表结构
 
-以需求 18.2 的 DDL 草案为准（v1.1 注：DDL 中的正文密文列、`data_keys`、`user_crypto` 的密钥列在本模型下不再使用，待需求文档 v7.5 同步时清理）。实现时需要以下技术补充【待确认】，均不改变产品行为，只补足需求中已描述的机制所需的存储：
+**建表以新隐私模型的权威 DDL 为准**：`docs/modules/Menote-数据模型与迁移设计-v1.md` §3——即需求 18.2 去掉正文密文列、`title_enc`/`name_enc`/`key_id`、`data_keys`、`user_crypto` 密钥列，并**重写**受密文列影响的 `items`/`folders`/`item_bodies` 的 CHECK 约束（原文的三条 CHECK 引用了要删的列，不能直接照抄）。`items.last_edit_at`/`last_device` 已包含其中。该稿的结论会在需求文档 v7.5 同步时并入需求 18.2。实现时需要以下技术补充【待确认】，均不改变产品行为，只补足需求中已描述的机制所需的存储：
 
 | 补充 | 原因（对应需求） | 草案 |
 |---|---|---|
@@ -487,7 +490,7 @@ D1 以元数据和当前稿为主，个人使用多年仍在百 MB 以内；R2 �
 
 | 方向 | 接口 | 说明 |
 |---|---|---|
-| 拉取 | `GET /api/sync?cursor=N` | 返回 `sync_seq > N` 的元数据变化：条目、文件夹、数据密钥、设置、附件元数据、墓碑；每类合计最多 200 行，带 `next_cursor`、`has_more`；游标小于 `tombstone_floor` 时返回 `full_resync: true`。**不含正文** |
+| 拉取 | `GET /api/sync?cursor=N` | 返回 `sync_seq > N` 的元数据变化：条目、文件夹、设置、附件元数据、墓碑；每类合计最多 200 行，带 `next_cursor`、`has_more`；游标小于 `tombstone_floor` 时返回 `full_resync: true`。**不含正文** |
 | 取正文 | `GET /api/items/:id/body` | 响应体为原文（`text/markdown`），`ETag` 为 `content_hash`，支持 `If-None-Match` 返回 304；隐私条目同样返回原文，由前端门禁控制显示（v1.1） |
 | 新建 | `PUT /api/items/:id`（客户端生成 ID） | 请求体为正文原文；元数据放在 `X-Menote-Meta` 请求头（base64url 编码的 JSON：类型、标题、文件夹、标签、任务字段、`content_hash`、附件引用）。重复提交幂等（需求 15.3） |
 | 全文保存 | `PUT /api/items/:id/body` | 请求头 `If-Match: <base_rev>`、`X-Menote-Hash`、`X-Menote-Refs`（附件引用有变化时才带） |
@@ -537,7 +540,7 @@ sequenceDiagram
 
 ### 6.3 outbox 设计【架构定】
 
-- 每项记录：`entity`（item / folder / setting / key / attachment / version）、`entityId`、`op`、`baseRev`、载荷引用（正文不复制，指向 `drafts`）、重试次数、下次重试时间、最后错误。
+- 每项记录：`entity`（item / folder / setting / attachment / version）、`entityId`、`op`、`baseRev`、载荷引用（正文不复制，指向 `drafts`）、重试次数、下次重试时间、最后错误。
 - 合并规则：同一条目的正文保存只保留最新一份并保留最早的 `baseRev`；连续补丁合并为一个补丁，合并后超过正文 25% 或 20 个操作时改为全文（需求 15.7）。
 - 依赖顺序：新建文件夹先于移入该文件夹的条目；附件上传先于引用它的正文保存（未上传完成时正文照常保存，引用在附件上传成功后补报）。
 - 退避与超时按需求 15.3：15 秒超时、1/2/4/8… 秒指数退避加抖动、最长 60 秒；`online`、标签页可见时立即重试。
@@ -814,7 +817,9 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 
 - 迁移脚本放在 `apps/worker/src/db/migrations/`，按序号命名，每个脚本幂等（`CREATE TABLE IF NOT EXISTS` 等），单个脚本的语句数不超过 45 条。
 - 每个 isolate 首次请求读取 `app_meta.schema_version`；低于代码期望值时，先用条件更新抢占 `app_meta` 中的迁移锁（带过期时间，防止并发执行），再按序执行迁移并校验必需的表与索引，最后写入新版本号。
+- **这是唯一的迁移通道**。不要用 `wrangler d1 migrations apply` 建表：该命令在全新账户上会因查不到库而直接失败（CLI **不会**自动供给 D1），于是同一条部署链路上的 `wrangler deploy` 永远执行不到、库也建不出来；且部署主通道 Workers Builds 执行的是 `npx wrangler deploy`，改 `package.json` 的 `deploy` 脚本对它无效（见 §15.5）。迁移放运行时自愈，一键部署才真正零手工步骤。
 - 需要数据回填的迁移（例如补 `sync_seq`）拆成分批任务，由 Cron 推进，不在请求路径中一次做完。
+- 表结构之所以表在 `apps/worker/src/db/` 内以 TS 常量（而非 `.sql`）承载：无需额外 Wrangler 模块规则、可被 `tsc`/ESLint 检查、测试可直接引用；`migrations_dir` 与目录保留，仅供将来可选的手工/本地 apply。
 
 ### 15.5 部署：从 GitHub 一键部署到 Cloudflare【已定·用户确认 2026-09-26】
 
@@ -828,8 +833,8 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 
 仓库为满足一键部署需要遵守的约定：
 
-- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建；机密以 `"secrets": { "required": ["BACKUP_CRED_KEY", "SESSION_SECRET", ...] }` 声明，另配 `.dev.vars.example` 说明每项的格式与生成方式，部署页据此逐项提示。
-- **`package.json` 的 `deploy` 脚本**：`wrangler d1 migrations apply DB --remote && wrangler deploy`——迁移放在部署命令内一键完成，且引用**绑定名**而非库名（部署者可能自定义库名）。
+- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建；机密以 `"secrets": { "required": ["AUTH_PEPPER", "BACKUP_CRED_KEY"] }` 声明（`AUTH_PEPPER` 见 §13.2；`BACKUP_CRED_KEY` M5 起需要。**没有 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，不需要服务端密钥），另配 `.dev.vars.example` 说明每项的格式与生成方式，部署页据此逐项提示。
+- **`package.json` 的 `deploy` 脚本**：只做 `wrangler deploy`。**不要把 `wrangler d1 migrations apply` 放进部署链路**（原因见 §15.4 第三条）；迁移由运行时自愈在首个请求完成。
 - **不硬编码域名**：`*.workers.dev` 子域因账户而异。§13.2 的 Origin 校验、分享链接、MCP 端点地址均从请求的 `URL.origin` 推导；自定义域名作为可选后置步骤（dashboard 添加），代码不依赖它。
 - **仓库可见性**：仓库须为 public，其他人才可能通过按钮部署；本人部署自己的仓库（含私有）可直接走 dashboard「Import a repository」，自动供给行为相同。
 

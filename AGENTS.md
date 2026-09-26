@@ -7,17 +7,17 @@
 
 - 名称：`MeNote`
 - 一句话：面向个人与家人的轻量多端笔记应用（浏览器 PWA + Cloudflare 自托管），支持 Markdown 笔记、表格、Memo、待办、版本历史与隐私锁。
-- 仓库形态：单仓多包（规划 pnpm workspace：`apps/web` + `apps/worker` + `packages/*`，见架构文档 §2.3）
-- 当前版本：预开发（尚无代码，仅设计文档与原型）
+- 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared`（`mdcore` / `crypto-format` 待 M2/M5 建），见架构文档 §2.3）
+- 当前版本：v0.1.3（M1 开发期）
 - 技术栈：
-  - 前端：`React PWA（Vite + CodeMirror 6，规划）`
-  - 后端：`Cloudflare Workers（Hono，规划）`
+  - 前端：`React PWA（Vite + CodeMirror 6；M1 接入编辑器）`
+  - 后端：`Cloudflare Workers（Hono，已接入 `/api/health`）`
   - 数据：`Cloudflare D1 + R2 + Static Assets；外部备份 WebDAV / S3 / Git`
   - 部署：`GitHub 一键部署到 Cloudflare（Workers Builds，见架构文档 §15.5）`
-- 源码位置：代码尚未初始化；规划 `apps/web`（PWA 客户端）与 `apps/worker`（Cloudflare Worker）
-- 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 待从原型设计令牌落稿
-- 怎么跑：尚未初始化；初始化后更新此处（完整说明见 README.md）
-- 现在做到哪：设计与架构定稿阶段（需求 v7.4 / 功能拆解 v2.3 / 架构 v1.5），下一步初始化代码骨架
+- 源码位置：`apps/web`（PWA 客户端）、`apps/worker`（Cloudflare Worker，唯一入口 `src/index.ts` 只装配）、`packages/shared`（两端共享类型与纯函数）
+- 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 结构章已定稿、**视觉章（§3）待定**，实现界面时按 `DESIGN.md` §3.1 从原型取值并标注临时值
+- 怎么跑：`pnpm install` → `pnpm dev`（前端 + Worker + 本地 D1 一体）；常用命令与部署流程见 `wiki/guides/local-dev.md`
+- 现在做到哪：M0 已收口（v0.1.0，线上可访问 + `/api/health` 通）；**M1 执行中**——运行时自愈迁移与首批 8 张表已落地，进度见 `docs/todo/Menote-M1-实施计划-v1.md`
 
 ## 工作原则
 
@@ -149,4 +149,4 @@ Git：
 
 随项目进行需要注意的内容记在这里：工作习惯、易踩坑、临时约束，以及尚未升入上方稳定章节的约定。确认后写入；过时则标注。
 
-- 
+- **里程碑执行节奏（用户确认 2026-09-26）**：M1/M2 等里程碑执行过程中，**每完成一个关键阶段就即时 git 提交并推送**（一个子计划步、或一次线上可验证的交付即算一个阶段），不攒大招，避免数据丢失。推送前跑通 `pnpm lint` / `pnpm typecheck` / `pnpm test`；代码与文档分开提交（见上方「Git」节）。

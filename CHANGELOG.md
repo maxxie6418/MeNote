@@ -4,11 +4,13 @@
 
 ## 2026-09-26
 
+- v0.1.2 / 40e5113 — 评审反馈批次修复（合并记一次 +0.0.1）：run_worker_first 补 "/api"（无尾斜杠会落 SPA 回退返回 HTML）；wrangler.jsonc 显式 migrations_dir（插件默认改写到不存在的 <根>/migrations）并建 apps/worker/src/db/migrations/；ESLint 补依赖方向护栏（routes/services/db 分层 + packages 禁依赖 apps）；删除误用的 web deploy 脚本；CHANGELOG 归属勘误
+- v0.1.1 — AGENTS.md 与 DESIGN.md 增补「移动端兼容」约定：移动端后续会做，窄屏布局定稿前不得留下仅桌面成立的写法（弹性 / 流式布局、不以悬停为唯一入口、触屏命中区、允许视口缩放、滚动仍每层一个容器）；DESIGN.md 升 v1.1 并增禁止项第 17 条
 - v0.1.1 / 4f05411 — 修复 Workers Builds 部署失败（assets 缺 directory）：build 末尾在仓库根生成 .wrangler/deploy/config.json 指针，默认 `npx wrangler deploy` 即采用 Vite 产物配置；guide §6 部署说明同步更新
-
 - v0.1.0 / 5fce691 — 版本号规范落进 AGENTS.md（主版本号仅用户主动变更；次版本号随里程碑 +0.1；修订号 +0.0.1，分批可合并）；根 package.json 同步为 0.1.0
 - v0.1.0 / 7a8d42b — 重写 README：特性与技术栈（含已接入/规划状态）、快速开始、目录结构、常用命令、部署（Deploy 按钮 + Workers Builds）、文档导航与冲突优先级
-- v0.1.0 / 5b371c6 — M0 工程骨架：pnpm workspace（apps/web + apps/worker + packages/shared）、Worker /api/health、Vite 8 + React 19 前端、wrangler 部署链路（D1 自动供给 + SPA 静态资源 + CSP 头）、CI（lint / typecheck / 测试 / 构建 / 体积检查）、本地开发指南 wiki/guides/local-dev.md
+- v0.1.0 / 0d26862 — 首篇操作指南 wiki/guides/local-dev.md（本地开发上手 + 部署链路）；README「怎么跑」更新
+- v0.1.0 / 5b371c6 — M0 工程骨架：pnpm workspace（apps/web + apps/worker + packages/shared）、Worker /api/health、Vite 8 + React 19 前端、wrangler 部署链路（D1 自动供给 + SPA 静态资源 + CSP 头）、CI（lint / typecheck / 测试 / 构建 / 体积检查）
 - 预开发 — 新增 docs/todo/Menote-开发计划-v1.md（前置准备评估 + M0-M6 里程碑规划，草案待确认）
 - 预开发 / 1cc0ec5 — 文档规划指南 v1.1：补 API 与接口文档规划
 - 预开发 / 9268ac1 — DESIGN.md 首稿：结构 / 交互 / 用法已定（布局尺寸、间距原则、组件用法与层级、交互与状态、无障碍底线、16 条禁止项），视觉语言整章待定；components.md 同步令牌引用

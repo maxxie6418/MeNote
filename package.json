@@ -1,7 +1,7 @@
 {
   "name": "menote",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {
@@ -9,12 +9,12 @@
   },
   "scripts": {
     "dev": "pnpm --filter @menote/shared build && pnpm --filter @menote/web dev",
-    "build": "pnpm --filter @menote/shared build && pnpm --filter @menote/web build",
+    "build": "pnpm --filter @menote/shared build && pnpm --filter @menote/web build && node scripts/write-deploy-config.mjs",
     "typecheck": "tsc -b && pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "test": "pnpm --filter @menote/shared build && pnpm -r --if-present test",
     "check:size": "node scripts/check-bundle-size.mjs",
-    "deploy": "pnpm build && pnpm --filter @menote/web exec wrangler deploy -c dist/menote/wrangler.json"
+    "deploy": "pnpm build && wrangler deploy"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

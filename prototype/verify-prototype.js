@@ -17,7 +17,7 @@
          新建直连笔记 / 笔记本新建入口 /
          加密空间贴底且无分组小标题 /
          表格更多菜单 / 滑出详情侧栏 / 隐私锁锁定与解锁 / Memo 隐私门禁 /
-         恢复码流程 / 搜索 / 表格视图切换
+         设置两栏分页（左列分类导航 + 右侧内容，§7.5）/ 重置隐私密码流程 / 搜索 / 表格视图切换
    ============================================================ */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
@@ -42,6 +42,21 @@ const input = (el, v) => { el.value = v; el.dispatchEvent(new window.Event('inpu
    统一走这两个助手取，避免后续再调整结构时满脚本改选择器。 */
 const navEl = fn => $('.nav-item[data-fn="' + fn + '"], .seg-item[data-fn="' + fn + '"]');
 const navAll = () => $$('.nav-item[data-fn], .seg-item[data-fn]');
+
+/* 设置是两栏分页（§7.5）：先点顶栏账户入口进设置，再点左列分类导航切到目标分类。
+   分类没切到就断言右侧内容 = 拿上一分类残留的 DOM 蒙混过关，所以这一步必须走。 */
+function openSetPage(id){
+  click($('#topAccount'));
+  if (!$('.pane-head h1') || !$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
+  const nav = $('#setNav');
+  if (!nav) throw new Error('设置缺左列分类导航（§7.5）');
+  const item = nav.querySelector('.set-nav-item[data-set="' + id + '"]');
+  if (!item) throw new Error('分类导航里没有「' + id + '」');
+  click(item);
+  const on = $('#setNav .set-nav-item.on');
+  if (!on || on.dataset.set !== id) throw new Error('切分类后左列高亮不对');
+  return $('#setPages');
+}
 
 let pass = 0, fail = 0;
 function step(name, fn) {
@@ -313,19 +328,55 @@ step('账户与设置：点击顶栏入口进入设置（2026-09-26 调整）', 
   if (!$('#topAccount').classList.contains('active')) throw new Error('账户入口未高亮');
 });
 
-step('设置内含「版本与回收站」，可打开回收站（7.4 修订）', () => {
-  if (!$('#openTrash')) throw new Error('设置里没有回收站入口');
+step('设置：两栏分页结构 —— 左列分类导航 + 右侧当前分类内容（§7.5）', () => {
+  click($('#topAccount'));
+  const nav = $('#setNav');
+  if (!nav) throw new Error('设置缺左列分类导航');
+  const items = $$('#setNav .set-nav-item');
+  if (items.length !== 10) throw new Error('分类数不是 10：' + items.map(e => e.textContent.trim()).join(' / '));
+  ['通用', '账户与安全', '编辑器', '隐私锁', '版本与回收站', '备份', '分享', 'MCP', '数据管理', '实例管理'].forEach(n => {
+    if (!items.some(el => el.textContent.indexOf(n) >= 0)) throw new Error('分类导航缺「' + n + '」');
+  });
+  // 默认落在「通用」，页头必须跟着分类走
+  if (!items.find(el => el.classList.contains('on')) || $('#setNav .set-nav-item.on').dataset.set !== 'general')
+    throw new Error('默认分类不是「通用」');
+  if (!$('#startViewSet')) throw new Error('默认分类未渲染「通用」内容');
+  if (!$('.pane-head .sub').textContent.includes('通用')) throw new Error('页头未跟随当前分类');
+  // 切到「编辑器」：左侧高亮、右侧内容、页头三处同时变，且上一分类的内容必须消失
+  click($('#setNav .set-nav-item[data-set="editor"]'));
+  if ($('#setNav .set-nav-item.on').dataset.set !== 'editor') throw new Error('编辑器分类未高亮');
+  if (!$('#editModeSet')) throw new Error('编辑器分类缺「默认编辑模式」');
+  if ($('#startViewSet')) throw new Error('切页后「通用」的内容仍在，未真正分页');
+  if (!$('.pane-head .sub').textContent.includes('编辑器')) throw new Error('页头未跟随编辑器分类');
+  click($$('#editModeSet .radio-opt')[3]);
+  if (!$('#editModeSet .radio-opt[data-em="live"]').classList.contains('on')) throw new Error('默认编辑模式未就地高亮');
+  // 当前分类记在 state：离开设置再回来仍停在原分类（回收站返回同理，见下一条）
+  click(navEl('recent'));
+  click($('#topAccount'));
+  if ($('#setNav .set-nav-item.on').dataset.set !== 'editor') throw new Error('离开再回来未停在原分类');
+  // 实例管理是 owner 专属，导航上要有标记
+  const inst = $$('#setNav .set-nav-item').find(el => el.dataset.set === 'instance');
+  if (!inst.querySelector('.badge') || inst.querySelector('.badge').textContent.indexOf('owner') < 0)
+    throw new Error('实例管理未标「仅 owner」');
+  openSetPage('general');
+});
+
+step('设置内含「版本与回收站」，可打开回收站并原路返回（7.4 修订）', () => {
+  openSetPage('version');
+  if (!$('#openTrash')) throw new Error('设置 › 版本与回收站里没有回收站入口');
   click($('#openTrash'));
   if (!$('.pane-head h1').textContent.includes('回收站')) throw new Error('未进入回收站');
   if (!$('#trashBack')) throw new Error('回收站缺返回设置的入口');
   click($('#trashBack'));
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未返回设置');
+  if (!$('#setNav .set-nav-item.on') || $('#setNav .set-nav-item.on').dataset.set !== 'version')
+    throw new Error('从回收站返回未落回「版本与回收站」分类');
 });
 
 step('启动视图：切到「收藏」隐藏首页项，切回首页恢复（v2 M02-04）', () => {
-  click($('#topAccount'));
+  openSetPage('general');
   const set = $('#startViewSet');
-  if (!set) throw new Error('设置里没有通用 › 启动视图');
+  if (!set) throw new Error('设置 › 通用 里没有启动视图');
   click(set.querySelector('.radio-opt[data-sv="starred"]'));
   if ($('#navHome').style.display !== 'none') throw new Error('未选首页时首页项仍显示');
   click(set.querySelector('.radio-opt[data-sv="home"]'));
@@ -334,6 +385,7 @@ step('启动视图：切到「收藏」隐藏首页项，切回首页恢复（v2
 
 /* ---------- 主题：Claude 橙白双主题 ---------- */
 step('主题：默认浅色，设置里可切深色 / 跟随系统（§7.5 界面偏好）', () => {
+  openSetPage('general');
   const root = doc.documentElement;
   if (root.getAttribute('data-theme') !== 'light') throw new Error('默认不是浅色：' + root.getAttribute('data-theme'));
   const set = $('#themeSet');
@@ -567,8 +619,8 @@ step('旧加密模型的文案已清干净（DEK / 主钥 / 密文）', () => {
   ['DEK', '数据密钥', '主钥', '密钥库', '为密文', '同名密文'].forEach(w => {
     if (src.indexOf(w) >= 0) throw new Error('原型仍残留旧模型文案「' + w + '」');
   });
-  // 设置 › 隐私锁 卡片：原来的恢复码行已换成重置入口
-  click($('#topAccount'));
+  // 设置 › 隐私锁 分类：原来的恢复码行已换成重置入口
+  openSetPage('privacy');
   const card = $$('.set-card').find(c => c.textContent.indexOf('隐私锁') >= 0);
   if (!card) throw new Error('缺隐私锁设置卡片');
   if (card.textContent.indexOf('2026-09-20') >= 0) throw new Error('隐私锁卡片仍留恢复码生成时间');
@@ -576,7 +628,7 @@ step('旧加密模型的文案已清干净（DEK / 主钥 / 密文）', () => {
 });
 
 step('回收站：从设置进入并恢复一条（7.4 修订）', () => {
-  click($('#topAccount'));
+  openSetPage('version');
   click($('#openTrash'));
   const before = $$('.trash-row').length;
   click($('[data-restore]'));
@@ -584,13 +636,13 @@ step('回收站：从设置进入并恢复一条（7.4 修订）', () => {
 });
 
 step('设置：改档位 → 胶囊跟随', () => {
-  click($('#topAccount'));
-  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
+  openSetPage('privacy');
   click($('#timeoutSet .radio-opt[data-min="-1"]'));
   if (!$('#lockCapsule').textContent.includes('本次会话')) throw new Error('胶囊未跟随档位');
 });
 
 step('设置：关闭 Memo 门禁 → 锁定后 Memo 仍可见', () => {
+  openSetPage('privacy');
   click($('#privacyToggle'));
   if ($('#privacyToggle').classList.contains('on')) throw new Error('开关未关闭');
   lock();

@@ -546,6 +546,19 @@ table.data tbody tr:hover{background:var(--panel-2)}
 .trash-row .t{flex:1;font-size:13.5px}
 .trash-row .d{font-size:11px;color:var(--muted)}
 
+/* 设置：设计文档 §7.5 定的两栏结构 —— 左列分类导航 + 右侧当前分类内容 */
+.set-wrap{flex:1;display:flex;min-height:0}
+.set-nav{width:184px;flex:none;border-right:1px solid var(--line);background:var(--bg);padding:14px 10px 40px;overflow-y:auto}
+.set-nav-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;font-size:13px;
+  color:var(--text-2);cursor:pointer;transition:.13s;margin-bottom:2px}
+.set-nav-item:hover{background:var(--panel-2);color:var(--text)}
+.set-nav-item.on{background:var(--primary-soft);color:var(--primary-2);font-weight:600}
+.set-nav-item .ic{width:15px;height:15px;flex:none;opacity:.72}
+.set-nav-item.on .ic{opacity:1}
+.set-nav-item .badge{margin-left:auto;font-size:10px;padding:1px 6px;border-radius:99px;
+  background:var(--panel-3);border:1px solid var(--line-2);color:var(--muted)}
+.set-pages{flex:1;overflow-y:auto;min-width:0}
+.set-page{padding:20px 24px 60px}
 .set-grid{display:flex;flex-direction:column;gap:15px;max-width:790px}
 .set-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
 .set-head{padding:13px 17px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
@@ -1176,6 +1189,10 @@ const state = {
   startView:'home',
   // 界面偏好 · 主题（§7.5 通用 › 界面偏好）：light / dark / auto
   theme:'light',
+  // 设置的两栏分页（§7.5）：左列分类导航的当前项，默认落在「通用」
+  setPage:'general',
+  // 设置 › 编辑器：默认编辑模式（§7.1，与正文区的 editorMode 同一字段）
+  // editorMode 见上一行（split / edit / preview / live，默认双栏）
   locked:false, timeoutMin:5, remaining:4*60+32, timerId:null, privacyBrowse:true,
   drawerId:null
 };
@@ -2045,7 +2062,8 @@ function trashPanel(){
 }
 function bindTrash(){
   const back = $('#trashBack');
-  if(back) back.addEventListener('click', () => go('settings'));
+  // 返回设置时落回「版本与回收站」子页面（回收站是它的下级页面，7.5 / Q2）
+  if(back) back.addEventListener('click', () => { state.setPage = 'version'; go('settings'); });
   $$('[data-restore]').forEach(el => el.addEventListener('click', () => {
     const it = TRASH.splice(+el.dataset.restore, 1)[0]; render(); toast('已恢复「' + it.t + '」', 'ok');
   }));
@@ -2054,13 +2072,53 @@ function bindTrash(){
   }));
 }
 
-function settingsPanel(){
-  // 7.5：按功能域分子页面。7.4 修订后，账户入口（功能栏底部）与本页合并，回收站也并入本页。
-  return '<div class="pane-head"><div><h1>设置</h1><div class="sub">通用 / 账户与安全 / 隐私锁 / Memo 隐私浏览 / MCP 令牌 / 备份目标 / 我的分享 / 版本与回收站</div></div></div>'
-  + '<div class="doc-scroll"><div class="pane-pad"><div class="set-grid">'
+/* 设置（设计文档 §7.5）：独立区域，按功能域分子页面 —— 左列分类导航 + 右侧当前分类内容。
+   分类清单照 §7.5 的子页面表，仅把「通用」提到首位作为默认落地页（其余顺序不变）。 */
+const SET_PAGES = [
+  { id:'general',  ic:'i-settings', name:'通用',        hint:'启动视图 · 时区 · 界面偏好' },
+  { id:'account',  ic:'i-user',     name:'账户与安全',  hint:'登录密码 · 会话' },
+  { id:'editor',   ic:'i-note',     name:'编辑器',      hint:'默认编辑模式' },
+  { id:'privacy',  ic:'i-lock',     name:'隐私锁',      hint:'门禁 · 解锁档位 · Memo 浏览' },
+  { id:'version',  ic:'i-trash',    name:'版本与回收站', hint:'封存与保留 · 回收站' },
+  { id:'backup',   ic:'i-cloud-up', name:'备份',        hint:'备份目标与进度' },
+  { id:'share',    ic:'i-share',    name:'分享',        hint:'我的分享' },
+  { id:'mcp',      ic:'i-key',      name:'MCP',         hint:'令牌与审计日志' },
+  { id:'data',     ic:'i-list',     name:'数据管理',    hint:'用量 · 附件' },
+  { id:'instance', ic:'i-bolt',     name:'实例管理',    hint:'仅 owner', badge:'owner' }
+];
 
-  // 通用（设计文档 §7.5 / 功能拆解 v2 M02-04）
-  + '<div class="set-card"><div class="set-head">' + icon('i-settings') + '<h3>通用</h3>'
+function settingsPanel(){
+  if(!SET_PAGES.some(p => p.id === state.setPage)) state.setPage = 'general';
+  const nav = SET_PAGES.map(p =>
+      '<div class="set-nav-item' + (p.id === state.setPage ? ' on' : '') + '" data-set="' + p.id + '" title="' + p.hint + '">'
+    + icon(p.ic) + '<span>' + p.name + '</span>'
+    + (p.badge ? '<span class="badge">' + p.badge + '</span>' : '') + '</div>').join('');
+  const cur = SET_PAGES.filter(p => p.id === state.setPage)[0];
+  return '<div class="pane-head"><div><h1>设置</h1>'
+  + '<div class="sub">' + cur.name + ' · ' + cur.hint + ' · 共 ' + SET_PAGES.length + ' 个分类，左列切换（7.5）</div></div></div>'
+  + '<div class="set-wrap"><div class="set-nav" id="setNav">' + nav + '</div>'
+  + '<div class="set-pages"><div class="set-page"><div class="set-grid">'
+  + setPageBody(state.setPage) + '</div></div></div></div>';
+}
+
+/* 按分类装配内容。每张卡片独立成函数，便于与 §7.5 的子页面表对照。 */
+function setPageBody(id){
+  if(id === 'general')  return cardGeneral();
+  if(id === 'account')  return cardAccount();
+  if(id === 'editor')   return cardEditor();
+  if(id === 'privacy')  return cardPrivacy() + cardMemoPrivacy();
+  if(id === 'version')  return cardVersion();
+  if(id === 'backup')   return cardBackup();
+  if(id === 'share')    return cardShare();
+  if(id === 'mcp')      return cardMcp();
+  if(id === 'data')     return cardData();
+  if(id === 'instance') return cardInstance();
+  return '';
+}
+
+// 通用（设计文档 §7.5 / 功能拆解 v2 M02-04）
+function cardGeneral(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-settings') + '<h3>通用</h3>'
   + '<div class="right"><span class="chip">启动视图</span></div></div><div class="set-body">'
   + '<div class="field" style="margin-bottom:6px"><label>启动视图</label><div class="radio-set" id="startViewSet">'
   +   '<div class="radio-opt' + (state.startView === 'home' ? ' on' : '') + '" data-sv="home"><div class="radio-dot"></div><div><div class="t">首页</div><div class="d">概括预览 + 快捷方式 + 快速导航；功能栏导航显示「首页」项（推荐默认）</div></div></div>'
@@ -2074,17 +2132,41 @@ function settingsPanel(){
   +   '<div class="radio-opt' + (state.theme === 'dark' ? ' on' : '') + '" data-th="dark"><div class="radio-dot"></div><div><div class="t">深色</div><div class="d">暖黑底 + 同一主色，夜间使用</div></div></div>'
   +   '<div class="radio-opt' + (state.theme === 'auto' ? ' on' : '') + '" data-th="auto"><div class="radio-dot"></div><div><div class="t">跟随系统</div><div class="d">按操作系统的浅色 / 深色偏好自动切换</div></div></div>'
   + '</div></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '<div class="set-card"><div class="set-head">' + icon('i-user') + '<h3>账户与安全</h3>'
+// 账户与安全（§7.5）
+function cardAccount(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-user') + '<h3>账户与安全</h3>'
   + '<div class="right"><span class="chip green">owner</span></div></div><div class="set-body">'
   + '<div class="set-row"><div><div class="lbl">owner</div><div class="desc">每人独立空间，互不可见；无共享、无团队、无邀请（5.1）</div></div>'
   + '<div class="right"><button class="btn sm">修改登录密码</button></div></div>'
   + '<div class="set-row"><div><div class="lbl">登录设备与会话</div><div class="desc">后续深入设计清单第 4 项，暂只占位</div></div>'
   + '<div class="right"><button class="btn sm">退出登录</button></div></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '<div class="set-card"><div class="set-head">' + icon('i-lock') + '<h3>隐私锁</h3>'
+// 编辑器（§7.5：默认编辑模式；对应 §7.1 的 CodeMirror 显示方式）
+function cardEditor(){
+  const modes = [
+    ['split',   '双栏',     '左编辑右预览，长文写作的默认'],
+    ['edit',    '仅编辑',   '只留编辑区，窄屏或纯输入时用'],
+    ['preview', '仅预览',   '只留渲染结果，阅读与校对'],
+    ['live',    '即时渲染', '边输边渲染，Markdown 标记就地隐藏']
+  ];
+  return '<div class="set-card"><div class="set-head">' + icon('i-note') + '<h3>编辑器</h3>'
+  + '<div class="right"><span class="chip">默认编辑模式</span></div></div><div class="set-body">'
+  + '<div class="field" style="margin-bottom:4px"><label>默认编辑模式</label><div class="radio-set" id="editModeSet">'
+  +   modes.map(m => '<div class="radio-opt' + (state.editorMode === m[0] ? ' on' : '') + '" data-em="' + m[0] + '">'
+      + '<div class="radio-dot"></div><div><div class="t">' + m[1] + '</div><div class="d">' + m[2] + '</div></div></div>').join('')
+  + '</div></div>'
+  + '<div class="hint-line">只决定新打开一篇笔记时的默认显示方式；表格条目不受影响，始终用增强表格编辑模式（10.7）。</div>'
+  + '</div></div>';
+}
+
+// 隐私锁（§7.5：门禁 / 解锁档位 / Memo 浏览；「Memo 浏览需要隐私密码」在文档里归入本子页面，界面独立成卡）
+function cardPrivacy(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-lock') + '<h3>隐私锁</h3>'
   + '<div class="right"><span class="chip green">已启用</span></div></div><div class="set-body">'
   + '<div class="field" style="margin-bottom:16px"><label>解锁档位</label><div class="radio-set" id="timeoutSet">'
   +   '<div class="radio-opt" data-min="0"><div class="radio-dot"></div><div><div class="t">仅本次查看</div><div class="d">解锁后离开当前这一篇或加密空间即重新锁定；该档位不解除 Memo 门禁</div></div></div>'
@@ -2094,17 +2176,23 @@ function settingsPanel(){
   + '</div></div>'
   + '<div class="set-row"><div><div class="lbl">重置隐私密码</div><div class="desc">忘记密码时直接重置；内容是明文存储的，不会丢内容，只有已导出的旧备份需要旧密码解密</div></div>'
   + '<div class="right"><button class="btn sm" id="setResetPw">重置</button></div></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '<div class="set-card"><div class="set-head">' + icon('i-clock') + '<h3>Memo 隐私浏览</h3></div><div class="set-body">'
+// Memo 隐私浏览（§7.5 归入隐私锁子页面）
+function cardMemoPrivacy(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-clock') + '<h3>Memo 隐私浏览</h3></div><div class="set-body">'
   + '<div class="set-row"><div><div class="lbl">Memo 浏览需要隐私密码</div>'
   + '<div class="desc">Memo 明文存储、写入免密；此项只控制浏览界面是否门禁，不触发任何加密转换</div></div>'
   + '<div class="right"><div class="toggle on" id="privacyToggle"></div></div></div>'
   + '<div class="warn-box" style="margin-top:14px">' + icon('i-alert')
   + '<span>Memo 的正文、标签与图片引用在数据库、本地缓存与备份中均为明文。界面门禁用于应对「身边的人看到屏幕」，不提供设备级或数据库级的机密性（8.9）。</span></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '<div class="set-card"><div class="set-head">' + icon('i-key') + '<h3>MCP 令牌</h3>'
+// MCP（§7.5）
+function cardMcp(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-key') + '<h3>MCP 令牌</h3>'
   + '<div class="right"><button class="btn sm primary">' + icon('i-plus') + '新建令牌</button></div></div>'
   + '<div class="set-body" style="padding:6px 17px 12px">'
   + '<div class="set-row"><div><div class="lbl">Claude Code · 只读</div><div class="desc">最后一次使用 2 小时前 · 仅搜索与读取，不含 Memo</div></div>'
@@ -2112,9 +2200,12 @@ function settingsPanel(){
   + '<div class="set-row"><div><div class="lbl">自写脚本 · 读写</div><div class="desc">最后一次使用 3 天前 · 含写入与移到回收站，不含删除</div></div>'
   + '<div class="right"><span class="chip green">启用</span><button class="btn sm">撤销</button></div></div>'
   + '<div class="hint-line">令牌只在创建时显示一次完整值，库里只存 SHA-256，界面只显示前缀（如 <code>mn_3fK2…</code>）。加密内容对 MCP 一律不可见，与令牌权限无关。</div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '<div class="set-card"><div class="set-head">' + icon('i-cloud-up') + '<h3>备份目标</h3>'
+// 备份（§7.5）
+function cardBackup(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-cloud-up') + '<h3>备份目标</h3>'
   + '<div class="right"><button class="btn sm">立即备份</button></div></div><div class="set-body">'
   + '<div class="bk-card"><div class="bk-ic">' + icon('i-cloud-up','lg') + '</div><div><div class="t">S3 兼容存储</div>'
   + '<div class="d">已配置 · 同步删除（镜像）· 上次成功 12 分钟前</div></div><div class="right"><span class="chip green">' + icon('i-check') + '正常</span></div></div>'
@@ -2124,9 +2215,12 @@ function settingsPanel(){
   + '<div class="d">已配置 · 同步删除（历史提交无法清除）· 上次成功 1 小时前</div></div><div class="right"><span class="chip amber">有延迟</span></div></div>'
   + '<div class="warn-box info">' + icon('i-info')
   + '<span>加密空间内的条目与单篇加密内容在出站前强制加密，普通内容默认明文出站；这一步不需要解锁（16.3）。镜像目标在删除目标文件后，同步删除 <code>backup_state</code> 中对应记录，避免该表无限增长。</span></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '<div class="set-card"><div class="set-head">' + icon('i-share') + '<h3>我的分享</h3></div>'
+// 分享（§7.5）
+function cardShare(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-share') + '<h3>我的分享</h3></div>'
   + '<div class="set-body" style="padding:6px 17px 12px">'
   + '<div class="set-row"><div><div class="lbl">书单</div><div class="desc">单篇表格 · 无密码 · 2026-10-25 过期</div></div>'
   + '<div class="right"><span class="chip blue">公开标记</span><button class="btn sm">撤销</button></div></div>'
@@ -2134,21 +2228,73 @@ function settingsPanel(){
   + '<div class="right"><span class="chip blue">公开标记</span><button class="btn sm">撤销</button></div></div>'
   + '<div class="set-row"><div><div class="lbl">Memo 合集 · 读书笔记</div><div class="desc">12 条 · 条目在创建时固定 · 设了访问密码</div></div>'
   + '<div class="right"><span class="chip blue">公开标记</span><button class="btn sm">撤销</button></div></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  // 7.4 修订：回收站由功能栏底部的独立入口并入设置（7.5 已列有「版本与回收站」）
-  + '<div class="set-card"><div class="set-head">' + icon('i-trash') + '<h3>版本与回收站</h3>'
+// 版本与回收站（§7.5；7.4 修订：回收站由功能栏底部的独立入口并入此处，Q2 已确认）
+function cardVersion(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-trash') + '<h3>版本与回收站</h3>'
   + '<div class="right"><button class="btn sm" id="openTrash">' + icon('i-trash') + '打开回收站<span class="count" style="margin-left:5px">' + TRASH.length + '</span></button></div></div>'
   + '<div class="set-body">'
   + '<div class="set-row"><div><div class="lbl">回收站保留天数</div><div class="desc">默认保留 30 天后永久删除；永久删除会一并清理版本、R2 快照与不再被引用的附件（7.1）</div></div>'
   + '<div class="right"><span class="keycap">30 天</span><button class="btn sm">修改</button></div></div>'
   + '<div class="set-row"><div><div class="lbl">版本封存与保留策略</div><div class="desc">24 小时内全留、1–7 天每 6 小时、7–30 天每天、30 天–1 年每周、1 年以上每月；每条最多 100 个（12.3）</div></div>'
   + '<div class="right"><button class="btn sm">调整</button></div></div>'
-  + '</div></div>'
+  + '</div></div>';
+}
 
-  + '</div></div></div>';
+// 数据管理（§7.5：个人用量概览 + 附件管理；功能拆解 M19-01 / M19-02）
+function cardData(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-list') + '<h3>个人用量</h3>'
+  + '<div class="right"><span class="chip">个人空间</span></div></div><div class="set-body">'
+  + '<div class="set-row"><div><div class="lbl">条目数量</div><div class="desc">笔记与表格合计，含加密空间内的条目</div></div>'
+  + '<div class="right"><span class="keycap">248</span></div></div>'
+  + '<div class="set-row"><div><div class="lbl">正文占用</div><div class="desc">Markdown 正文与元数据</div></div>'
+  + '<div class="right"><span class="keycap">18.4 MB</span></div></div>'
+  + '<div class="set-row"><div><div class="lbl">附件占用</div><div class="desc">图片与文件，同一附件被多处引用只计一次</div></div>'
+  + '<div class="right"><span class="keycap">412 MB</span></div></div>'
+  + '<div class="set-row"><div><div class="lbl">版本占用</div><div class="desc">按 12.3 的保留策略封存，与正文分开计</div></div>'
+  + '<div class="right"><span class="keycap">96 MB</span></div></div>'
+  + '<div class="hint-line">用量只统计当前账户。实例总量在「实例管理」里看（仅 owner）。</div>'
+  + '</div></div>'
+  + '<div class="set-card"><div class="set-head">' + icon('i-image') + '<h3>附件管理</h3>'
+  + '<div class="right"><button class="btn sm">扫描孤儿附件</button></div></div><div class="set-body">'
+  + '<div class="set-row"><div><div class="lbl">未被引用的附件</div><div class="desc">条目被永久删除后残留的附件；清理前先列出清单确认（14.3）</div></div>'
+  + '<div class="right"><span class="chip amber">3 个 · 2.1 MB</span><button class="btn sm">清理</button></div></div>'
+  + '<div class="warn-box info">' + icon('i-info')
+  + '<span>清理不可撤销，但只影响没有任何条目引用的文件；条目仍在回收站时，其附件不算孤儿。</span></div>'
+  + '</div></div>';
+}
+
+// 实例管理（§7.5：仅 owner 可见可改的实例级设置，属 site_settings 而非个人设置）
+function cardInstance(){
+  return '<div class="set-card"><div class="set-head">' + icon('i-bolt') + '<h3>实例管理</h3>'
+  + '<div class="right"><span class="chip green">仅 owner</span></div></div><div class="set-body">'
+  + '<div class="set-row"><div><div class="lbl">注册开关</div><div class="desc">关闭后不再接受新成员；可设置为期到期后自动关闭（5.2）</div></div>'
+  + '<div class="right"><div class="toggle on"></div></div></div>'
+  + '<div class="set-row"><div><div class="lbl">成员账户</div><div class="desc">3 人 · 停用、删除与数据清理【后续深入设计】</div></div>'
+  + '<div class="right"><button class="btn sm">管理</button></div></div>'
+  + '<div class="set-row"><div><div class="lbl">实例总用量</div><div class="desc">D1 42.6 MB / 500 MB · R2 1.8 GB / 10 GB 免费额度 · 各成员占用分布（19.4）</div></div>'
+  + '<div class="right"><button class="btn sm">明细</button></div></div>'
+  + '<div class="set-row"><div><div class="lbl">更新通知</div><div class="desc">新版本只推送给 owner（21.1 第 11 条）</div></div>'
+  + '<div class="right"><div class="toggle on"></div></div></div>'
+  + '<div class="warn-box info">' + icon('i-info')
+  + '<span>本页是实例级设置，与个人设置分开存放；家人各自看不到也不能改（7.5 两级归属）。</span></div>'
+  + '</div></div>';
 }
 function bindSettings(){
+  // 设置的两栏分页（§7.5）：点左列分类切到对应子页面；切换沿用完整重渲染，保证与其它视图同一套渲染路径
+  $$('#setNav .set-nav-item').forEach(el => el.addEventListener('click', () => {
+    if(el.dataset.set === state.setPage) return;
+    state.setPage = el.dataset.set;
+    render();
+  }));
+  // 默认编辑模式（§7.1 / §7.5 编辑器）
+  $$('#editModeSet .radio-opt').forEach(opt => opt.addEventListener('click', () => {
+    state.editorMode = opt.dataset.em;
+    $$('#editModeSet .radio-opt').forEach(o => o.classList.toggle('on', o.dataset.em === state.editorMode));
+    toast('默认编辑模式已设为「' + opt.querySelector('.t').textContent + '」', 'ok');
+  }));
   // 界面偏好 · 主题（§7.5）：就地切换，不整页重渲染，避免丢失滚动位置
   $$('#themeSet .radio-opt').forEach(opt => opt.addEventListener('click', () => {
     state.theme = opt.dataset.th;

@@ -281,10 +281,25 @@ step('录入框已压缩：取消独立发布行，发布按钮与模式选择�
   if (!pub.textContent.includes('发布')) throw new Error('发布按钮文案不对');
 });
 
-step('设置页：含通用 › 启动视图 与 版本与回收站', () => {
+step('设置页：两栏分页 —— 左列分类导航 + 右侧当前分类内容（§7.5）', () => {
   gotoPage('设置');
-  if (!$('#canvas [data-b="startViewSet"]')) throw new Error('设置页无「通用 › 启动视图」');
+  const nav = $('#canvas [data-b="setNav"]');
+  const right = $('#canvas [data-b="setPageHead"]');
+  if (!nav) throw new Error('设置页无左列分类导航');
+  if (!right) throw new Error('设置页无当前分类的页头');
+  // 结构检查必须在 blockText 之前做：blockText 会点区块 → 画布重渲染 → 引用失效
+  if (nav.parentElement !== right.parentElement.parentElement)
+    throw new Error('分类导航与当前分类内容不在同一行');
+  if (!(nav.compareDocumentPosition(right) & 4))
+    throw new Error('分类导航不在当前分类内容的左侧');
+  const rightBox = right.parentElement;
+  if (!rightBox.contains($('#canvas [data-b="startViewSet"]')))
+    throw new Error('当前分类的卡片未装在右列容器里');
   if (!$('#canvas [data-b="setTrash"]')) throw new Error('设置页无「版本与回收站」');
+  // 文案（会触发重渲染）
+  if (!blockText('setNav').includes('10 个分类')) throw new Error('分类导航未说明分类数量');
+  if (!blockText('setNav').includes('实例管理')) throw new Error('分类导航未列实例管理');
+  if (!blockText('setPageHead').includes('返回设置')) throw new Error('分类页头未说明下级页面的返回行为');
   if (!blockText('startViewSet').includes('不显示')) throw new Error('启动视图未说明首页项显隐规则');
   if (!blockText('startViewSet').includes('主题')) throw new Error('通用页未列入主题偏好');
 });

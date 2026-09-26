@@ -543,22 +543,29 @@ const PAGES = [
   </div>`
 },
 {
-  no:'10', name:'设置', doc:'6.8 / 8.9 / 16.3 / 17.3 / v2 M02-04',
-  intro:'设置按功能域分子页面（7.5，借鉴 Inkstone：左列分类导航 + 右侧内容）。这里把各子页面的内容卡片平铺出来：通用（启动视图、时区）、隐私锁、Memo 隐私浏览、MCP 令牌、备份目标、我的分享、版本与回收站。回收站由功能栏底部的独立入口并入此处。',
+  no:'10', name:'设置', doc:'7.5 / 6.8 / 8.9 / 16.3 / 17.3 / v2 M02-04',
+  intro:'设置是独立区域，按功能域分子页面（7.5，借鉴 Inkstone）：左列分类导航、右侧为当前分类内容。共 10 个分类 —— 通用 / 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 备份 / 分享 / MCP / 数据管理 / 实例管理（仅 owner），默认落在「通用」。回收站是「版本与回收站」的下级页面，返回时落回该分类。右列把各分类的内容卡片叠放示意，实际一次只渲染一个分类。',
   render: () => `
   <div class="wf-page">
-    ${blk('startViewSet', '', 'flex:none;height:56px')}
-    ${blk('setPrivacy', '', 'flex:none;height:52px')}
-    ${blk('timeoutSet', '', 'flex:none;height:48px')}
     <div class="wf-row grow">
-      ${blk('setMemo', 'grow')}
-      ${blk('setMcp', 'grow')}
+      ${blk('setNav', '', 'width:184px;flex:none')}
+      <div class="blk box solid grow">
+        ${cap('当前分类内容', '一次只渲染一个分类')}
+        ${blk('setPageHead', '', 'flex:none;height:46px')}
+        ${blk('startViewSet', '', 'flex:none;height:56px')}
+        ${blk('setPrivacy', '', 'flex:none;height:52px')}
+        ${blk('timeoutSet', '', 'flex:none;height:48px')}
+        <div class="wf-row grow">
+          ${blk('setMemo', 'grow')}
+          ${blk('setMcp', 'grow')}
+        </div>
+        <div class="wf-row grow">
+          ${blk('setBackup', 'grow')}
+          ${blk('setShare', 'grow')}
+        </div>
+        ${blk('setTrash', '', 'flex:none;height:52px')}
+      </div>
     </div>
-    <div class="wf-row grow">
-      ${blk('setBackup', 'grow')}
-      ${blk('setShare', 'grow')}
-    </div>
-    ${blk('setTrash', '', 'flex:none;height:52px')}
   </div>`
 },
 {
@@ -920,6 +927,16 @@ const B = {
     '不防爆破，也不防已登录的账号' ]},
 
   /* ---- 设置 ---- */
+  setNav:{ n:'设置分类导航（左列）', s:'10 个分类 · 默认「通用」', d:'7.5', p:[
+    '设置是独立区域，按功能域分子页面：左列分类导航 + 右侧当前分类内容（与主界面一致的左右结构）',
+    '分类清单照 §7.5 的子页面表：通用 / 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 备份 / 分享 / MCP / 数据管理 / 实例管理',
+    '「通用」提到首位作为默认落地页，其余顺序与 §7.5 一致',
+    '「实例管理」只对 owner 显示，属实例级设置（`site_settings`），与个人设置分开存放（7.5 两级归属）',
+    '当前分类记在 state.setPage，离开再回来仍停在原分类；切换沿用完整重渲染，与其它视图同一套渲染路径',
+    '「Memo 浏览需要隐私密码」在 §7.5 里归入隐私锁子页面，界面上独立成一张卡片' ]},
+  setPageHead:{ n:'分类页头', s:'分类名 · 简述 · 分类总数', d:'7.5', p:[
+    '一次只显示一个分类，故页头带上当前分类名与一行简述，避免看不出自己在哪一页',
+    '「← 返回设置」只在回收站这类下级页面出现；返回时落回「版本与回收站」分类，不回到默认分类' ]},
   startViewSet:{ n:'通用 › 启动视图与界面偏好', s:'首页 / 最近编辑 / 收藏 · 主题（浅色 / 深色 / 跟随系统）', d:'7.4 / 7.5 / v2 M02-04', p:[
     '【v2 新增】对应设计文档 §7.5 通用子页面中的「启动视图」',
     '未选首页时功能栏不显示「首页」项，启动后直接进入所选视图',
@@ -932,7 +949,7 @@ const B = {
     '仅本次查看 / N 分钟 / 本次会话 / 当前设备长期',
     '档位只决定门禁保持多久，不涉及密钥（模型修订后密钥层级已取消）',
     '「当前设备长期」提供「锁定此设备」按钮' ]},
-  setMemo:{ n:'Memo 隐私浏览卡片', s:'门禁开关', d:'8.9', p:[
+  setMemo:{ n:'Memo 隐私浏览卡片', s:'门禁开关 · 归在「隐私锁」分类下', d:'8.9 / 7.5', p:[
     '默认开启，前提是已启用隐私锁',
     '关闭只是界面行为，不发生批量加密或解密',
     'Memo 在数据库 / 本地缓存 / 备份中均为明文' ]},

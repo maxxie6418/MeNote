@@ -8,7 +8,8 @@
      npm install jsdom
      NODE_PATH=<node_modules 路径> node verify-prototype.js
 
-   覆盖：导航顺序与路由（首页 / Memo / 待办 分离）/ 账户入口唯一性 /
+   覆盖：导航顺序与路由（首页 / Memo / 待办 分离）/
+         账户入口唯一性（顶栏隐私锁胶囊旁，6 块顶栏；功能栏底部已无账户区）/
          首页三类内容与隐私占位 / 启动视图 / 主题（Claude 橙白双主题）/
          笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
          快速录入框三模式（无加密选项）/ 录入框行序（输入区 → 附加项 → 模式行）/
@@ -73,18 +74,31 @@ step('导航顺序：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔�
     throw new Error('导航顺序为 ' + order);
 });
 
-step('底部已无独立的回收站 / 设置入口（7.4 修订）', () => {
+step('功能栏导航不含独立的回收站 / 设置项（7.4 修订，设置由顶栏账户入口进入）', () => {
   if ($('.nav-item[data-fn="trash"]')) throw new Error('底部仍有独立回收站入口');
   if ($('.nav-item[data-fn="settings"]')) throw new Error('底部仍有独立设置入口');
 });
 
-step('账户入口：全站只有一个头像，且位于功能栏底部（7.4 修订）', () => {
+step('账户入口：全站只有一个头像，位于顶栏隐私锁胶囊旁（2026-09-26 调整）', () => {
   const avatars = $$('.avatar');
   if (avatars.length !== 1) throw new Error('头像数量 ' + avatars.length);
-  const acc = $('#fnAccount');
-  if (!acc) throw new Error('功能栏底部无账户区');
-  if (!acc.closest('.fn-foot')) throw new Error('账户区不在功能栏底部');
-  if (!acc.contains(avatars[0])) throw new Error('头像不在账户区内');
+  const acc = $('#topAccount');
+  if (!acc) throw new Error('顶栏无账户入口');
+  if (!acc.closest('.topbar')) throw new Error('账户入口不在顶栏内');
+  if (!acc.contains(avatars[0])) throw new Error('头像不在账户入口内');
+  // 必须紧邻隐私锁胶囊：同一父容器，且排在胶囊之后
+  const bar = $('.topbar');
+  const kids = Array.from(bar.children).map(el => el.className.split(/\s+/)[0]);
+  const iCapsule = kids.indexOf('capsule'), iAcc = kids.indexOf('top-account');
+  if (iCapsule < 0 || iAcc < 0) throw new Error('顶栏缺少胶囊或账户入口：' + kids.join('/'));
+  if (iAcc !== iCapsule + 1) throw new Error('账户入口未紧邻隐私锁胶囊：' + kids.join('/'));
+  // 顶栏因此由 5 块变 6 块
+  if (bar.children.length !== 6) throw new Error('顶栏区块数 ' + bar.children.length + '，应为 6');
+  // 功能栏底部不再有账户区
+  if ($('.fn-foot') || $('.fn-account')) throw new Error('功能栏底部仍有账户区');
+  // 顶栏是紧凑条：只放圆形头像，不显示 owner / 「账户与设置」文字
+  if (acc.textContent.replace(/\s/g, '') !== 'M') throw new Error('顶栏账户入口不应显示文字：' + acc.textContent);
+  if (!acc.title.includes('账户与设置')) throw new Error('账户入口缺少 title 提示');
 });
 
 /* ---------- 首页数据与隐私（v2 M02-03 / Q7） ---------- */
@@ -203,10 +217,10 @@ step('「添加」按钮复用录入框并切到对应模式（M06-10 / M07-01�
 });
 
 /* ---------- 设置：账户入口与子页面 ---------- */
-step('账户与设置：点击底部入口进入设置（7.4 修订）', () => {
-  click($('#fnAccount'));
+step('账户与设置：点击顶栏入口进入设置（2026-09-26 调整）', () => {
+  click($('#topAccount'));
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
-  if (!$('#fnAccount').classList.contains('active')) throw new Error('账户入口未高亮');
+  if (!$('#topAccount').classList.contains('active')) throw new Error('账户入口未高亮');
 });
 
 step('设置内含「版本与回收站」，可打开回收站（7.4 修订）', () => {
@@ -219,7 +233,7 @@ step('设置内含「版本与回收站」，可打开回收站（7.4 修订）'
 });
 
 step('启动视图：切到「收藏」隐藏首页项，切回首页恢复（v2 M02-04）', () => {
-  click($('#fnAccount'));
+  click($('#topAccount'));
   const set = $('#startViewSet');
   if (!set) throw new Error('设置里没有通用 › 启动视图');
   click(set.querySelector('.radio-opt[data-sv="starred"]'));
@@ -407,7 +421,7 @@ step('忘记密码 → 恢复码流程', () => {
 });
 
 step('回收站：从设置进入并恢复一条（7.4 修订）', () => {
-  click($('#fnAccount'));
+  click($('#topAccount'));
   click($('#openTrash'));
   const before = $$('.trash-row').length;
   click($('[data-restore]'));
@@ -415,7 +429,7 @@ step('回收站：从设置进入并恢复一条（7.4 修订）', () => {
 });
 
 step('设置：改档位 → 胶囊跟随', () => {
-  click($('#fnAccount'));
+  click($('#topAccount'));
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
   click($('#timeoutSet .radio-opt[data-min="-1"]'));
   if (!$('#lockCapsule').textContent.includes('本次会话')) throw new Error('胶囊未跟随档位');
@@ -455,9 +469,9 @@ step('笔记本新建入口：文件夹 / 表格（表格不在录入框里）',
   if (!$('table.data')) throw new Error('未进入表格');
 });
 
-step('账户与设置入口不弹菜单，直接进设置（7.4 修订）', () => {
+step('账户与设置入口不弹菜单，直接进设置（2026-09-26 调整）', () => {
   click($('.nav-item[data-fn="recent"]'));
-  click($('#fnAccount'));
+  click($('#topAccount'));
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
   if (doc.querySelector('.menu')) throw new Error('账户入口仍在弹菜单，与「合并为一个入口」不符');
 });

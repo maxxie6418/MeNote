@@ -189,18 +189,12 @@ a{color:inherit;text-decoration:none}
 .fnbar{width:var(--fnbar-w);flex:none;background:var(--bg-soft);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
 .fn-top{padding:12px 12px 0;flex:none}
 .fn-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 12px 14px}
-.fn-foot{flex:none;border-top:1px solid var(--line);padding:8px 12px 10px}
-
-/* 账户区（7.4 修订：由顶栏移到功能栏底部，全站唯一账户入口） */
-.fn-account{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:9px;cursor:pointer;transition:.14s;margin-bottom:4px}
-.fn-account:hover{background:var(--panel)}
-.fn-account .acc-meta{display:flex;flex-direction:column;line-height:1.25;min-width:0;flex:1}
-.fn-account .acc-meta b{font-size:12.5px;font-weight:600}
-.fn-account .acc-meta span{font-size:10.5px;color:var(--muted)}
-.fn-account .chev{margin-left:auto;width:13px;height:13px;color:var(--muted);opacity:.7}
-.fn-account.active{background:var(--primary-soft)}
-.fn-account.active .acc-meta b{color:var(--primary-2)}
-.fn-account.active .chev{color:var(--primary-2);opacity:1}
+/* 账户与设置（2026-09-26 用户调整：由功能栏底部移回顶栏，紧邻隐私锁胶囊；
+   顶栏是紧凑条，故只显示圆形头像，不显示 owner / 账户与设置文字） */
+.top-account{flex:none;display:grid;place-items:center;padding:1px;border-radius:50%;cursor:pointer;transition:.16s}
+.top-account:hover{background:var(--panel-3)}
+.top-account.active{box-shadow:0 0 0 2px var(--primary-line)}
+.top-account .avatar{width:30px;height:30px;font-size:12px}
 
 /* 笔记本节点右侧的新建入口（表格 / 文件夹走这里，7.4） */
 .nb-head{display:flex;align-items:center;gap:4px}
@@ -735,6 +729,11 @@ table.data tbody tr:hover{background:var(--panel-2)}
       <span>已解锁</span>
       <span class="timer" id="lockTimer">4:32</span>
     </div>
+
+    <!-- 账户与设置（2026-09-26 用户调整：由功能栏底部移回顶栏，紧邻隐私锁胶囊，全站唯一入口；点击直接进设置） -->
+    <div class="top-account" id="topAccount" title="账户与设置 · owner（点击进入设置）" role="button" tabindex="0">
+      <div class="avatar">M</div>
+    </div>
   </header>
 
   <div class="body-row">
@@ -838,14 +837,6 @@ table.data tbody tr:hover{background:var(--panel-2)}
         </div>
       </div>
 
-      <div class="fn-foot">
-        <!-- 账户与设置（7.4 修订）：由顶栏移来并与设置合并，全站唯一入口；回收站移入设置 -->
-        <div class="fn-account" id="fnAccount" title="账户与设置">
-          <div class="avatar">M</div>
-          <div class="acc-meta"><b>owner</b><span>账户与设置</span></div>
-          <svg class="ic chev"><use href="#i-settings"/></svg>
-        </div>
-      </div>
     </aside>
 
     <!-- ==================== 主操作区 ==================== -->
@@ -1242,8 +1233,8 @@ function go(fn, opts){
   if(opts.tag !== undefined) state.tag = opts.tag;
 
   $$('.nav-item[data-fn]').forEach(n => n.classList.toggle('active', n.dataset.fn === fn));
-  // 7.4 修订：账户与设置合并为一个入口，进设置或回收站时它保持高亮
-  const acc = $('#fnAccount');
+  // 2026-09-26 调整：账户与设置移回顶栏（隐私锁胶囊旁），进设置或回收站时它保持高亮
+  const acc = $('#topAccount');
   if(acc) acc.classList.toggle('active', fn === 'settings' || fn === 'trash');
   $$('#folderTree .tree-row[data-folder]').forEach(r => r.classList.toggle('active', r.dataset.folder === state.folder));
 
@@ -2494,8 +2485,8 @@ $('#lockCapsule').addEventListener('click', e => {
   });
 });
 
-/* 账户与设置（7.4 修订：位于功能栏底部，与设置合并为同一个入口） */
-$('#fnAccount').addEventListener('click', () => {
+/* 账户与设置（2026-09-26 调整：位于顶栏隐私锁胶囊旁，与设置合并为同一个入口，点击直接进设置） */
+$('#topAccount').addEventListener('click', () => {
   go('settings');
 });
 

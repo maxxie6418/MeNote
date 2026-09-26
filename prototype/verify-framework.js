@@ -11,7 +11,8 @@
    注意：页面用「页名」定位，不用下标 —— 增删页面后不会假失败。
 
    覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
-         区块名与说明文字齐全 / 导航顺序与首页项 / 待办独立视图 /
+         区块名与说明文字齐全 / 顶栏 6 块且账户入口紧邻隐私锁胶囊 /
+         导航顺序与首页项 / 待办独立视图 /
          Memo 去清单 / 录入框三模式与去加密 / 录入框行序（附加项在模式行之上）/
          主题（Claude 橙白双主题）/
          点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
@@ -133,19 +134,25 @@ step('区块总数统计', () => {
   console.log('       （字典共 ' + all.size + ' 个区块）');
 });
 
-step('顶栏页：账户头像已移出（只剩 5 块）', () => {
+step('顶栏页：含账户入口，紧邻隐私锁胶囊（6 块，2026-09-26 调整）', () => {
   gotoPage('顶栏');
-  if ($('#canvas [data-b="fnAccount"]')) throw new Error('顶栏仍存在账户块');
-  const n = $$('#canvas .blk-strip > [data-b]').length;
-  if (n !== 5) throw new Error('顶栏区块数 ' + n);
+  const strip = $$('#canvas .blk-strip > [data-b]').map(el => el.getAttribute('data-b'));
+  if (strip.length !== 6) throw new Error('顶栏区块数 ' + strip.length + '：' + strip.join('/'));
+  if (strip.join('/') !== 'brand/crumb/search/syncPill/capsule/topAccount') {
+    throw new Error('顶栏块序不对：' + strip.join('/'));
+  }
+  if ($('#canvas [data-b="fnAccount"]')) throw new Error('旧的功能栏账户块仍在');
+  if (!blockText('topAccount').includes('移回顶栏')) throw new Error('账户块未说明由功能栏底部移回');
+  if (!blockText('fnbar').includes('移回顶栏')) throw new Error('功能栏未说明账户区已移回顶栏');
 });
 
-step('功能栏页：新建笔记 / 笔记本新建入口 / 底部账户与设置', () => {
+step('功能栏页：新建笔记 / 笔记本新建入口 / 已无底部账户区', () => {
   gotoPage('功能栏');
-  ['newBtn', 'nbAdd', 'fnAccount'].forEach(id => {
+  ['newBtn', 'nbAdd'].forEach(id => {
     if (!$('#canvas [data-b="' + id + '"]')) throw new Error('缺区块 ' + id);
   });
   if (!noteOf('newBtn').includes('新建笔记')) throw new Error('新建按钮未直连笔记');
+  if ($('#canvas [data-b="fnAccount"]')) throw new Error('功能栏底部仍有账户区');
   if ($('#canvas [data-b="fnFoot"]')) throw new Error('底部仍有独立回收站 / 设置区块');
 });
 

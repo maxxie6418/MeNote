@@ -15,6 +15,7 @@
 | v1 | v0.1.2 | 2026-09-26 | 初稿。新隐私模型权威 DDL（重写被密文列污染的 CHECK）、运行时自愈迁移机制、首次部署路径与测试策略 | deepseek-v4.1-flash |
 | v1.1 | v0.1.3 | 2026-09-26 | 状态改「生效」；据 SQLite 实测与独立复核修正（语句数 21→18、`sync_seq` 分配去掉 `RETURNING` 并记录需求 §18.3 守卫缺陷、引注改为章节号）；应用已批准决定：`app_meta` 承载实例级设置、`.gitignore` 放行 `.dev.vars.example` | deepseek-v4.1-flash |
 | v1.2 | v0.2.4 | 2026-09-26 | M2-1 定死任务字段字面量：§六待确认 #1 由「待定」改「已定」——写入 `todo / doing / done` 与 `high / medium / low`（英文，与既有 YAML 键约定一致），读取兼容中文，界面文案走 `mdcore` 的 `TASK_*_LABELS`；「M2-5 补 CHECK」的约定保留 | deepseek-v4.1-flash |
+| v1.3 | v0.2.11 | 2026-09-26 | **M2-5 落地约束，形式由 CHECK 改为触发器**：新增 0002 迁移（6 个幂等触发器，覆盖 INSERT/UPDATE；含「`is_task = 0` 时不得携带任务字段」一条），并纳入 `selfheal` 的完整性检查（`sqlite_master` 查 `type='trigger'`）。理由：SQLite 不支持 `ALTER TABLE ... ADD CONSTRAINT`，补 CHECK 只能重建 `items` 这张已有生产数据的热表，风险与收益不成比例；触发器幂等追加、不动表结构与数据，约束效果等价。0001 的 18 条语句不变，0002 为 6 条 | deepseek-v4.1-flash |
 
 ---
 
@@ -322,7 +323,7 @@ UPDATE users SET sync_seq = sync_seq + 1
 
 | # | 项 | 处理建议 |
 |---|---|---|
-| 1 | `task_status` / `task_priority` 的枚举值字符串 | **已在 M2-1 定死**（`packages/mdcore/src/tasks.ts`）：写入用英文 `todo / doing / done` 与 `high / medium / low`（与既有 YAML 英文键约定一致，md 可移植、MCP 好筛）；**读取兼容中文**（待办 / 进行中 / 已完成、高 / 中 / 低），因为 md 允许手工编辑；界面文案走 `TASK_STATUS_LABELS` / `TASK_PRIORITY_LABELS`，中文不入数据。日期为 `YYYY-MM-DD` 且校验真实日期。**M2-5 补 CHECK 约束**（`items` 是热表，别拖到更后） |
+| 1 | `task_status` / `task_priority` 的枚举值字符串 | **已在 M2-1 定死字面量、M2-5 补上约束**：写入用英文 `todo / doing / done` 与 `high / medium / low`（与既有 YAML 英文键约定一致，md 可移植、MCP 好筛）；**读取兼容中文**（待办 / 进行中 / 已完成、高 / 中 / 低），因为 md 允许手工编辑；界面文案走 `TASK_STATUS_LABELS` / `TASK_PRIORITY_LABELS`，中文不入数据。日期为 `YYYY-MM-DD` 且校验真实日期。**约束落地形式改为触发器（0002 迁移，见下）** |
 | 2 | 三条"新增·本文决定"的 CHECK | 若担心导入数据误伤可去掉（§3.3 末注） |
 | 3 | `wrangler.jsonc` 自动回写的 `database_id` | 本地 `pnpm deploy` 后 wrangler 会把 ID 回写进配置文件；**不要提交**（提交后会把 Deploy 按钮用户指向他人账户）。建议在部署指南加一条；可选在 CI 加 `git diff --exit-code wrangler.jsonc` |
 | 4 | `migrations_dir` 保留与否 | 建议保留（零风险），仅更新 `.gitkeep` 说明为"可选手工通道" |

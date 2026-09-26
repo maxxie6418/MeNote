@@ -10,7 +10,8 @@
  * 这里把 CodeMirror 换成受控替身：能拿到 `initialValue` 并能主动触发 `onChange`，
  * 从而在 jsdom 里确定性地复现这两条路径（真实 CM6 依赖布局 API，不适合放进单测）。
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/app/editor/Editor", () => ({
@@ -153,5 +154,43 @@ describe("正文区模式切换", () => {
     );
 
     expect((await screen.findByTestId("editor")).getAttribute("data-initial")).toBe("B 的内容");
+  });
+});
+
+describe("跨标签页改动的事前提示（M2-9）", () => {
+  it("提示条可见，并把「重新载入」接上回调", async () => {
+    const user = userEvent.setup();
+    const onReload = vi.fn();
+    const { rerender } = render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        remoteChanged={false}
+        onReload={onReload}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+
+    rerender(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        remoteChanged={true}
+        onReload={onReload}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+
+    const banner = screen.getByRole("status");
+    expect(banner.textContent).toContain("另一个标签页被修改过");
+    expect(banner.textContent).toContain("冲突副本");
+
+    await user.click(within(banner).getByRole("button", { name: /重新载入/ }));
+    expect(onReload).toHaveBeenCalledTimes(1);
   });
 });

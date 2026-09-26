@@ -550,6 +550,10 @@ export default function App() {
                 initialBody={workspace.initialBody}
                 snapshot={workspace.snapshot}
                 initialMode={userSettings.settings.editor_mode}
+                remoteChanged={workspace.remoteChanged}
+                onReload={() => {
+                  void workspace.reloadSelected();
+                }}
                 onInput={workspace.input}
                 onTitleChange={(title) => {
                   void workspace.changeTitle(title);

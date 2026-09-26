@@ -932,6 +932,22 @@ button {
   font-weight: 600;
 }
 
+/* 需要注意但不阻塞的提示（如"别的标签页改过这条"）：琥珀色，动作按钮在右侧 */
+.banner--warn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border-bottom-color: var(--amber-line);
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: var(--fs-small);
+}
+
+.banner--warn .btn {
+  margin-left: auto;
+  flex: none;
+}
+
 /* 诊断信息（地址 / 协议 / 安全上下文 / WebCrypto）：等宽、靠右，便于用户原样抄给开发者 */
 .banner__facts {
   margin-left: auto;

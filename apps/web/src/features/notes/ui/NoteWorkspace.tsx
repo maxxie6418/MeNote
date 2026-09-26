@@ -34,6 +34,10 @@ export interface NoteWorkspaceProps {
   snapshot: NoteEditorSnapshot | null;
   /** 打开条目时的模式；来自 设置 › 编辑器 › 默认编辑模式（M2-7），之后可手动切换 */
   initialMode?: DocMode;
+  /** 这条被别的标签页改过（M2-9）：显示事前提示，避免"以为没冲突" */
+  remoteChanged?: boolean;
+  /** 放弃本地改动、按最新内容重新载入 */
+  onReload?: () => void;
   onInput: (text: string) => void;
   onTitleChange: (title: string) => void;
 }
@@ -43,6 +47,8 @@ export function NoteWorkspace({
   initialBody,
   snapshot,
   initialMode,
+  remoteChanged = false,
+  onReload,
   onInput,
   onTitleChange,
 }: NoteWorkspaceProps) {
@@ -65,6 +71,19 @@ export function NoteWorkspace({
 
   return (
     <div className="docpane">
+      {remoteChanged ? (
+        <div className="banner banner--warn" role="status">
+          <span>
+            这条笔记在另一个标签页被修改过。现在保存会生成一份冲突副本，不会覆盖别处的改动。
+          </span>
+          {onReload ? (
+            <button type="button" className="btn btn--sm" onClick={onReload}>
+              按最新内容重新载入
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="docpane__head">
         <input
           className="docpane__title-input"

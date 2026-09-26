@@ -15,6 +15,8 @@ import {
   db,
   enqueueBodySave,
   enqueueMetaPatch,
+  getCachedBody,
+  getDraft,
   getLocalItem,
   listItemSummaries,
   listLocalFolders,
@@ -117,6 +119,10 @@ export interface NotesWorkspace {
   notifyUploaded: () => void;
   notifyFailed: () => void;
   notifyConflict: () => void;
+  /** 打开着的这条被别的标签页改过（M2-9 的事前提示；保存仍会走冲突副本路径） */
+  remoteChanged: boolean;
+  /** 放弃本地改动、按服务端最新内容重新打开 */
+  reloadSelected: () => Promise<void>;
   /** 同步跑完后按本地库的真实状态重算编辑器的保存态 */
   refreshEditorState: () => Promise<void>;
 }
@@ -133,6 +139,8 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [memos, setMemos] = useState<LocalItem[]>([]);
   const [memoContents, setMemoContents] = useState<Record<string, MemoContent>>({});
+  /** 打开着的这条是否被别的标签页改过（事前提示；M2-9） */
+  const [remoteChanged, setRemoteChanged] = useState(false);
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;
@@ -155,7 +163,17 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     setSummaries(bodySummaries);
     setMemos((previous) => (sameItems(previous, memoRows) ? previous : memoRows));
     setMemoContents(memoBodies);
-  }, []);
+
+    /**
+     * 跨标签页改动的事前提示（M2-9）：基准是**打开这条时的正文** `initialBody`。
+     * 两个标签页共用同一个 IndexedDB，所以别处保存后本地缓存正文就变了——一比就知道。
+     * 自己保存成功后会把基准跟着更新（见 `notifyUploaded`），因此不会误报成"别处改的"。
+     */
+    if (selectedId !== null) {
+      const cached = await getCachedBody(selectedId);
+      if (cached && cached.body !== initialBody) setRemoteChanged(true);
+    }
+  }, [initialBody, selectedId]);
 
   // 首次加载：setState 放在 then 回调里，不在 effect 体内同步触发（react-hooks/set-state-in-effect）
   useEffect(() => {
@@ -180,8 +198,10 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       });
       editorRef.current = editor;
       const body = await editor.load();
+      // initialBody 就是"打开时的基准"（跨标签页提示用它比对），所以这里必须先设
       setInitialBody(body);
       setSelectedId(id);
+      setRemoteChanged(false);
       editor.start();
     },
     [onLocalWrite],
@@ -198,8 +218,14 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [onLocalWrite, open, refresh],
   );
 
-  const changeTitle = useCallback(
-    async (title: string) => {
+  /** 放弃本地改动、按最新内容重新打开（跨标签页提示里的"重新载入"） */
+  const reloadSelected = useCallback(async () => {
+    if (!selectedId) return;
+    await refresh();
+    await open(selectedId);
+  }, [open, refresh, selectedId]);
+
+  const changeTitle = useCallback(async (title: string) => {
       if (!selectedId) return;
       const item = await getLocalItem(selectedId);
       if (!item) return;
@@ -415,8 +441,19 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       moveItemToFolder,
       togglePinned,
       toggleStarred,
+      remoteChanged,
+      reloadSelected,
       input: (text: string) => editorRef.current?.onInput(text),
-      notifyUploaded: () => editorRef.current?.notifyUploaded(),
+      notifyUploaded: () => {
+        editorRef.current?.notifyUploaded();
+        // 自己保存成功不是"别处改的"：把基准（initialBody）跟到自己刚写下的内容，并清掉提示
+        if (selectedId !== null) {
+          void getDraft(selectedId).then((draft) => {
+            if (draft) setInitialBody(draft.body);
+          });
+        }
+        setRemoteChanged(false);
+      },
       notifyFailed: () => editorRef.current?.notifyFailed(),
       notifyConflict: () => editorRef.current?.notifyConflict(),
       refreshEditorState: () => editorRef.current?.refreshState() ?? Promise.resolve(),
@@ -437,6 +474,8 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       open,
       publishMemo,
       refresh,
+      reloadSelected,
+      remoteChanged,
       renameFolder,
       moveFolder,
       selected,

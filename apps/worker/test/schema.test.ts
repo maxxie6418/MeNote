@@ -1,60 +1,15 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { ensureSchema, resetSchemaCacheForTests, verifySchema } from "../src/db/selfheal";
 import {
   EXPECTED_SCHEMA_VERSION,
-  ensureSchema,
-  resetSchemaCacheForTests,
-  verifySchema,
-} from "../src/db/selfheal";
-
-/** 0001 迁移应当建立的全部对象（与 docs/modules/Menote-数据模型与迁移设计-v1.md §3.2 一致） */
-const TABLES = [
-  "app_meta",
-  "users",
-  "sessions",
-  "auth_throttle",
-  "user_settings",
-  "folders",
-  "items",
-  "item_bodies",
-] as const;
-
-const INDEXES = [
-  "idx_sessions_user",
-  "idx_sessions_expires",
-  "idx_folders_sync",
-  "idx_folders_parent",
-  "idx_folders_enc_space",
-  "idx_items_sync",
-  "idx_items_folder",
-  "idx_items_memo",
-  "idx_items_task",
-  "idx_items_trash",
-] as const;
-
-/** 把库恢复成空库，避免用例之间互相污染（测试文件内共享同一个本地 D1） */
-async function resetDatabase(): Promise<void> {
-  await env.DB.exec("DROP VIEW IF EXISTS idx_items_sync");
-  for (const name of TABLES) {
-    await env.DB.exec(`DROP TABLE IF EXISTS ${name}`);
-  }
-  resetSchemaCacheForTests();
-}
-
-async function readVersion(): Promise<number> {
-  const row = await env.DB.prepare("SELECT value FROM app_meta WHERE key = 'schema_version'").first<{
-    value: string;
-  }>();
-  return Number.parseInt(row?.value ?? "0", 10);
-}
-
-async function listObjects(): Promise<Set<string>> {
-  const rows = await env.DB.prepare(
-    "SELECT name FROM sqlite_master WHERE type IN ('table','index') AND name NOT LIKE 'sqlite_%'",
-  ).all<{ name: string }>();
-  return new Set(rows.results.map((row) => row.name));
-}
+  INDEXES,
+  TABLES,
+  listObjects,
+  readSchemaVersion,
+  resetDatabase,
+} from "./helpers";
 
 describe("运行时自愈迁移", () => {
   it("空库首次调用后建立全部表与索引", async () => {
@@ -73,7 +28,7 @@ describe("运行时自愈迁移", () => {
     await resetDatabase();
 
     expect((await ensureSchema(env.DB)).ok).toBe(true);
-    const version = await readVersion();
+    const version = await readSchemaVersion();
 
     resetSchemaCacheForTests();
     const again = await ensureSchema(env.DB);
@@ -81,7 +36,7 @@ describe("运行时自愈迁移", () => {
     if (again.ok) expect(again.version).toBe(version);
 
     await verifySchema(env.DB);
-    expect(await readVersion()).toBe(EXPECTED_SCHEMA_VERSION);
+    expect(await readSchemaVersion()).toBe(EXPECTED_SCHEMA_VERSION);
   });
 
   it("并发调用：至少一方完成迁移，另一方要么放行要么报 migrating，结构完整", async () => {
@@ -95,7 +50,7 @@ describe("运行时自愈迁移", () => {
       if (!result.ok) expect(result.reason).toBe("migrating");
     }
     await verifySchema(env.DB);
-    expect(await readVersion()).toBe(EXPECTED_SCHEMA_VERSION);
+    expect(await readSchemaVersion()).toBe(EXPECTED_SCHEMA_VERSION);
   });
 
   it("版本高于代码期望时放行（前向兼容，便于回滚）", async () => {
@@ -123,7 +78,7 @@ describe("运行时自愈迁移", () => {
     if (!result.ok) expect(result.reason).toBe("failed");
 
     // app_meta 由 ensureSchema 自己建好并播种为 0；迁移失败后版本必须还是 0
-    expect(await readVersion()).toBe(0);
+    expect(await readSchemaVersion()).toBe(0);
 
     // 批次是事务：前面的建表语句必须一起回滚，不能留半成品
     const names = await listObjects();

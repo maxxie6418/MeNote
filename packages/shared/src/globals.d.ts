@@ -15,3 +15,9 @@ declare class TextDecoder {
   constructor(label?: string);
   decode(input?: Uint8Array): string;
 }
+
+/** WebCrypto 的最小声明（浏览器 / Worker 都提供；只声明本项目用到的成员） */
+declare const crypto: {
+  getRandomValues<T extends ArrayBufferView>(array: T): T;
+  randomUUID(): string;
+};

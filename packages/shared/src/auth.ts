@@ -67,6 +67,10 @@ export const MeResponseSchema = v.object({
 });
 export type MeResponse = v.InferOutput<typeof MeResponseSchema>;
 
+/** 注册（201）与登录（200）成功后的响应：自动登录，用户信息直接可用 */
+export const AuthSessionResponseSchema = v.object({ user: MeResponseSchema });
+export type AuthSessionResponse = v.InferOutput<typeof AuthSessionResponseSchema>;
+
 /** `POST /api/auth/password`：新盐由服务端生成，verifier 由服务端算（浏览器拿不到 pepper） */
 export const ChangePasswordRequestSchema = v.object({
   login_key: v.string(),

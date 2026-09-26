@@ -9,6 +9,7 @@
  * 流程：建 app_meta → 读版本 → 抢锁（TTL 60s）→ 按序执行 → 校验对象齐备 → 写版本。
  * 中途失败不写版本、不释放锁（用 TTL 自然限流重试），下次请求重跑（DDL 全部幂等）。
  */
+import { MIGRATION_LOCK_TTL_MS } from "@menote/shared";
 import { migration0001, type MigrationScript } from "./migrations/0001_init";
 
 /** 全部迁移脚本，按 version 升序 */
@@ -22,7 +23,6 @@ export const EXPECTED_SCHEMA_VERSION = MIGRATIONS.reduce(
 
 const KEY_VERSION = "schema_version";
 const KEY_LOCK = "migration_lock";
-const LOCK_TTL_MS = 60_000;
 
 /** 迁移完成后必须存在的对象（缺失即视为迁移不完整） */
 const REQUIRED_TABLES = [
@@ -78,7 +78,7 @@ async function readSchemaVersion(db: D1Database): Promise<number> {
 async function acquireLock(db: D1Database, now: number): Promise<boolean> {
   const result = await db
     .prepare("UPDATE app_meta SET value = ? WHERE key = ? AND CAST(value AS INTEGER) < ?")
-    .bind(String(now), KEY_LOCK, now - LOCK_TTL_MS)
+    .bind(String(now), KEY_LOCK, now - MIGRATION_LOCK_TTL_MS)
     .run();
   return (result.meta.changes ?? 0) === 1;
 }

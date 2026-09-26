@@ -9,6 +9,13 @@ export default defineConfig({
       wrangler: {
         configPath: "../../wrangler.jsonc",
       },
+      // 测试专用机密：不是真实密钥（生产在部署页填写，本地放 .dev.vars）。
+      // 只在这里注入，避免把机密塞进 wrangler.jsonc 的 vars。
+      miniflare: {
+        bindings: {
+          AUTH_PEPPER: "test-pepper-not-a-real-secret",
+        },
+      },
     }),
   ],
 });

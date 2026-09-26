@@ -84,3 +84,9 @@ wrangler.jsonc    唯一 Worker 配置（仓库根）：main、assets、D1 绑�
 - **兼容日 2026-08-22**：受 `@cloudflare/vitest-pool-workers` 0.22 内置 workerd 的兼容日上限约束（该包精确锁定 miniflare 5.20260815.0-alpha）。pool-workers 跟进新版后，与 wrangler 一并上移 `wrangler.jsonc` 的 `compatibility_date`。
 - pnpm 固定 `nodeLinker: hoisted` 扁平布局（`pnpm-workspace.yaml`）：pnpm 11 默认 package-map 布局对 tsc/Vite 的模块解析不透明，勿改回。
 - `esbuild`、`workerd` 的 postinstall 在 `allowBuilds` 中显式放行（安装平台二进制）。
+
+## 八、M1 开工前必办（M0 遗留挂钩）
+
+- **迁移挂钩**：M0 尚无迁移脚本，deploy 脚本只有 `wrangler deploy`。引入第一条迁移（M1）时，按架构 §15.5 把根 deploy 脚本改为 `wrangler d1 migrations apply DB --remote && wrangler deploy`。注意顺序坑：D1（menote-db）在**首次成功部署时**才由自动供给创建——若第一条迁移出现在任何成功部署之前，`--remote` 迁移会因库里查不到而失败，需先手动 `wrangler deploy` 一次建库。
+- **机密声明**：出现第一个服务端密钥（如 SESSION_SECRET）时，按架构 §15.5 在 wrangler.jsonc 增加 `"secrets": { "required": [...] }`，并配 `.dev.vars.example` 说明格式与生成方式——否则一键部署的设置页不会逐项提示填密钥。
+- **前端 feature 互不依赖的 ESLint 规则**：M2 引入 `features/` 时补 no-restricted-imports（跨 feature 复用只走 `app/` 或 `data/`）。

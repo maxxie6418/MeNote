@@ -2,17 +2,17 @@
    Menote 原型回归验证脚本
    ------------------------------------------------------------
    用 jsdom 加载 menote-prototype.html 并真实执行页面脚本，
-   按设计文档约定模拟交互路径，捕获运行时错误。
+   按设计文档与《Menote 功能拆解 v2》的约定模拟交互路径，捕获运行时错误。
 
    运行：
      npm install jsdom
      NODE_PATH=<node_modules 路径> node verify-prototype.js
 
-   覆盖：导航路由 / 账户入口唯一性 / 笔记本双栏 / 正文层级归并 /
-         Memo 三视图 / 清单列表与看板 / 快速录入框两模式 + 独立待办按钮 /
-         新建直连笔记 / 笔记本新建入口 / 滑出详情侧栏 /
-         隐私锁锁定与解锁 / Memo 隐私门禁 / 恢复码流程 /
-         搜索 / 表格视图切换 / 菜单
+   覆盖：导航顺序与路由（首页 / Memo / 待办 分离）/ 账户入口唯一性 /
+         首页三类内容与隐私占位 / 启动视图 / 笔记本双栏 / 正文层级归并 /
+         Memo 两视图 / 待办列表与看板 / 快速录入框三模式（无加密选项）/
+         新建直连笔记 / 笔记本新建入口 / 表格更多菜单 / 滑出详情侧栏 /
+         隐私锁锁定与解锁 / Memo 隐私门禁 / 恢复码流程 / 搜索 / 表格视图切换
    ============================================================ */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
@@ -46,20 +46,34 @@ function step(name, fn) {
   }
 }
 const lock = () => {
+  if ($('#lockCapsule').classList.contains('locked')) throw new Error('已处于锁定态');
   click($('#lockCapsule'));
   const item = doc.querySelector('.menu-item[data-lock]');
   if (!item) throw new Error('胶囊菜单未出现');
   click(item);
 };
+const unlockVia = sel => { click($(sel)); input($('#pwInput'), 'demo'); click($('#unlockConfirm')); };
 
 console.log('=== 交互路径验证 ===');
 
-step('初始渲染：最近编辑列表', () => {
-  if (!$$('#paneList .item-row').length) throw new Error('列表为空');
+/* ---------- 导航结构（功能拆解 v2 / Q1 已确认） ---------- */
+step('初始渲染：首页三类内容（v2 M02-03）', () => {
+  if (!$('.pane-head h1').textContent.includes('首页')) throw new Error('默认视图不是首页');
+  const titles = $$('.home-card > .hd h3').map(h => h.textContent);
+  ['条目统计', '今日待办', '最近动态', '快捷方式', '快速导航'].forEach(t => {
+    if (!titles.includes(t)) throw new Error('首页缺内容块：' + t);
+  });
 });
 
-step('导航含「笔记本」且可点（7.4 导航项）', () => {
-  if (!$('.nav-item[data-fn="notebook"]')) throw new Error('笔记本不是导航项');
+step('导航顺序：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔记本 · 隐私空间（v2 Q1）', () => {
+  const order = $$('.nav-item[data-fn]').map(el => el.dataset.fn).join('/');
+  if (order !== 'home/memo/task/recent/starred/notebook/vault')
+    throw new Error('导航顺序为 ' + order);
+});
+
+step('底部已无独立的回收站 / 设置入口（7.4 修订）', () => {
+  if ($('.nav-item[data-fn="trash"]')) throw new Error('底部仍有独立回收站入口');
+  if ($('.nav-item[data-fn="settings"]')) throw new Error('底部仍有独立设置入口');
 });
 
 step('账户入口：全站只有一个头像，且位于功能栏底部（7.4 修订）', () => {
@@ -71,11 +85,31 @@ step('账户入口：全站只有一个头像，且位于功能栏底部（7.4 �
   if (!acc.contains(avatars[0])) throw new Error('头像不在账户区内');
 });
 
-step('底部已无独立的回收站 / 设置入口（7.4 修订）', () => {
-  if ($('.nav-item[data-fn="trash"]')) throw new Error('底部仍有独立回收站入口');
-  if ($('.nav-item[data-fn="settings"]')) throw new Error('底部仍有独立设置入口');
+/* ---------- 首页数据与隐私（v2 M02-03 / Q7） ---------- */
+step('首页统计 = 最近编辑条目数（记录视图不含 Memo，v2 Q8）', () => {
+  const nums = $$('.home-stat .n').map(n => n.textContent.trim());
+  const total = parseInt(nums[0], 10) + parseInt(nums[1], 10);
+  click($('.nav-item[data-fn="recent"]'));
+  const rows = $$('#paneList .item-row').length;
+  if (rows !== total) throw new Error('最近编辑条目数 ' + rows + ' ≠ 首页统计 ' + total);
+  if ($('#paneList .memo-item')) throw new Error('记录视图出现 Memo');
+  click($('.nav-item[data-fn="starred"]'));
+  if ($('#paneList .memo-item')) throw new Error('收藏视图出现 Memo');
 });
 
+step('首页隐私规则：锁定时 Memo 统计与动态占位（M02-03 / Q7）', () => {
+  lock();
+  click($('.nav-item[data-fn="home"]'));
+  const memoStat = $$('.home-stat')[2];
+  if (!memoStat.textContent.includes('已锁定')) throw new Error('锁定时 Memo 统计未占位');
+  if (!$('.home-locked')) throw new Error('锁定时未提示 Memo 内容已锁定');
+  click($('.nav-item[data-fn="memo"]'));
+  unlockVia('#memoUnlockBtn');
+  click($('.nav-item[data-fn="home"]'));
+  if (!$$('.home-stat')[2].textContent.match(/\d/)) throw new Error('解锁后 Memo 统计未恢复');
+});
+
+/* ---------- 功能栏：新建与录入框 ---------- */
 step('录入框模式为 Memo / 待办 / 笔记 三档', () => {
   const modes = $$('#composerModes button').map(b => b.dataset.mode);
   if (modes.join('/') !== 'memo/task/note') throw new Error('模式为 ' + modes.join('/'));
@@ -96,6 +130,13 @@ step('模式附加项：锁定一排（26px），三档都不隐藏、不换行�
   if (!extra.textContent.includes('首行作标题')) throw new Error('笔记附加项文案未收短：' + extra.textContent);
 });
 
+step('录入框「笔记」模式不再提供加密选项（v2 M04-02）', () => {
+  click($('#composerModes button[data-mode="note"]'));
+  const txt = $('#composerExtra').textContent;
+  if (txt.includes('加密')) throw new Error('笔记模式仍有加密选项：' + txt);
+  if (!$('#composerPublish').title.includes('新建')) throw new Error('发布按钮未承接新建提示');
+});
+
 step('录入框已压缩：取消发布行，发布按钮与模式选择同行（7.4 修订）', () => {
   if ($('.composer-foot')) throw new Error('仍存在独立的发布行');
   if ($('#composerTip')) throw new Error('仍存在独立的快捷键提示元素');
@@ -108,23 +149,42 @@ step('录入框已压缩：取消发布行，发布按钮与模式选择同行�
   click($('#composerModes button[data-mode="memo"]'));
 });
 
-step('待办与 Memo 已合并为一个导航项（7.4 / 9.4）', () => {
-  if ($('.nav-item[data-fn="task"]')) throw new Error('导航仍有独立待办项');
+/* ---------- Memo 与待办分离（v2 Q1） ---------- */
+step('Memo 视图只有 时间轴 / 瀑布流，无「清单」tab（v2 Q1 / M06-10）', () => {
   click($('.nav-item[data-fn="memo"]'));
-  if (!$$('.memo-item').length) throw new Error('Memo 默认未落在时间轴');
+  if (!$('.pane-head h1').textContent.includes('Memo')) throw new Error('未进入 Memo 视图');
   const tabs = $$('#memoMode button').map(b => b.dataset.m);
-  if (tabs.join('/') !== 'timeline/waterfall/tasks') throw new Error('Memo 视图 tab 不是三档：' + tabs.join('/'));
+  if (tabs.join('/') !== 'timeline/waterfall') throw new Error('Memo 视图 tab 为：' + tabs.join('/'));
+  if (!$$('.memo-item').length) throw new Error('时间轴为空');
+  if (!$('#memoAdd')) throw new Error('Memo 视图顶部缺「添加」按钮');
 });
 
-step('Memo 视图内的「清单」tab 即待办（7.4 / 9.4）', () => {
-  click($('#memoMode button[data-m="tasks"]'));
-  if (!$$('.task-row').length) throw new Error('清单为空');
-  if (!$('.pane-head .sub').textContent.includes('清单不是独立类型'))
-    throw new Error('未说明清单与 Memo 的归属关系');
-  click($('#memoMode button[data-m="timeline"]'));
-  if (!$$('.memo-item').length) throw new Error('返回时间轴失败');
+step('待办为独立视图，列表 / 看板可切（v2 Q1 / M07-05）', () => {
+  click($('.nav-item[data-fn="task"]'));
+  if (!$('.pane-head h1').textContent.includes('待办')) throw new Error('未进入待办视图');
+  if (!$('#taskAdd')) throw new Error('待办视图顶部缺「添加」按钮');
+  const tabs = $$('#taskView button').map(b => b.dataset.t);
+  if (tabs.join('/') !== 'list/kanban') throw new Error('待办视图为：' + tabs.join('/'));
+  if (!$$('.task-row').length) throw new Error('待办列表为空');
+  click($('#taskView button[data-t="kanban"]'));
+  if (!$$('.kb-col').length) throw new Error('看板为空');
+  click($('[data-kb]'));
+  click($('#taskView button[data-t="list"]'));
+  click($('[data-tcheck]'));
 });
 
+step('「添加」按钮复用录入框并切到对应模式（M06-10 / M07-01）', () => {
+  click($('.nav-item[data-fn="memo"]'));
+  click($('#memoAdd'));
+  if (!$('#composerModes button[data-mode="memo"]').classList.contains('on'))
+    throw new Error('Memo「添加」未切到 Memo 模式');
+  click($('.nav-item[data-fn="task"]'));
+  click($('#taskAdd'));
+  if (!$('#composerModes button[data-mode="task"]').classList.contains('on'))
+    throw new Error('待办「添加」未切到待办模式');
+});
+
+/* ---------- 设置：账户入口与子页面 ---------- */
 step('账户与设置：点击底部入口进入设置（7.4 修订）', () => {
   click($('#fnAccount'));
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
@@ -140,6 +200,17 @@ step('设置内含「版本与回收站」，可打开回收站（7.4 修订）'
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未返回设置');
 });
 
+step('启动视图：切到「收藏」隐藏首页项，切回首页恢复（v2 M02-04）', () => {
+  click($('#fnAccount'));
+  const set = $('#startViewSet');
+  if (!set) throw new Error('设置里没有通用 › 启动视图');
+  click(set.querySelector('.radio-opt[data-sv="starred"]'));
+  if ($('#navHome').style.display !== 'none') throw new Error('未选首页时首页项仍显示');
+  click(set.querySelector('.radio-opt[data-sv="home"]'));
+  if ($('#navHome').style.display === 'none') throw new Error('选回首页后首页项仍隐藏');
+});
+
+/* ---------- 笔记本 / 正文 ---------- */
 step('切到笔记本 → 列表 + 正文双栏', () => {
   click($('.nav-item[data-fn="notebook"]'));
   if (!$$('#paneList .item-row').length) throw new Error('左侧列表为空');
@@ -147,7 +218,7 @@ step('切到笔记本 → 列表 + 正文双栏', () => {
 });
 
 step('点开加密日记（已解锁态）：加密信息已并入状态栏', () => {
-  click($$('#paneList .item-item, #paneList .item-row').find(r => r.dataset.id === 'n3'));
+  click($$('#paneList .item-row').find(r => r.dataset.id === 'n3'));
   if (!$('.doc-head .enc-mark')) throw new Error('正文头未显示加密标识');
   if ($$('#paneDoc .doc-status').length !== 1) throw new Error('正文状态栏不是唯一一条');
   const st = $('#paneDoc .doc-status');
@@ -170,36 +241,18 @@ step('文件夹筛选 → 双栏只剩该文件夹条目', () => {
   if (!rows.length) throw new Error('文件夹为空');
 });
 
-step('切 Memo → 时间轴', () => {
-  click($('.nav-item[data-fn="memo"]'));
-  if (!$$('.memo-item').length) throw new Error('时间轴为空');
-});
-
-step('Memo 切清单视图', () => {
-  click($('#memoMode button[data-m="tasks"]'));
-  if (!$$('.task-row').length) throw new Error('清单为空');
-});
-
-step('清单切看板 → 点卡片换状态', () => {
-  click($('#taskView button[data-t="kanban"]'));
-  if (!$$('.kb-col').length) throw new Error('看板为空');
-  click($('[data-kb]'));
-});
-
-step('清单勾选完成', () => {
-  click($('#taskView button[data-t="list"]'));
-  click($('[data-tcheck]'));
-});
-
-step('录入框：待办模式发布（带优先级，日期与优先级为模式附加项）', () => {
+/* ---------- 录入发布 ---------- */
+step('录入框：待办模式发布 → 待办视图新增一条', () => {
+  click($('.nav-item[data-fn="task"]'));
+  const before = $$('.task-row').length;
   click($('#composerModes button[data-mode="task"]'));
   click($('span[data-pri="低"]'));
   input($('#composerInput'), '测试待办一条 #测试');
   click($('#composerPublish'));
-  if (!$$('.task-row').length) throw new Error('未进入清单');
+  if ($$('.task-row').length !== before + 1) throw new Error('待办视图未新增条目');
 });
 
-step('录入框：笔记模式发布（首行作标题）', () => {
+step('录入框：笔记模式发布（首行作标题，落根目录）', () => {
   click($('#composerModes button[data-mode="note"]'));
   input($('#composerInput'), '临时笔记标题\n这是正文内容');
   click($('#composerPublish'));
@@ -207,6 +260,7 @@ step('录入框：笔记模式发布（首行作标题）', () => {
   if (!$('#docTitle').value.includes('临时笔记标题')) throw new Error('首行未作标题');
 });
 
+/* ---------- 条目侧栏 / 表格 ---------- */
 step('收藏 → 点击条目滑出详情侧栏', () => {
   click($('.nav-item[data-fn="starred"]'));
   click($$('#paneList .item-row')[0]);
@@ -223,6 +277,34 @@ step('标签筛选', () => {
   if (!$$('#paneList .item-row').length) throw new Error('标签筛选结果为空');
 });
 
+step('表格条目：表格 / 图册切换', () => {
+  click($('.nav-item[data-fn="notebook"]'));
+  click($$('#paneList .item-row').find(r => r.dataset.id === 't1'));
+  if (!$('table.data')) throw new Error('表格未渲染');
+  click($('#tableMode button[data-v="gallery"]'));
+  if (!$$('.gal-card').length) throw new Error('图册为空');
+  click($('#tableMode button[data-v="table"]'));
+});
+
+step('表格「更多」菜单：加密文案按类型区分（v2 M04-02 / M04-08）', () => {
+  const btn = $('#docMoreBtn');
+  if (!btn) throw new Error('表格正文头缺「更多」按钮');
+  click(btn);
+  const enc = doc.querySelector('.menu-item[data-doc="enc"]');
+  if (!enc) throw new Error('更多菜单缺加密项');
+  if (!enc.textContent.includes('加密此表格')) throw new Error('表格加密文案未按类型区分：' + enc.textContent);
+  if (!doc.querySelector('.menu-item[data-doc="down"]')) throw new Error('表格更多菜单缺「降级为普通笔记」');
+  click(doc.body);
+});
+
+step('表格：状态单元格循环', () => {
+  const cell = $('[data-bstatus]');
+  const before = cell.textContent;
+  click(cell);
+  if ($('[data-bstatus]').textContent === before) throw new Error('状态未变化');
+});
+
+/* ---------- 隐私锁 ---------- */
 step('胶囊菜单 → 立即锁定', () => {
   lock();
   if (!$('#lockCapsule').classList.contains('locked')) throw new Error('未锁定');
@@ -245,18 +327,19 @@ step('解锁 → 进入隐私空间', () => {
   if (!$('.mini-tree')) throw new Error('空间内容未渲染');
 });
 
-step('锁定态 Memo 显示门禁占位', () => {
+step('锁定态 Memo 与待办都显示门禁占位（M06-08 / M07-05）', () => {
   lock();
   click($('.nav-item[data-fn="memo"]'));
   if (!$('#memoUnlockBtn')) throw new Error('未显示 Memo 门禁');
+  click($('.nav-item[data-fn="task"]'));
+  if (!$('#taskUnlockBtn')) throw new Error('未显示待办门禁');
 });
 
-step('从 Memo 门禁解锁恢复内容', () => {
-  click($('#memoUnlockBtn'));
-  input($('#pwInput'), 'demo');
-  click($('#unlockConfirm'));
-  click($('#memoMode button[data-m="timeline"]'));
-  if (!$$('.memo-item').length) throw new Error('解锁后未恢复');
+step('从待办门禁解锁恢复内容', () => {
+  unlockVia('#taskUnlockBtn');
+  if (!$$('.task-row').length) throw new Error('解锁后未恢复待办内容');
+  click($('.nav-item[data-fn="memo"]'));
+  if (!$$('.memo-item').length) throw new Error('一次解锁应同时解开 Memo（v2 Q5）');
 });
 
 step('忘记密码 → 恢复码流程', () => {
@@ -291,9 +374,9 @@ step('设置：关闭 Memo 门禁 → 锁定后 Memo 仍可见', () => {
   click($('.nav-item[data-fn="memo"]'));
   click($('#memoMode button[data-m="timeline"]'));
   if (!$$('.memo-item').length) throw new Error('门禁关闭后 Memo 应可见');
-  input($('#pwInput'), '');
 });
 
+/* ---------- 搜索 / 新建 ---------- */
 step('搜索：匹配条目', () => {
   input($('#searchInput'), 'Cloudflare');
   if (!$$('#paneList .sr-item').length) throw new Error('无搜索结果');
@@ -302,22 +385,6 @@ step('搜索：匹配条目', () => {
 step('搜索：清空后退出搜索视图', () => {
   input($('#searchInput'), '');
   if ($('#paneList').querySelector('.sr-item')) throw new Error('仍停留在搜索结果');
-});
-
-step('表格条目：表格 / 图册切换', () => {
-  click($('.nav-item[data-fn="notebook"]'));
-  click($$('#paneList .item-row').find(r => r.dataset.id === 't1'));
-  if (!$('table.data')) throw new Error('表格未渲染');
-  click($('#tableMode button[data-v="gallery"]'));
-  if (!$$('.gal-card').length) throw new Error('图册为空');
-});
-
-step('表格：状态单元格循环', () => {
-  click($('#tableMode button[data-v="table"]'));
-  const cell = $('[data-bstatus]');
-  const before = cell.textContent;
-  click(cell);
-  if ($('[data-bstatus]').textContent === before) throw new Error('状态未变化');
 });
 
 step('新建按钮：一次点击直接新建笔记（7.4 修订）', () => {

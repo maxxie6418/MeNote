@@ -8,9 +8,12 @@
      npm install jsdom
      NODE_PATH=<node_modules 路径> node verify-framework.js
 
-   覆盖：页面切换器 11 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
-         区块名与说明文字齐全 / 点块进块详情 / 嵌套块选内层 /
-         返回页面说明 / chip 反向跳转 / Esc 退出 /
+   注意：页面用「页名」定位，不用下标 —— 增删页面后不会假失败。
+
+   覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
+         区块名与说明文字齐全 / 导航顺序与首页项 / 待办独立视图 /
+         Memo 去清单 / 录入框三模式与去加密 / 点块进块详情 /
+         嵌套块选内层 / 返回页面说明 / chip 反向跳转 / Esc 退出 /
          键盘左右切页 / 切页清选中 / 块说明与网格两个开关
    ============================================================ */
 const fs = require('fs');
@@ -35,6 +38,28 @@ const click = el => { if (!el) throw new Error('目标元素不存在'); el.disp
 const key = k => doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true }));
 const tabName = () => $('.fw-tab.on').textContent.replace(/^\d+/, '').trim();
 const inspTitle = () => ($('#insp h2') || $('#insp h3')) ? ($('#insp h2') || $('#insp h3')).textContent.trim() : '';
+const tabNames = () => $$('.fw-tab').map(t => t.textContent.replace(/^\d+/, '').trim());
+/* 按页名切页：页面增删或重新编号后脚本依然有效 */
+const gotoPage = name => {
+  const i = tabNames().indexOf(name);
+  if (i < 0) throw new Error('找不到页面「' + name + '」，现有：' + tabNames().join(' / '));
+  click($$('.fw-tab')[i]);
+  return i;
+};
+const noteOf = id => {
+  const el = $('#canvas [data-b="' + id + '"]');
+  if (!el) throw new Error('缺区块 ' + id);
+  return el.querySelector('.blk-note').textContent;
+};
+/* 点开块详情后取说明面板全文（含 .blk-note 里放不下的要点列表） */
+const blockText = id => {
+  const el = $('#canvas [data-b="' + id + '"]');
+  if (!el) throw new Error('缺区块 ' + id);
+  click(el);
+  const box = $('#insp .insp-block');
+  if (!box) throw new Error('未进入块详情：' + id);
+  return box.textContent;
+};
 
 let pass = 0, fail = 0;
 const step = (name, fn) => {
@@ -44,9 +69,16 @@ const step = (name, fn) => {
 
 console.log('=== 页面框架验证 ===');
 
-step('页面切换器渲染 11 个标签', () => {
+step('页面切换器渲染 13 个标签', () => {
   const n = $$('.fw-tab').length;
-  if (n !== 11) throw new Error('实际 ' + n + ' 个');
+  if (n !== 13) throw new Error('实际 ' + n + ' 个：' + tabNames().join(' / '));
+});
+
+step('页面清单含新增的「首页」与「待办」（v2 Q1 / M02-03）', () => {
+  const names = tabNames();
+  ['首页', '待办', 'Memo', '功能栏', '设置'].forEach(n => {
+    if (!names.includes(n)) throw new Error('缺页面「' + n + '」');
+  });
 });
 
 step('默认停在「全局框架」', () => {
@@ -58,9 +90,10 @@ step('说明面板显示页面说明 + 区块清单', () => {
   if (!$$('#insp .insp-chip').length) throw new Error('无区块清单');
 });
 
-step('逐页切换：11 页全部渲染且不抛错', () => {
+step('逐页切换：全部页面渲染且不抛错（面板标题 === 标签名）', () => {
   const bad = [];
-  for (let i = 0; i < 11; i++) {
+  const total = tabNames().length;
+  for (let i = 0; i < total; i++) {
     const errBefore = errs.length;
     click($$('.fw-tab')[i]);
     const name = tabName();
@@ -75,7 +108,8 @@ step('逐页切换：11 页全部渲染且不抛错', () => {
 
 step('每页区块都有名称与说明文字', () => {
   const bad = [];
-  for (let i = 0; i < 11; i++) {
+  const total = tabNames().length;
+  for (let i = 0; i < total; i++) {
     click($$('.fw-tab')[i]);
     const name = tabName();
     $$('#canvas .blk').forEach(b => {
@@ -90,7 +124,8 @@ step('每页区块都有名称与说明文字', () => {
 
 step('区块总数统计', () => {
   const all = new Set();
-  for (let i = 0; i < 11; i++) {
+  const total = tabNames().length;
+  for (let i = 0; i < total; i++) {
     click($$('.fw-tab')[i]);
     $$('#insp .insp-chip').forEach(c => all.add(c.dataset.b));
   }
@@ -98,43 +133,76 @@ step('区块总数统计', () => {
 });
 
 step('顶栏页：账户头像已移出（只剩 5 块）', () => {
-  click($$('.fw-tab')[1]);
+  gotoPage('顶栏');
   if ($('#canvas [data-b="fnAccount"]')) throw new Error('顶栏仍存在账户块');
   const n = $$('#canvas .blk-strip > [data-b]').length;
   if (n !== 5) throw new Error('顶栏区块数 ' + n);
 });
 
 step('功能栏页：新建笔记 / 笔记本新建入口 / 底部账户与设置', () => {
-  click($$('.fw-tab')[2]);
+  gotoPage('功能栏');
   ['newBtn', 'nbAdd', 'fnAccount'].forEach(id => {
     if (!$('#canvas [data-b="' + id + '"]')) throw new Error('缺区块 ' + id);
   });
-  if (!$('#canvas [data-b="newBtn"]').textContent.includes('新建笔记'))
-    throw new Error('新建按钮未直连笔记');
+  if (!noteOf('newBtn').includes('新建笔记')) throw new Error('新建按钮未直连笔记');
   if ($('#canvas [data-b="fnFoot"]')) throw new Error('底部仍有独立回收站 / 设置区块');
 });
 
-step('待办已与 Memo 合并：导航无独立待办项（7.4 / 9.4）', () => {
-  click($$('.fw-tab')[2]);
-  if ($('#canvas [data-b="navTask"]')) throw new Error('导航仍有独立待办项');
-  const nav = $('#canvas [data-b="navMain"] .blk-note').textContent;
-  if (nav.includes('待办')) throw new Error('主导航描述仍含待办：' + nav);
-  click($$('.fw-tab')[5]);   // 05 Memo 页
-  const tabs = $('#canvas [data-b="memoMode"] .blk-note').textContent;
-  if (!tabs.includes('清单')) throw new Error('Memo 视图缺清单 tab：' + tabs);
+step('导航按 v2 Q1 重排：含首页与独立的待办项（不再是「待办并入 Memo」）', () => {
+  gotoPage('功能栏');
+  if (!$('#canvas [data-b="navHome"]')) throw new Error('导航缺「首页」项');
+  const nav = blockText('navMain');
+  ['首页', 'Memo', '待办', '最近编辑', '收藏'].forEach(x => {
+    if (!nav.includes(x)) throw new Error('主导航描述缺「' + x + '」：' + nav);
+  });
+  if (!nav.includes('独立成项')) throw new Error('主导航未说明待办已独立：' + nav);
+});
+step('Memo 页：只剩时间轴 / 瀑布流，清单已移出（v2 Q1 / M06-10）', () => {
+  gotoPage('Memo');
+  const tabs = noteOf('memoMode');
+  if (!tabs.includes('时间轴') || !tabs.includes('瀑布流')) throw new Error('缺时间轴/瀑布流：' + tabs);
+  if (tabs.includes('清单并入')) throw new Error('仍写「清单并入 Memo」：' + tabs);
+  if (!$('#canvas [data-b="memoAdd"]')) throw new Error('Memo 页缺「添加」按钮');
+  ['taskList', 'kanban', 'taskFilters'].forEach(id => {
+    if ($('#canvas [data-b="' + id + '"]')) throw new Error('Memo 页仍包含清单区块 ' + id);
+  });
+});
+
+step('待办页：列表 / 看板 + 筛选 + 添加 + 门禁（v2 M07-05）', () => {
+  gotoPage('待办');
+  ['taskHead', 'taskAdd', 'taskFilters', 'taskList', 'kanban', 'gateState'].forEach(id => {
+    if (!$('#canvas [data-b="' + id + '"]')) throw new Error('待办页缺区块 ' + id);
+  });
+  const f = noteOf('taskFilters');
+  if (!f.includes('列表') || !f.includes('看板')) throw new Error('待办筛选未说明两种渲染：' + f);
+});
+
+step('首页页：概括预览 / 快捷方式 / 快速导航三类齐全（v2 M02-03）', () => {
+  gotoPage('首页');
+  ['homeStats', 'homeToday', 'homeRecent', 'homeActs', 'homeNav'].forEach(id => {
+    if (!$('#canvas [data-b="' + id + '"]')) throw new Error('首页缺区块 ' + id);
+  });
+  if (!blockText('homeStats').includes('本地')) throw new Error('条目统计未说明本地计算');
 });
 
 step('快速录入框：模式为 Memo / 待办 / 笔记 三档', () => {
-  click($$('.fw-tab')[2]);
-  const s = $('#canvas [data-b="modeTabs"] .blk-note').textContent;
+  gotoPage('功能栏');
+  const s = noteOf('modeTabs');
   ['Memo', '待办', '笔记'].forEach(m => {
     if (!s.includes(m)) throw new Error('模式缺 ' + m + '：' + s);
   });
 });
 
+step('录入框不再提供加密选项（v2 M04-02）', () => {
+  gotoPage('功能栏');
+  const n = blockText('composerExtra');
+  if (!n.includes('不提供加密选项')) throw new Error('未标注创建时不提供加密：' + n);
+  if (/笔记：首行作标题 \/ 根目录 \/ 加密/.test(n)) throw new Error('笔记附加项仍列出「加密」：' + n);
+});
+
 step('模式附加项：锁定只占一排（26px），切换不推挤', () => {
-  click($$('.fw-tab')[2]);
-  const n = $('#canvas [data-b="composerExtra"] .blk-note').textContent;
+  gotoPage('功能栏');
+  const n = noteOf('composerExtra');
   if (!n.includes('锁定')) throw new Error('附加项未标注为锁定一排：' + n);
   if (!n.includes('一排')) throw new Error('附加项未标注排数：' + n);
   const style = $('#canvas [data-b="composerExtra"]').getAttribute('style') || '';
@@ -142,7 +210,7 @@ step('模式附加项：锁定只占一排（26px），切换不推挤', () => {
 });
 
 step('录入框已压缩：取消独立发布行，发布按钮与模式选择同行', () => {
-  click($$('.fw-tab')[2]);
+  gotoPage('功能栏');
   if ($('#canvas [data-b="composerFoot"]')) throw new Error('独立发布行仍在');
   const row = $('#canvas [data-b="modeTabs"]').parentElement;
   const pub = $('#canvas [data-b="composerPublish"]');
@@ -153,13 +221,15 @@ step('录入框已压缩：取消独立发布行，发布按钮与模式选择�
   if (!pub.textContent.includes('发布')) throw new Error('发布按钮文案不对');
 });
 
-step('设置页：含版本与回收站子页面', () => {
-  click($$('.fw-tab')[8]);
+step('设置页：含通用 › 启动视图 与 版本与回收站', () => {
+  gotoPage('设置');
+  if (!$('#canvas [data-b="startViewSet"]')) throw new Error('设置页无「通用 › 启动视图」');
   if (!$('#canvas [data-b="setTrash"]')) throw new Error('设置页无「版本与回收站」');
+  if (!blockText('startViewSet').includes('不显示')) throw new Error('启动视图未说明首页项显隐规则');
 });
 
 step('笔记本正文：加密状态条与尺寸提示条已并入状态栏', () => {
-  click($$('.fw-tab')[4]);
+  gotoPage('笔记本');
   ['secBar', 'sizeWarn'].forEach(id => {
     if ($('#canvas [data-b="' + id + '"]')) throw new Error('仍存在独立块 ' + id);
   });
@@ -169,7 +239,7 @@ step('笔记本正文：加密状态条与尺寸提示条已并入状态栏', ()
 });
 
 step('点击线框块 → 说明面板切到块详情', () => {
-  click($$('.fw-tab')[1]);                       // 顶栏页
+  gotoPage('顶栏');
   click($('#canvas [data-b="capsule"]'));
   if (!$('#insp .insp-block')) throw new Error('未进入块详情');
   if (!inspTitle().includes('隐私锁胶囊')) throw new Error('块名不对：' + inspTitle());
@@ -178,7 +248,7 @@ step('点击线框块 → 说明面板切到块详情', () => {
 });
 
 step('嵌套块：点内层选中内层', () => {
-  click($$('.fw-tab')[0]);                       // 全局框架
+  gotoPage('全局框架');
   click($('#canvas [data-b="fnbar"]'));
   if (!inspTitle().includes('功能栏')) throw new Error('选中了 ' + inspTitle());
 });
@@ -190,7 +260,7 @@ step('返回页面说明', () => {
 });
 
 step('点说明面板的区块 chip → 块详情', () => {
-  click($$('.fw-tab')[0]);
+  gotoPage('全局框架');
   click($$('#insp .insp-chip').find(c => c.dataset.b === 'work'));
   if (!inspTitle().includes('主操作区')) throw new Error('未跳转');
 });
@@ -201,7 +271,7 @@ step('Esc 退出块详情', () => {
 });
 
 step('键盘左右切页', () => {
-  click($$('.fw-tab')[0]);
+  gotoPage('全局框架');
   key('ArrowRight');
   if (tabName() !== '顶栏') throw new Error('右切到 ' + tabName());
   key('ArrowLeft');

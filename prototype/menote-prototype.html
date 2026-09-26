@@ -561,6 +561,37 @@ table.data tbody tr:hover{background:var(--panel-2)}
 .guide .x{margin-left:auto;cursor:pointer;opacity:.6;flex:none}
 .guide .x:hover{opacity:1}
 
+/* ---------- 首页（7.4 / 功能拆解 v2 M02-03）---------- */
+.home-grid{display:flex;flex-direction:column;gap:15px;max-width:920px}
+.home-row{display:flex;gap:15px;align-items:stretch}
+.home-card{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;display:flex;flex-direction:column}
+.home-card>.hd{padding:11px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;flex:none}
+.home-card>.hd h3{font-size:13px;font-weight:640}
+.home-card>.hd .ic{width:14px;height:14px;color:var(--text-2)}
+.home-card>.hd .right{margin-left:auto;font-size:11px;color:var(--muted)}
+.home-card>.bd{padding:13px 15px;flex:1;min-height:0}
+.home-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.home-stat{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:11px 12px}
+.home-stat .n{font-size:20px;font-weight:660;font-variant-numeric:tabular-nums;line-height:1.2}
+.home-stat .l{font-size:11.5px;color:var(--muted);margin-top:3px}
+.home-stat.off .n{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:5px;font-weight:500}
+.home-list{display:flex;flex-direction:column;gap:9px}
+.home-line{display:flex;align-items:center;gap:9px;font-size:12.5px}
+.home-line .dot{width:6px;height:6px;border-radius:50%;background:var(--primary);flex:none}
+.home-line .m{margin-left:auto;font-size:11px;color:var(--muted);flex:none}
+.home-line.done{color:var(--muted);text-decoration:line-through}
+.home-empty{font-size:12.5px;color:var(--muted)}
+.home-locked{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.home-locked .ic{width:14px;height:14px}
+.home-acts{display:flex;flex-wrap:wrap;gap:8px}
+.home-act{display:flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel-2);font-size:12.5px;color:var(--text-2);cursor:pointer;transition:.14s}
+.home-act:hover{border-color:var(--primary);color:var(--text)}
+.home-act .ic{width:14px;height:14px}
+.home-nav{display:flex;flex-direction:column;gap:12px}
+.home-nav .grp{display:flex;flex-direction:column;gap:7px}
+.home-nav .t{font-size:11px;letter-spacing:.6px;color:var(--muted);font-weight:600}
+
 @media(max-width:1240px){
   .waterfall{column-count:2}
 }
@@ -609,6 +640,8 @@ table.data tbody tr:hover{background:var(--panel-2)}
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5L11 13"/><path d="M18 14v5.5H4.5V6H10"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.8 20c0-3.6 3.2-6 7.2-6s7.2 2.4 7.2 6"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.8 10.4L12 4l8.2 6.4V19a1.6 1.6 0 0 1-1.6 1.6h-3.8v-6.2H9.2v6.2H5.4A1.6 1.6 0 0 1 3.8 19z"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.2 3.5L5.6 13.4h5.2l-.8 6.9 7.6-9.9h-5.2z"/></symbol>
 </svg>
 
 <div class="shell">
@@ -667,10 +700,12 @@ table.data tbody tr:hover{background:var(--panel-2)}
       </div>
 
       <div class="fn-scroll">
-        <!-- 导航：最近编辑 / Memo / 收藏 / 笔记本 / 标签 / 隐私空间 -->
+        <!-- 导航（功能拆解 v2 / Q1 已确认）：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔记本 · 标签 · 隐私空间 -->
         <nav class="nav" id="fnNav">
-          <a class="nav-item active" data-fn="recent"><svg class="ic"><use href="#i-refresh"/></svg>最近编辑</a>
+          <a class="nav-item active" data-fn="home" id="navHome"><svg class="ic"><use href="#i-home"/></svg>首页</a>
           <a class="nav-item" data-fn="memo"><svg class="ic"><use href="#i-clock"/></svg>Memo<span class="count">49</span></a>
+          <a class="nav-item" data-fn="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办<span class="count" id="navTaskCount">6</span></a>
+          <a class="nav-item" data-fn="recent"><svg class="ic"><use href="#i-refresh"/></svg>最近编辑</a>
           <a class="nav-item" data-fn="starred"><svg class="ic"><use href="#i-star"/></svg>收藏</a>
         </nav>
 
@@ -1002,11 +1037,14 @@ tags: [项目]
    2. 状态
    ============================================================ */
 const state = {
-  fn:'recent', folder:null, tag:null,
+  fn:'home', folder:null, tag:null,
   activeId:'n1',
   searchedFrom:'recent',
   composerMode:'memo', taskSwitch:false, taskMeta:{ due:'2026-09-30', pri:'高' },
   memoView:'timeline', taskView:'list', tableMode:'table', editorMode:'split',
+  // 启动视图（设计文档 §7.4 / 功能拆解 v2 M02-04）：首页 / 最近编辑 / 收藏，推荐默认首页。
+  // 未选首页时功能栏不显示「首页」项。
+  startView:'home',
   locked:false, timeoutMin:5, remaining:4*60+32, timerId:null, privacyBrowse:true,
   drawerId:null
 };
@@ -1128,7 +1166,7 @@ function mdToHtml(src){
 /* ============================================================
    5. 路由：功能栏 → 主操作区
    ============================================================ */
-const FN_TITLE = { recent:'最近编辑', memo:'Memo', starred:'收藏', tag:'标签', notebook:'笔记本', vault:'隐私空间', trash:'回收站', settings:'设置', search:'搜索结果' };
+const FN_TITLE = { home:'首页', recent:'最近编辑', memo:'Memo', task:'待办', starred:'收藏', tag:'标签', notebook:'笔记本', vault:'隐私空间', trash:'回收站', settings:'设置', search:'搜索结果' };
 
 function go(fn, opts){
   opts = opts || {};
@@ -1156,6 +1194,8 @@ function go(fn, opts){
 function render(){
   const list = $('#paneList'), doc = $('#paneDoc');
   const fn = state.fn;
+  syncNavCounts();
+  syncStartView();
 
   // 清空两个面板，避免上一视图的 DOM 残留
   list.innerHTML = '';
@@ -1163,9 +1203,11 @@ function render(){
   list.classList.remove('wide','hidden');
   doc.classList.remove('center','hidden');
 
-  // 7.4 / 9.4：清单不是独立类型，是加在 Memo 上的标记 —— 待办与 Memo 合并为同一个导航项，
-  // 待办即 Memo 视图内的「清单」tab（见 memoPanel 的 memoMode）。
+  // 功能拆解 v2（Q1 已确认）：清单（列表 / 看板）从 Memo 视图移到独立的「待办」视图；
+  // Memo 视图只保留 时间轴 / 瀑布流。两者都只是浏览入口，不改变数据模型（9.1 / 9.4）。
+  if(fn === 'home'){ list.classList.add('hidden'); doc.innerHTML = homePanel(); bindHome(); return; }
   if(fn === 'memo'){ list.classList.add('hidden'); doc.innerHTML = memoPanel(); bindMemo(); return; }
+  if(fn === 'task'){ list.classList.add('hidden'); doc.innerHTML = taskPanel(); bindTask(); return; }
   if(fn === 'vault'){ list.classList.add('hidden'); doc.innerHTML = vaultPanel(); bindVault(); return; }
   if(fn === 'trash'){ list.classList.add('hidden'); doc.innerHTML = trashPanel(); bindTrash(); return; }
   if(fn === 'settings'){ list.classList.add('hidden'); doc.innerHTML = settingsPanel(); bindSettings(); return; }
@@ -1253,8 +1295,9 @@ function emptyDocPanel(){
 function docPanel(n){
   if(!n) return emptyDocPanel();
 
-  if(n.kind === 'table') return tablePanel(n);
+  // 功能拆解 v2：加密判断在类型判断之前 —— 表格与笔记一样受单篇加密约束（M04-02）
   if(n.enc && state.locked) return lockedDocPanel(n);
+  if(n.kind === 'table') return tablePanel(n);
 
   const body = bodyOf(n);
 
@@ -1312,8 +1355,8 @@ function lockedDocPanel(n){
     + '<div style="flex:1;display:grid;place-items:center">'
     + '<div class="placeholder">'
     + '<div class="big-ic">' + icon('i-lock') + '</div>'
-    + '<h3>此笔记已加密</h3>'
-    + '<p>锁定状态下正文与附件均不可读。单篇加密的文章标题保持明文，空间内文章的标题同样为密文。</p>'
+    + '<h3>此内容已加密</h3>'
+    + '<p>锁定状态下正文与附件均不可读。单篇加密的条目标题保持明文，空间内条目的标题同样为密文。</p>'
     + '<button class="btn primary" id="docUnlockBtn">' + icon('i-unlock') + '输入隐私密码解锁</button>'
     + '</div></div></div>';
 }
@@ -1361,20 +1404,32 @@ function bindDoc(){
     eb.classList.add('mode-' + b.dataset.mode);
   }));
 
-  // 7.4 修订：加密 / 版本 / 分享三个按钮收进「更多」菜单，正文头只留模式切换
+  // 7.4 修订 / v2 M04-08：正文头只留模式切换，其余操作收进「更多」菜单。
+  // 菜单文字按类型区分（笔记 / 表格）；表格另有「降级为普通笔记」。
   const moreBtn = $('#docMoreBtn');
   if(moreBtn) moreBtn.addEventListener('click', e => {
     e.stopPropagation();
+    const isTable = n.kind === 'table';
     showMenu(moreBtn,
-      '<div class="menu-item" data-doc="enc">' + icon('i-lock') + (n.enc ? '取消加密' : '加密此笔记') + '</div>'
+      '<div class="menu-item" data-doc="enc">' + icon('i-lock') + (n.enc ? '取消加密' : (isTable ? '加密此表格' : '加密此笔记')) + '</div>'
+      + '<div class="menu-item" data-doc="move">' + icon('i-folder') + '移动到…<span class="hint">含移入隐私空间</span></div>'
       + '<div class="menu-item" data-doc="ver">' + icon('i-clock') + '版本历史<span class="hint">' + n.versions + ' 个</span></div>'
-      + '<div class="menu-item" data-doc="share">' + icon('i-share') + '分享' + (n.enc ? '<span class="hint">加密内容不可分享</span>' : '') + '</div>',
+      + '<div class="menu-item" data-doc="share">' + icon('i-share') + '分享' + (n.enc ? '<span class="hint">加密内容不可分享</span>' : '') + '</div>'
+      + (isTable ? '<div class="menu-item" data-doc="down">' + icon('i-note') + '降级为普通笔记</div>' : '')
+      + '<div class="menu-item" data-doc="star">' + icon('i-star') + (n.star ? '取消收藏' : '收藏') + '</div>'
+      + '<div class="menu-item" data-doc="del">' + icon('i-trash') + '删除<span class="hint">移入回收站</span></div>',
       item => {
         const k = item.dataset.doc;
-        if(k === 'enc') toast('加密标记：勾选后正文与附件在浏览器端加密，旧明文版本与附件需一并处理（6.11）', 'info');
+        if(k === 'enc') toast('单篇加密：创建时不提供，只在「更多」菜单中开关；需处于解锁状态，旧明文版本与附件需一并处理（v2 M04-02 / 6.11）', 'info');
+        else if(k === 'move') toast('移动到…：未解锁时隐私空间只显示为单个节点，只能移入空间根目录（v2 M08-09）', 'info');
         else if(k === 'ver') toast('版本历史：' + n.versions + ' 个版本，正文压缩后存 R2，元数据存 D1（第十二节）', 'info');
-        else if(n.enc) toast('加密内容不可分享：菜单项标注原因并置灰（16.1）', 'warn');
-        else toast('已创建只读分享链接（原型不实现）', 'ok');
+        else if(k === 'share'){
+          if(n.enc) toast('加密内容不可分享：菜单项标注原因并置灰（16.1）', 'warn');
+          else toast('已创建只读分享链接（原型不实现）', 'ok');
+        }
+        else if(k === 'down') toast('降级为普通笔记：表格转回笔记后不再有列结构（10.11）', 'info');
+        else if(k === 'star'){ n.star = !n.star; render(); toast(n.star ? '已收藏' : '已取消收藏', 'ok'); }
+        else if(k === 'del') toast('已移入回收站（原型不实现）', 'warn');
       }, 'right');
   });
   const lockNow = $('#docLockNow');
@@ -1451,11 +1506,14 @@ function tablePanel(n){
     + '<button data-v="table"' + (state.tableMode==='table'?' class="on"':'') + '>' + icon('i-table') + '表格</button>'
     + '<button data-v="gallery"' + (state.tableMode==='gallery'?' class="on"':'') + '>' + icon('i-image') + '图册</button></div>';
 
+  // 功能拆解 v2 / M04-02：表格与笔记一样，单篇加密只在「更多」菜单中开关；
+  // 菜单文字按类型区分（笔记：加密此笔记 / 表格：加密此表格）。
   const head = '<div class="doc-head">'
     + '<input class="doc-title" value="' + esc(n.title) + '" readonly>'
+    + (n.enc ? '<span class="enc-mark" title="此表格已加密">' + icon('i-lock') + '已加密</span>' : '')
     + '<div class="actions">' + seg
     + '<button class="btn sm">' + icon('i-plus') + '新增行</button>'
-    + '<button class="btn sm">' + icon('i-share') + '分享</button></div></div>';
+    + '<button class="btn sm" id="docMoreBtn">' + icon('i-more') + '更多</button></div></div>';
 
   let body;
   if(state.tableMode === 'gallery'){
@@ -1491,29 +1549,130 @@ function tablePanel(n){
 }
 
 /* ============================================================
-   7. Memo（时间轴 / 瀑布流 / 清单）
+   6.5 首页（设计文档 §7.4 / 功能拆解 v2 M02-03）
+   三类内容：概括预览（条目统计 / 今日待办 / 最近动态）· 快捷方式 · 快速导航。
+   数据全部由本地元数据计算，不发额外请求。
+   隐私规则（M02-03 / Q7）：锁定时加密空间条目不计入统计；来自 Memo 的部分以「已锁定」占位。
+   ============================================================ */
+function homePanel(){
+  const locked = state.locked;                             // 全局锁状态（Q5：一次解锁为一体）
+  const memoLocked = state.locked && state.privacyBrowse;  // Memo 门禁
+
+  const allNotes  = NOTES.filter(n => n.kind !== 'table');
+  const allTables = NOTES.filter(n => n.kind === 'table');
+  // 锁定时不暴露加密空间内的条目数（§6.9「不显示条目数」）
+  const nNotes  = locked ? allNotes.length  - allNotes.filter(n => n.enc).length  : allNotes.length;
+  const nTables = locked ? allTables.length - allTables.filter(n => n.enc).length : allTables.length;
+
+  // ① 概括预览
+  const stats = '<div class="home-stats">'
+    + '<div class="home-stat"><div class="n">' + nNotes + '</div><div class="l">笔记</div></div>'
+    + '<div class="home-stat"><div class="n">' + nTables + '</div><div class="l">表格</div></div>'
+    + (memoLocked
+        ? '<div class="home-stat off"><div class="n">' + icon('i-lock') + '已锁定</div><div class="l">Memo</div></div>'
+        : '<div class="home-stat"><div class="n">' + MEMOS.length + '</div><div class="l">Memo</div></div>')
+    + '</div>'
+    + '<div class="hint-line">概览数据由客户端从本地元数据计算，不发额外网络请求（7.4）。'
+    + (locked ? '锁定状态下加密空间内的条目不计入统计（6.9）。' : '') + '</div>';
+
+  // 今日待办（来自清单 Memo）
+  const openTasks = TASKS.filter(t => t.status !== 'done').slice(0, 4);
+  const today = memoLocked
+    ? '<div class="home-locked">' + icon('i-lock') + '来自 Memo 的内容已锁定，解锁后可见（8.9）</div>'
+    : (openTasks.length
+        ? '<div class="home-list">' + openTasks.map(t =>
+            '<div class="home-line"><span class="dot"></span><span>' + esc(t.txt) + '</span>'
+            + '<span class="m">' + esc(t.due) + ' · ' + esc(t.pri) + '</span></div>').join('') + '</div>'
+        : '<div class="home-empty">没有未完成的待办。</div>');
+
+  // 最近动态
+  const recent = locked ? NOTES.filter(n => !n.enc).slice(0, 4) : NOTES.slice(0, 4);
+  const dyn = '<div class="home-list">' + recent.map(n =>
+      '<div class="home-line">' + icon(n.kind === 'table' ? 'i-table' : 'i-note')
+      + '<span>' + esc(n.title) + '</span><span class="m">' + esc(n.date) + '</span></div>').join('')
+    + (memoLocked ? '<div class="home-locked">' + icon('i-lock') + '来自 Memo 的动态已锁定（8.9）</div>' : '')
+    + '</div>';
+
+  const overview = '<div class="home-row">'
+    + '<div class="home-card" style="flex:1.15"><div class="hd">' + icon('i-info') + '<h3>条目统计</h3>'
+    + '<div class="right">本地计算</div></div><div class="bd">' + stats + '</div></div>'
+    + '<div class="home-card"><div class="hd">' + icon('i-check-sq') + '<h3>今日待办</h3>'
+    + '<div class="right">来自清单 Memo</div></div><div class="bd">' + today + '</div></div>'
+    + '<div class="home-card"><div class="hd">' + icon('i-clock') + '<h3>最近动态</h3></div>'
+    + '<div class="bd">' + dyn + '</div></div>'
+    + '</div>';
+
+  // ② 快捷方式
+  const acts = '<div class="home-acts">'
+    + '<button class="home-act" data-ha="new">' + icon('i-plus') + '新建笔记</button>'
+    + '<button class="home-act" data-ha="memo">' + icon('i-clock') + '记录 Memo</button>'
+    + '<button class="home-act" data-ha="task">' + icon('i-check-sq') + '新建待办</button>'
+    + '<button class="home-act" data-ha="vault">' + icon('i-lock') + '打开隐私空间</button>'
+    + '<button class="home-act" data-ha="search">' + icon('i-search') + '搜索（Ctrl+K）</button>'
+    + '</div>'
+    + '<div class="hint-line">快捷方式 = 常用内容或操作的入口（7.4）。此处给的是操作入口；常用内容的快捷入口随使用频率产生，细则后续定。</div>';
+
+  // ③ 快速导航
+  const nav = '<div class="home-nav">'
+    + '<div class="grp"><div class="t">文件夹</div><div class="home-acts">'
+    +   ['学习','自托管','项目'].map(f => '<span class="chip clickable" data-hnav="folder:' + f + '">'
+        + icon('i-folder') + f + '</span>').join('')
+    + '</div></div>'
+    + '<div class="grp"><div class="t">标签</div><div class="home-acts">'
+    +   ['读书','自托管','英语','灵感'].map(t => '<span class="chip tag" data-tag="' + t + '"># ' + t + '</span>').join('')
+    + '</div></div>'
+    + '<div class="grp"><div class="t">常用视图</div><div class="home-acts">'
+    +   [['recent','最近编辑'],['starred','收藏'],['memo','Memo'],['task','待办'],['notebook','笔记本'],['vault','隐私空间']]
+        .map(p => '<span class="chip clickable" data-hnav="fn:' + p[0] + '">' + p[1] + '</span>').join('')
+    + '</div></div>'
+    + '</div>';
+
+  return '<div class="pane-head"><div><h1>首页</h1>'
+    + '<div class="sub">概括预览 · 快捷方式 · 快速导航 · 全部由本地元数据计算（7.4）</div></div></div>'
+    + '<div class="doc-scroll"><div class="pane-pad"><div class="home-grid">'
+    + overview
+    + '<div class="home-card"><div class="hd">' + icon('i-bolt') + '<h3>快捷方式</h3></div><div class="bd">' + acts + '</div></div>'
+    + '<div class="home-card"><div class="hd">' + icon('i-folder') + '<h3>快速导航</h3></div><div class="bd">' + nav + '</div></div>'
+    + '</div></div></div>';
+}
+
+function bindHome(){
+  $$('[data-ha]').forEach(el => el.addEventListener('click', () => {
+    const k = el.dataset.ha;
+    if(k === 'new'){ const b = $('#btnNew'); if(b) b.click(); return; }
+    if(k === 'memo' || k === 'task'){ go(k === 'memo' ? 'memo' : 'task'); addViaComposer(k); return; }
+    if(k === 'vault'){ if(state.locked) openUnlock('vault'); else go('vault'); return; }
+    if(k === 'search'){ const s = $('#searchInput'); if(s){ s.focus(); s.select(); } return; }
+  }));
+  $$('[data-hnav]').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation();
+    const v = el.dataset.hnav;
+    if(v.indexOf('folder:') === 0) go('notebook', { folder: v.slice(7) });
+    else if(v.indexOf('fn:') === 0) go(v.slice(3));
+  }));
+}
+
+/* ============================================================
+   7. Memo（时间轴 / 瀑布流）· 待办（列表 / 看板）
    ============================================================ */
 function memoPanel(){
   const locked = state.locked && state.privacyBrowse;
+  // 功能拆解 v2（Q1 已确认）：清单（列表 / 看板）已移到独立的「待办」视图，这里只剩时间轴 / 瀑布流。
   const seg = '<div class="seg" id="memoMode">'
     + '<button data-m="timeline"' + (state.memoView==='timeline'?' class="on"':'') + '>' + icon('i-clock') + '时间轴</button>'
-    + '<button data-m="waterfall"' + (state.memoView==='waterfall'?' class="on"':'') + '>' + icon('i-image') + '瀑布流</button>'
-    + '<button data-m="tasks"' + (state.memoView==='tasks'?' class="on"':'') + '>' + icon('i-check-sq') + '清单</button></div>';
+    + '<button data-m="waterfall"' + (state.memoView==='waterfall'?' class="on"':'') + '>' + icon('i-image') + '瀑布流</button></div>';
 
-  // 7.4 / 9.4：待办与 Memo 已合并为一个入口，清单只是 Memo 的第三个 tab
-  const taskTab = state.memoView === 'tasks';
   const head = '<div class="pane-head"><div><h1>Memo</h1>'
-    + '<div class="sub">' + (taskTab
-        ? '清单视图 · 清单不是独立类型，是加在 Memo 上的标记（9.1）'
-        : '碎片流水 · 明文存储 · 写入免密' + (locked ? ' · 隐私浏览门禁已开启' : ''))
-    + '</div></div>'
-    + '<div class="actions">' + seg + '</div></div>';
+    + '<div class="sub">碎片流水 · 明文存储 · 写入免密' + (locked ? ' · 隐私浏览门禁已开启' : '') + '</div></div>'
+    + '<div class="actions">' + seg
+    + '<button class="btn sm primary" id="memoAdd">' + icon('i-plus') + '添加</button>'
+    + '</div></div>';
 
   if(locked){
     return head + '<div class="doc-scroll"><div class="placeholder boxed">'
       + '<div class="big-ic">' + icon('i-lock') + '</div>'
       + '<h3>Memo 已锁定</h3>'
-      + '<p>「Memo 浏览需要隐私密码」已开启。锁定状态下时间轴、瀑布流与清单均以占位显示，不展示内容、标签与图片，搜索结果中也不出现。<br>写入不受影响，随时可以免密记录。</p>'
+      + '<p>「Memo 浏览需要隐私密码」已开启。锁定状态下时间轴与瀑布流均以占位显示，不展示内容、标签与图片，搜索结果中也不出现。<br>写入不受影响，随时可以免密记录。</p>'
       + '<button class="btn primary" id="memoUnlockBtn">' + icon('i-unlock') + '解锁查看</button>'
       + '</div></div>';
   }
@@ -1525,8 +1684,6 @@ function memoPanel(){
       '<div class="wf-card"><div class="wf-img" style="background:' + (m.imgs ? grads[i % grads.length] : 'var(--panel-3)') + '"></div>'
       + '<div class="wf-txt">' + esc(m.text.slice(0, 30)) + '…</div></div>').join('');
     inner = '<div class="waterfall">' + cards + '</div>';
-  } else if(state.memoView === 'tasks'){
-    inner = tasksInner();
   } else {
     const days = {};
     MEMOS.forEach(m => { (days[m.day] = days[m.day] || []).push(m); });
@@ -1536,6 +1693,28 @@ function memoPanel(){
   }
 
   return head + '<div class="doc-scroll"><div class="pane-pad"><div class="memo-wrap">' + inner + '</div></div></div>';
+}
+
+/* 待办视图（功能拆解 v2 / M07-05）：筛出所有清单 Memo，支持列表 / 看板切换。
+   清单 Memo 同时仍出现在 Memo 时间轴中，这里只是另一个浏览入口（9.1 / 9.4）。 */
+function taskPanel(){
+  const locked = state.locked && state.privacyBrowse;
+  const head = '<div class="pane-head"><div><h1>待办</h1>'
+    + '<div class="sub">清单 Memo 的集中浏览入口 · 清单不是独立类型，是加在 Memo 上的标记（9.1 / 9.4）'
+    + (locked ? ' · 隐私浏览门禁已开启' : '') + '</div></div>'
+    + '<div class="actions"><button class="btn sm primary" id="taskAdd">' + icon('i-plus') + '添加</button></div></div>';
+
+  // 隐私浏览门禁与 Memo 视图相同（M06-08）
+  if(locked){
+    return head + '<div class="doc-scroll"><div class="placeholder boxed">'
+      + '<div class="big-ic">' + icon('i-lock') + '</div>'
+      + '<h3>待办已锁定</h3>'
+      + '<p>「Memo 浏览需要隐私密码」已开启。清单来自 Memo，因此与 Memo 视图同一道门禁：锁定状态下不展示清单内容与标签。<br>写入不受影响，随时可以免密记录。</p>'
+      + '<button class="btn primary" id="taskUnlockBtn">' + icon('i-unlock') + '解锁查看</button>'
+      + '</div></div>';
+  }
+
+  return head + '<div class="doc-scroll"><div class="pane-pad"><div class="memo-wrap">' + tasksInner() + '</div></div></div>';
 }
 
 function memoItemHtml(m, isNew){
@@ -1587,15 +1766,36 @@ function tasksInner(){
   }).join('');
 
   return bar + '<div class="task-list">' + rows + '</div>'
-    + '<div class="hint-line">清单不是独立类型，是加在 Memo 上的清单标记（9.1）：任务留在时间轴里，清单界面只是筛出带标记的条目。看板按状态分列，是纯视图，不动数据模型。</div>';
+    + '<div class="hint-line">清单不是独立类型，是加在 Memo 上的清单标记（9.1）：任务留在 Memo 时间轴里，待办视图只是筛出带标记的条目。看板按状态分列，是纯视图，不动数据模型。</div>';
 }
 
 const STATUS_LABEL = { todo:'待办', doing:'进行中', done:'已完成' };
+
+/* 「添加」按钮（M06-10 / M07-01 入口二）：复用功能栏快速录入框，不另做一套输入框 */
+function addViaComposer(mode){
+  state.composerMode = mode;
+  state.fn = state.fn; // 保持当前视图，只切录入框
+  syncModeTabs(); syncComposer();
+  const box = $('#composerInput');
+  if(box){
+    box.focus();
+    // jsdom 未实现 scrollIntoView，做防御式调用（浏览器中正常滚动到录入框）
+    if(typeof box.scrollIntoView === 'function') box.scrollIntoView({ block:'nearest' });
+  }
+  toast(mode === 'task' ? '录入框已切到「待办」模式，写完 Ctrl+Enter 发布' : '录入框已切到「Memo」模式，写完 Ctrl+Enter 发布', 'info');
+}
 
 function bindMemo(){
   $$('#memoMode button').forEach(b => b.addEventListener('click', () => {
     state.memoView = b.dataset.m; render();
   }));
+  const mb = $('#memoUnlockBtn');
+  if(mb) mb.addEventListener('click', () => openUnlock('memo'));
+  const ab = $('#memoAdd');
+  if(ab) ab.addEventListener('click', () => addViaComposer('memo'));
+}
+
+function bindTask(){
   $$('#taskView button').forEach(b => b.addEventListener('click', () => {
     state.taskView = b.dataset.t; render();
   }));
@@ -1612,8 +1812,10 @@ function bindMemo(){
     render();
     toast('状态已改为「' + STATUS_LABEL[t.status] + '」· 看板是纯视图，不改数据模型', 'ok');
   }));
-  const ub = $('#memoUnlockBtn');
-  if(ub) ub.addEventListener('click', () => openUnlock('memo'));
+  const ub = $('#taskUnlockBtn');
+  if(ub) ub.addEventListener('click', () => openUnlock('task'));
+  const ab = $('#taskAdd');
+  if(ab) ab.addEventListener('click', () => addViaComposer('task'));
 }
 
 /* ============================================================
@@ -1678,8 +1880,20 @@ function bindTrash(){
 
 function settingsPanel(){
   // 7.5：按功能域分子页面。7.4 修订后，账户入口（功能栏底部）与本页合并，回收站也并入本页。
-  return '<div class="pane-head"><div><h1>设置</h1><div class="sub">账户与安全 / 隐私锁 / Memo 隐私浏览 / MCP 令牌 / 备份目标 / 我的分享 / 版本与回收站</div></div></div>'
+  return '<div class="pane-head"><div><h1>设置</h1><div class="sub">通用 / 账户与安全 / 隐私锁 / Memo 隐私浏览 / MCP 令牌 / 备份目标 / 我的分享 / 版本与回收站</div></div></div>'
   + '<div class="doc-scroll"><div class="pane-pad"><div class="set-grid">'
+
+  // 通用（设计文档 §7.5 / 功能拆解 v2 M02-04）
+  + '<div class="set-card"><div class="set-head">' + icon('i-settings') + '<h3>通用</h3>'
+  + '<div class="right"><span class="chip">启动视图</span></div></div><div class="set-body">'
+  + '<div class="field" style="margin-bottom:6px"><label>启动视图</label><div class="radio-set" id="startViewSet">'
+  +   '<div class="radio-opt' + (state.startView === 'home' ? ' on' : '') + '" data-sv="home"><div class="radio-dot"></div><div><div class="t">首页</div><div class="d">概括预览 + 快捷方式 + 快速导航；功能栏导航显示「首页」项（推荐默认）</div></div></div>'
+  +   '<div class="radio-opt' + (state.startView === 'recent' ? ' on' : '') + '" data-sv="recent"><div class="radio-dot"></div><div><div class="t">最近编辑</div><div class="d">启动后直接进入「最近编辑」；功能栏不显示「首页」项</div></div></div>'
+  +   '<div class="radio-opt' + (state.startView === 'starred' ? ' on' : '') + '" data-sv="starred"><div class="radio-dot"></div><div><div class="t">收藏</div><div class="d">启动后直接进入「收藏」；功能栏不显示「首页」项</div></div></div>'
+  + '</div></div>'
+  + '<div class="set-row"><div><div class="lbl">时区</div><div class="desc">默认 Asia/Shanghai；影响 Memo 日期分组与首页「今日待办」（8.4）</div></div>'
+  + '<div class="right"><span class="keycap">Asia/Shanghai</span><button class="btn sm">修改</button></div></div>'
+  + '</div></div>'
 
   + '<div class="set-card"><div class="set-head">' + icon('i-user') + '<h3>账户与安全</h3>'
   + '<div class="right"><span class="chip green">owner</span></div></div><div class="set-body">'
@@ -1754,6 +1968,15 @@ function settingsPanel(){
   + '</div></div></div>';
 }
 function bindSettings(){
+  // 启动视图（v2 M02-04）：未选首页时功能栏不显示「首页」项，启动后直接进入所选视图
+  $$('#startViewSet .radio-opt').forEach(opt => opt.addEventListener('click', () => {
+    state.startView = opt.dataset.sv;
+    syncStartView();
+    toast(state.startView === 'home'
+      ? '启动视图已设为「首页」，功能栏显示首页项'
+      : '启动视图已设为「' + (state.startView === 'recent' ? '最近编辑' : '收藏') + '」，功能栏不显示首页项', 'ok');
+    if(state.startView !== 'home' && state.fn === 'home') go(state.startView); else render();
+  }));
   $$('#timeoutSet .radio-opt').forEach(opt => opt.addEventListener('click', () => {
     state.timeoutMin = parseInt(opt.dataset.min, 10);
     syncTimeoutUI();
@@ -1895,10 +2118,11 @@ function syncComposer(){
     }));
   } else if(m === 'note'){
     extra.classList.remove('hidden');
-    // 7.4 修订：附加项锁定一排，文案相应收短，确保一排放得下
+    // 功能拆解 v2 / M04-02：创建时不提供加密选项 —— 原「加密」胶囊已去掉，
+    // 单篇加密只在编辑器「更多」菜单中开关。
+    // 附加项锁定一排，文案相应收短，确保一排放得下。
     extra.innerHTML = '<span class="sw">' + icon('i-note') + '首行作标题</span>'
-      + '<span class="sw">' + icon('i-folder') + '根目录</span>'
-      + '<span class="sw">' + icon('i-lock') + '加密</span>';
+      + '<span class="sw">' + icon('i-folder') + '根目录</span>';
     hint('Ctrl+Enter 新建并打开编辑器');
   } else {
     // 7.4 修订：Memo 模式保留等高空位（不隐藏容器），切换模式时下方导航不位移
@@ -1946,15 +2170,33 @@ function publishComposer(){
   setTopSync('busy');
   toast(task ? '已发布为清单条目（乐观 UI，待上传）' : '已发布到时间轴（乐观 UI，待上传）', 'info');
 
-  if(state.fn !== 'memo' || state.memoView === 'waterfall'){ state.memoView = task ? 'tasks' : 'timeline'; }
-  if(state.fn === 'memo') render();
+  // 功能拆解 v2（Q1）：Memo 视图已无「清单」tab，待办在自己的独立视图里呈现
+  if(task){
+    if(state.fn === 'task') render();
+  } else if(state.fn === 'memo'){
+    if(state.memoView === 'waterfall') state.memoView = 'timeline';
+    render();
+  }
+  syncNavCounts();
 
   setTimeout(() => {
     memo.status = 'synced';
     setTopSync('ok');
-    if(state.fn === 'memo') render();
+    if(state.fn === 'memo' || state.fn === 'task') render();
     toast('已同步', 'ok');
   }, 1400);
+}
+
+/* 导航上的待办计数（未完成数） */
+function syncNavCounts(){
+  const el = $('#navTaskCount');
+  if(el) el.textContent = TASKS.filter(t => t.status !== 'done').length;
+}
+
+/* 启动视图控制「首页」项显隐（v2 M02-04：未选首页时功能栏不显示首页项） */
+function syncStartView(){
+  const nh = $('#navHome');
+  if(nh) nh.style.display = state.startView === 'home' ? '' : 'none';
 }
 
 function setTopSync(s){
@@ -1990,6 +2232,7 @@ function doUnlock(){
   if(t === 'doc'){ render(); }
   else if(t === 'vault'){ go('vault'); }
   else if(t === 'memo'){ go('memo'); }
+  else if(t === 'task'){ go('task'); }
   else if(t === 'drawer' && arg){ openDrawer(arg); }
   else { render(); }
 }
@@ -2206,11 +2449,12 @@ $('#composerInput').addEventListener('keydown', e => {
 $('#composerInput').addEventListener('input', e => {
   const v = e.target.value;
   if(/- \[ \]/.test(v) && state.composerMode === 'memo' && !v.includes('#')){
-    // 9.2：正文写了 - [ ] 时提示"设为清单？"，由用户确认
-    if(!$('#composerInput').dataset.hinted){
-      $('#composerInput').dataset.hinted = '1';
-      toast('检测到复选框语法 — 设为清单条目？可点功能栏的「待办」按钮', 'info');
-    }
+      // 9.2 / v2 M07-02：正文写了 - [ ] 时提示"设为清单？"，由用户确认；
+      // 功能栏已无单独的「待办」按钮，入口改为录入框的「待办」模式。
+      if(!$('#composerInput').dataset.hinted){
+        $('#composerInput').dataset.hinted = '1';
+        toast('检测到复选框语法 — 设为清单条目？点录入框的「待办」模式即可', 'info');
+      }
   }
 });
 
@@ -2264,7 +2508,9 @@ const NOTES_BODIES = {};
 (function init(){
   renderCapsule(); renderVaultNode(); syncTimeoutUI(); syncComposer(); syncModeTabs();
   state.activeId = 'n1';
-  go('recent');
+  syncStartView();
+  // 启动视图（v2 M02-04）：默认首页
+  go(state.startView);
   startTimer();
 })();
 </script>

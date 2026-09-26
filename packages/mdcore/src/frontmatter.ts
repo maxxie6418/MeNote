@@ -29,6 +29,13 @@ export interface MenoteMeta {
   tags: string[];
   /** `null` 表示**没有** `menote.task` 键——清单标记的有无就看它（M07-04） */
   task: TaskFields | null;
+  /**
+   * Memo 转笔记后的**新笔记 id**（Q10：原 Memo 保留并显示"已转为笔记"的链接）。
+   *
+   * 可选：绝大多数条目没有这个键。放在 md 里而不是本地表，是因为关联必须跟着数据同步——
+   * 否则换一台设备打开时那条链接就没了。
+   */
+  convertedTo?: string | null;
   /** 不解析、但必须原样保留的行（如表格的 `columns` / `views`） */
   preservedLines: string[];
 }
@@ -191,6 +198,7 @@ export function parseMenoteMeta(markdown: string): ParsedDocument {
     if (segment.key === "type") meta.type = scalarOf(segment) || null;
     else if (segment.key === "tags") meta.tags = tagsOf(segment);
     else if (segment.key === "task") meta.task = taskOf(segment);
+    else if (segment.key === "converted_to") meta.convertedTo = scalarOf(segment) || null;
     else meta.preservedLines.push(...segment.lines);
   }
 
@@ -222,6 +230,7 @@ export function buildDocument(meta: MenoteMeta, body: string): string {
   const tagsLine = renderTagsLine(meta.tags);
   if (tagsLine) lines.push(tagsLine);
   lines.push(...renderTaskLines(meta.task));
+  if (meta.convertedTo) lines.push(`  converted_to: ${meta.convertedTo}`);
   lines.push(...meta.preservedLines);
 
   if (lines.length === 0) return body;
@@ -233,6 +242,8 @@ export interface MenotePatch {
   tags?: string[];
   /** `null` 表示删除整个 task 块（= 去掉清单标记，M07-04） */
   task?: TaskFields | null;
+  /** `null` 表示删除该键 */
+  convertedTo?: string | null;
 }
 
 /**
@@ -261,6 +272,7 @@ export function updateMenoteKeys(markdown: string, patch: MenotePatch): string {
   let sawType = false;
   let sawTags = false;
   let sawTask = false;
+  let sawConverted = false;
 
   for (const segment of segments) {
     if (segment.key === "type" && patch.type !== undefined) {
@@ -280,6 +292,13 @@ export function updateMenoteKeys(markdown: string, patch: MenotePatch): string {
       if (lines.length > 0) untouched.push({ key: "task", lines });
       continue;
     }
+    if (segment.key === "converted_to" && patch.convertedTo !== undefined) {
+      sawConverted = true;
+      if (patch.convertedTo !== null) {
+        untouched.push({ key: "converted_to", lines: [`  converted_to: ${patch.convertedTo}`] });
+      }
+      continue;
+    }
     untouched.push(segment);
   }
 
@@ -294,6 +313,9 @@ export function updateMenoteKeys(markdown: string, patch: MenotePatch): string {
   }
   if (patch.task !== undefined && patch.task !== null && !sawTask) {
     appended.push({ key: "task", lines: renderTaskLines(patch.task) });
+  }
+  if (patch.convertedTo !== undefined && patch.convertedTo !== null && !sawConverted) {
+    appended.push({ key: "converted_to", lines: [`  converted_to: ${patch.convertedTo}`] });
   }
 
   const head = outerHeader.length > 0 ? outerHeader : [MENOTE_KEY];

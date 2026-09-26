@@ -31,6 +31,7 @@ import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { TwoPane } from "./workarea/TwoPane";
 import { MemoPanel } from "../features/memos/ui/MemoPanel";
+import { convertMemoToNote } from "../features/memos/actions";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -302,6 +303,19 @@ export default function App() {
                 }}
                 onTogglePinned={(id) => {
                   void workspace.togglePinned(id);
+                }}
+                onConvert={(id) => {
+                  void convertMemoToNote(id).then(async (noteId) => {
+                    // Q10：新笔记直接打开 —— 回到笔记视图并打开它
+                    setBrowse(null);
+                    await workspace.refresh();
+                    await workspace.open(noteId);
+                    pushToast("已转为笔记", "success");
+                  });
+                }}
+                onOpenConverted={(noteId) => {
+                  setBrowse(null);
+                  void workspace.open(noteId);
                 }}
                 onAdd={focusComposer}
               />

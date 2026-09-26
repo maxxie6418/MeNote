@@ -26,6 +26,7 @@ import {
   saveDraft,
   type LocalFolder,
   type LocalItem,
+  type MemoContent,
 } from "../../data/db";
 import { createNoteEditor, type NoteEditorController, type NoteEditorSnapshot } from "./model";
 import {
@@ -87,8 +88,8 @@ export interface NotesWorkspace {
   changeTitle: (title: string) => Promise<void>;
   /** 时间轴上的 Memo（不含已删除的；按 memo_at 倒序，置顶由界面层再排） */
   memos: LocalItem[];
-  /** Memo 的正文（已剥 front matter），供时间轴渲染 */
-  memoContents: Record<string, string>;
+  /** Memo 的正文（已剥 front matter）与已转笔记关联，供时间轴渲染 */
+  memoContents: Record<string, MemoContent>;
   /**
    * 发布 Memo（乐观：先落本地并标"待上传"，出队由 outbox 后台上传；写入**永远免密**）。
    * `asTask` = 用户在录入框确认了"设为清单？"，正文会带上 `menote.task` 标记。
@@ -126,7 +127,7 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [memos, setMemos] = useState<LocalItem[]>([]);
-  const [memoContents, setMemoContents] = useState<Record<string, string>>({});
+  const [memoContents, setMemoContents] = useState<Record<string, MemoContent>>({});
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;

@@ -1617,6 +1617,17 @@ button.chip--tag:hover {
   margin-top: var(--sp-2);
 }
 
+/* 「已转为笔记」的链接（Q10：原 Memo 保留并显示链接） */
+.memo__converted {
+  margin-top: var(--sp-2);
+}
+
+.memo__link {
+  font-size: var(--fs-micro);
+  color: var(--primary-ink);
+  text-decoration: underline;
+}
+
 .memo-empty {
   padding: var(--sp-6) 0;
   text-align: center;

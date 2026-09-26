@@ -7,7 +7,7 @@
  * 状态都留在本组件内（筛选只影响显示，不进数据库）；数据与写入由 `App` 传进来。
  */
 import { useState } from "react";
-import type { LocalItem } from "../../../data/db";
+import type { LocalItem, MemoContent } from "../../../data/db";
 import { Button } from "../../../app/ui/Controls";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
@@ -23,10 +23,14 @@ import { MemoTimeline } from "./MemoTimeline";
 
 export interface MemoPanelProps {
   memos: readonly LocalItem[];
-  /** 已剥掉 front matter 的正文 */
-  contents: Readonly<Record<string, string>>;
+  /** 已剥掉 front matter 的正文 + 已转笔记关联 */
+  contents: Readonly<Record<string, MemoContent>>;
   onSave: (itemId: string, text: string) => void;
   onTogglePinned: (itemId: string) => void;
+  /** Memo 转笔记（Q10） */
+  onConvert: (itemId: string) => void;
+  /** 打开已转出的那篇笔记 */
+  onOpenConverted: (noteId: string) => void;
   /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
   onAdd: () => void;
   timeZone?: string;
@@ -39,6 +43,8 @@ export function MemoPanel({
   contents,
   onSave,
   onTogglePinned,
+  onConvert,
+  onOpenConverted,
   onAdd,
   timeZone,
   now,
@@ -103,6 +109,8 @@ export function MemoPanel({
           contents={contents}
           onSave={onSave}
           onTogglePinned={onTogglePinned}
+          onConvert={onConvert}
+          onOpenConverted={onOpenConverted}
           onSelectTag={(next) => setTag(next)}
           timeZone={timeZone}
         />

@@ -10,6 +10,8 @@
  * 这里只用 `Intl.DateTimeFormat`，不引时区库：只需要"某个时刻落在哪个日历日"。
  */
 
+import { buildDocument, splitFirstLineAsTitle } from "@menote/mdcore";
+
 /** 设置项的默认时区（M2-7 设置页接入后从用户设置读） */
 export const DEFAULT_TIME_ZONE = "Asia/Shanghai";
 
@@ -179,4 +181,36 @@ export function collectMemoTags(memos: readonly MemoLike[]): Array<{ tag: string
   return [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "zh-Hans-CN"));
+}
+
+// ——————————————————————————— Memo 转笔记（Q10） ———————————————————————————
+
+/** Q10：标题取正文第一行，**最多 50 字**（与录入框"笔记"模式一致） */
+export const NOTE_TITLE_MAX = 50;
+
+/**
+ * 由 Memo 的正文构造新笔记的标题与正文（Q10）。
+ *
+ * - 标题取正文第一行（≤50 字，按**码点**截断，避免把汉字切半）；
+ * - 正文 = 去掉首行之后的内容；
+ * - **清单字段从 YAML 去掉**（笔记不带 `task`），标签原样带走（Q10：内容、标签原样带走）；
+ * - 新笔记落根目录、直接打开由调用方负责。
+ */
+export function buildNoteFromMemo(
+  content: string,
+  tags: readonly string[],
+): { title: string; body: string } {
+  const { title, body } = splitFirstLineAsTitle(content);
+  const chars = [...title];
+  const trimmed = chars.length > NOTE_TITLE_MAX ? chars.slice(0, NOTE_TITLE_MAX).join("") : title;
+
+  const noteBody =
+    tags.length > 0
+      ? buildDocument(
+          { type: "note", tags: [...tags], task: null, convertedTo: null, preservedLines: [] },
+          body,
+        )
+      : body;
+
+  return { title: trimmed.trim() === "" ? "未命名笔记" : trimmed.trim(), body: noteBody };
 }

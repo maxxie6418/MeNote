@@ -61,18 +61,25 @@ function renderPanel(overrides: Partial<Parameters<typeof MemoPanel>[0]> = {}) {
   const onAdd = vi.fn();
   const onSave = vi.fn();
   const onTogglePinned = vi.fn();
+  const onConvert = vi.fn();
+  const onOpenConverted = vi.fn();
   const { container } = render(
     <MemoPanel
       memos={MEMOS}
-      contents={{ m1: "今天开会讨论 **方案**", m2: "- [ ] 买牛奶" }}
+      contents={{
+        m1: { content: "今天开会讨论 **方案**", convertedTo: null },
+        m2: { content: "- [ ] 买牛奶", convertedTo: null },
+      }}
       onSave={onSave}
       onTogglePinned={onTogglePinned}
+      onConvert={onConvert}
+      onOpenConverted={onOpenConverted}
       onAdd={onAdd}
       now={NOW}
       {...overrides}
     />,
   );
-  return { container, onAdd, onSave, onTogglePinned };
+  return { container, onAdd, onSave, onTogglePinned, onConvert, onOpenConverted };
 }
 
 /** 按文本取标签胶囊（无障碍名里带 `#` 与空格，直接按文本更稳） */
@@ -140,9 +147,11 @@ describe("筛选", () => {
     render(
       <MemoPanel
         memos={[memo("old", NOW - 40 * DAY)]}
-        contents={{ old: "很久以前" }}
+        contents={{ old: { content: "很久以前", convertedTo: null } }}
         onSave={vi.fn()}
         onTogglePinned={vi.fn()}
+        onConvert={vi.fn()}
+        onOpenConverted={vi.fn()}
         onAdd={vi.fn()}
         now={NOW}
       />,
@@ -195,5 +204,39 @@ describe("操作", () => {
     await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
     await user.click(screen.getByRole("menuitem", { name: "置顶" }));
     expect(onTogglePinned).toHaveBeenCalledWith("m1");
+  });
+});
+
+describe("Memo 转笔记（Q10）", () => {
+  it("未转过的 Memo：菜单里有「转为笔记」，转一下走回调", async () => {
+    const user = userEvent.setup();
+    const { onConvert } = renderPanel();
+
+    const card = document.querySelector('[data-memo-id="m1"]') as HTMLElement;
+    await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "转为笔记" }));
+
+    expect(onConvert).toHaveBeenCalledWith("m1");
+  });
+
+  it("转过之后：显示「已转为笔记」链接、且不再提供转换入口（单向）", async () => {
+    const user = userEvent.setup();
+    const { onOpenConverted } = renderPanel({
+      contents: {
+        m1: { content: "今天开会讨论 **方案**", convertedTo: "01JCXNOTE" },
+        m2: { content: "- [ ] 买牛奶", convertedTo: null },
+      },
+    });
+
+    const card = document.querySelector('[data-memo-id="m1"]') as HTMLElement;
+    expect(within(card).getByText(/已转为笔记/)).toBeTruthy();
+
+    await user.click(within(card).getByRole("button", { name: /已转为笔记/ }));
+    expect(onOpenConverted).toHaveBeenCalledWith("01JCXNOTE");
+
+    // 菜单里不再有「转为笔记」
+    await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
+    const menu = screen.getByRole("menu", { name: "Memo 的更多操作" });
+    expect(within(menu).queryByRole("menuitem", { name: "转为笔记" })).toBeNull();
   });
 });

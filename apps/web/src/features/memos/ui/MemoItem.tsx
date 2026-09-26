@@ -7,7 +7,7 @@
  * 编辑时只呈现**正文内容**：YAML front matter 由数据层维护，不让用户碰到。
  */
 import { lazy, Suspense, useState } from "react";
-import type { LocalItem } from "../../../data/db";
+import type { LocalItem, MemoContent } from "../../../data/db";
 import { Icon } from "../../../app/ui/Icon";
 import { Chip } from "../../../app/ui/Chip";
 import { DropdownMenu } from "../../../app/ui/Menu";
@@ -20,15 +20,27 @@ const MarkdownPreview = lazy(async () => {
 
 export interface MemoItemProps {
   memo: LocalItem;
-  /** 已剥掉 front matter 的正文 */
-  content: string;
+  /** 已剥掉 front matter 的正文 + 已转笔记关联 */
+  entry: MemoContent;
   onSave: (itemId: string, text: string) => void;
   onTogglePinned: (itemId: string) => void;
+  onConvert: (itemId: string) => void;
+  onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
   timeZone?: string;
 }
 
-export function MemoItem({ memo, content, onSave, onTogglePinned, onSelectTag, timeZone }: MemoItemProps) {
+export function MemoItem({
+  memo,
+  entry,
+  onSave,
+  onTogglePinned,
+  onConvert,
+  onOpenConverted,
+  onSelectTag,
+  timeZone,
+}: MemoItemProps) {
+  const content = entry.content;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(content);
 
@@ -74,6 +86,17 @@ export function MemoItem({ memo, content, onSave, onTogglePinned, onSelectTag, t
                 icon: "star",
                 onSelect: () => onTogglePinned(memo.id),
               },
+              // 已转过就不再提供入口：一篇 Memo 只转一次（Q10 单向）
+              ...(entry.convertedTo === null
+                ? [
+                    {
+                      id: "convert",
+                      label: "转为笔记",
+                      icon: "note" as const,
+                      onSelect: () => onConvert(memo.id),
+                    },
+                  ]
+                : []),
             ]}
           />
         </div>
@@ -118,6 +141,18 @@ export function MemoItem({ memo, content, onSave, onTogglePinned, onSelectTag, t
           </Suspense>
         </div>
       )}
+
+      {entry.convertedTo !== null ? (
+        <div className="memo__converted">
+          <button
+            type="button"
+            className="memo__link"
+            onClick={() => onOpenConverted(entry.convertedTo as string)}
+          >
+            已转为笔记 · 打开
+          </button>
+        </div>
+      ) : null}
 
       {memo.tags.length > 0 ? (
         <div className="memo__tags">

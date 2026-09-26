@@ -15,7 +15,7 @@ import {
   type ItemMeta,
   type ItemType,
 } from "@menote/shared";
-import { stripFrontmatter } from "@menote/mdcore";
+import { parseMenoteMeta, stripFrontmatter } from "@menote/mdcore";
 import { db } from "./database";
 import {
   SYNC_STATE_KEY,
@@ -116,22 +116,32 @@ export async function listLocalMemos(): Promise<LocalItem[]> {
     .sort((a, b) => (b.memo_at ?? 0) - (a.memo_at ?? 0));
 }
 
+export interface MemoContent {
+  /** 已剥掉 front matter 的正文 */
+  content: string;
+  /** 转成笔记后的新笔记 id（Q10）；没转过则为 null */
+  convertedTo: string | null;
+}
+
 /**
- * Memo 的正文（已剥掉 YAML front matter），供时间轴渲染。
+ * Memo 的正文（已剥掉 YAML front matter）与"已转为笔记"的关联，供时间轴渲染。
  *
  * 时间轴要显示**渲染后的正文**，而本地缓存里存的是原始 md（可能带 front matter）；
- * 剥壳放在数据层，界面层不该关心 md 的格式细节。
+ * 剥壳与键解析放在数据层，界面层不该关心 md 的格式细节。
  */
-export async function listMemoContents(): Promise<Record<string, string>> {
+export async function listMemoContents(): Promise<Record<string, MemoContent>> {
   const rows = await db.items.toArray();
   const memoIds = new Set(
     rows.filter((row) => row.deleted_at === null && row.type === "memo").map((row) => row.id),
   );
   const bodies = await db.bodies.toArray();
-  const out: Record<string, string> = {};
+  const out: Record<string, MemoContent> = {};
   for (const body of bodies) {
     if (!memoIds.has(body.item_id)) continue;
-    out[body.item_id] = stripFrontmatter(body.body);
+    out[body.item_id] = {
+      content: stripFrontmatter(body.body),
+      convertedTo: parseMenoteMeta(body.body).meta.convertedTo ?? null,
+    };
   }
   return out;
 }

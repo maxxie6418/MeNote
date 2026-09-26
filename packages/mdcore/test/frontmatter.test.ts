@@ -131,3 +131,37 @@ menote:
     );
   });
 });
+
+describe("Memo 转笔记的关联键（Q10）", () => {
+  it("converted_to 能写出并读回", () => {
+    const built = buildDocument(
+      {
+        type: "memo",
+        tags: ["工作"],
+        task: null,
+        convertedTo: "01JCXNOTE0000000000000000",
+        preservedLines: [],
+      },
+      "随手记",
+    );
+    expect(built).toContain("  converted_to: 01JCXNOTE0000000000000000");
+    expect(parseMenoteMeta(built).meta.convertedTo).toBe("01JCXNOTE0000000000000000");
+  });
+
+  it("没有该键时读回 undefined（绝大多数条目如此）", () => {
+    expect(parseMenoteMeta("---\nmenote:\n  type: memo\n---\n\n正文").meta.convertedTo).toBeUndefined();
+  });
+
+  it("改写：加键不破坏其它键；传 null 删键", () => {
+    const source = "---\nmenote:\n  type: memo\n  tags: [工作]\n---\n\n随手记";
+
+    const added = updateMenoteKeys(source, { convertedTo: "01JCXNOTE" });
+    expect(added).toContain("  converted_to: 01JCXNOTE");
+    expect(added).toContain("  tags: [工作]");
+    expect(parseMenoteMeta(added).meta.tags).toEqual(["工作"]);
+
+    const removed = updateMenoteKeys(added, { convertedTo: null });
+    expect(removed).not.toContain("converted_to");
+    expect(removed).toContain("  tags: [工作]");
+  });
+});

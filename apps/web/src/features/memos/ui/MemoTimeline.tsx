@@ -4,16 +4,18 @@
  * 按天分组（天边界按设置时区，见 `../model`），组内按时间倒序；置顶的 Memo 在时间轴最上方（Q9）。
  * 图片瀑布流是另一个视图，按计划依赖 M4 的图片管线，不在 M2。
  */
-import type { LocalItem } from "../../../data/db";
+import type { LocalItem, MemoContent } from "../../../data/db";
 import { groupMemosByDay } from "../model";
 import { MemoItem } from "./MemoItem";
 
 export interface MemoTimelineProps {
   memos: readonly LocalItem[];
-  /** 已剥掉 front matter 的正文 */
-  contents: Readonly<Record<string, string>>;
+  /** 已剥掉 front matter 的正文 + 已转笔记关联 */
+  contents: Readonly<Record<string, MemoContent>>;
   onSave: (itemId: string, text: string) => void;
   onTogglePinned: (itemId: string) => void;
+  onConvert: (itemId: string) => void;
+  onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
   timeZone?: string;
 }
@@ -23,6 +25,8 @@ export function MemoTimeline({
   contents,
   onSave,
   onTogglePinned,
+  onConvert,
+  onOpenConverted,
   onSelectTag,
   timeZone,
 }: MemoTimelineProps) {
@@ -48,9 +52,11 @@ export function MemoTimeline({
             <MemoItem
               key={memo.id}
               memo={memo}
-              content={contents[memo.id] ?? ""}
+              entry={contents[memo.id] ?? { content: "", convertedTo: null }}
               onSave={onSave}
               onTogglePinned={onTogglePinned}
+              onConvert={onConvert}
+              onOpenConverted={onOpenConverted}
               onSelectTag={onSelectTag}
               timeZone={timeZone}
             />

@@ -1,6 +1,7 @@
 // 设置时区为 Asia/Shanghai（UTC+8）：跨时区分组是本模块最容易出错的地方，单独钉住
 import { describe, expect, it } from "vitest";
 import {
+  buildNoteFromMemo,
   collectMemoTags,
   dayKeyInZone,
   dayLabelInZone,
@@ -122,5 +123,35 @@ describe("标签云", () => {
       { tag: "x", count: 2 },
       { tag: "y", count: 1 },
     ]);
+  });
+});
+
+describe("Memo 转笔记（Q10）", () => {
+  it("标题取正文第一行，正文为其余内容", () => {
+    expect(buildNoteFromMemo("买菜\n\n- 西红柿\n- 鸡蛋", [])).toEqual({
+      title: "买菜",
+      body: "- 西红柿\n- 鸡蛋",
+    });
+  });
+
+  it("标题最多 50 字（按码点截断，不切半汉字）", () => {
+    const long = "标".repeat(60);
+    const { title } = buildNoteFromMemo(long, []);
+    expect([...title]).toHaveLength(50);
+  });
+
+  it("标签原样带走（写进笔记的 YAML），清单字段不带走（Q10）", () => {
+    const { body } = buildNoteFromMemo("- [ ] 买牛奶", ["生活"]);
+    expect(body).toContain("tags: [生活]");
+    expect(body).not.toContain("task");
+  });
+
+  it("没有标签时不写 front matter（正文保持干净）", () => {
+    const { body } = buildNoteFromMemo("第一行\n第二行", []);
+    expect(body).toBe("第二行");
+  });
+
+  it("首行为空时给默认标题", () => {
+    expect(buildNoteFromMemo("   \n内容", []).title).toBe("未命名笔记");
   });
 });

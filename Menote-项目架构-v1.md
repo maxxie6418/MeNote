@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | 2026-09-25 | 初稿 |
 | v1.1 | 2026-09-26 | ①隐私模型修订【已定·用户确认】：服务端明文存储 + 前端门禁 + 备份导出加密，删除非对称密钥对、数据密钥层级、正文密文信封、批量转换任务与恢复码（第七章重写）；②登录与隐私密码 KDF 统一为 PBKDF2-SHA-256，前端零 wasm；③评审报告（deliverables/gstack/architecture-review-menote-v1-2026-09-26.md）阻塞项 #1、#2 随之失效 |
+| v1.2 | 2026-09-26 | 部署方式定稿【已定·用户确认】：从 GitHub 一键部署到 Cloudflare，资源在部署时自动创建并关联，无需提前手动创建（新增 15.5）；§15.2 发布主路径改为 Workers Builds，GitHub Actions 只保留测试职责；§15.3 生产环境落点同步更新 |
 
 ### 标注约定
 
@@ -128,7 +129,7 @@ flowchart LR
 | 接口校验 | Valibot（前后端共享 schema） | 体积和初始化开销都远小于 Zod，适合 1 秒启动限制 | 【架构定】 |
 | MCP | 手写无状态 JSON-RPC 分发（不引入官方 SDK） | 需求 17.1：无状态、轻量；官方 SDK 体积与初始化成本偏高 | 【依需求】 |
 | S3 签名 | aws4fetch（`UNSIGNED-PAYLOAD`） | 需求 16.3；体积小 | 【依需求】 |
-| 构建部署 | Vite + `@cloudflare/vite-plugin` + Wrangler | 一套构建同时产出前端资源与 Worker | 【架构定】 |
+| 构建部署 | Vite + `@cloudflare/vite-plugin` + Wrangler | 一套构建同时产出前端资源与 Worker；线上部署走 Workers Builds（Git 推送触发，见 15.5） | 【架构定】 |
 | 测试 | Vitest；Worker 与 D1 用 `@cloudflare/vitest-pool-workers`；端到端用 Playwright | 需求 21.2：从开发之初就有测试与 CI | 【依需求】 |
 | CI | GitHub Actions：类型检查、单元测试、Worker 集成测试、构建、包体积检查 | 同上 | 【依需求】 |
 
@@ -681,7 +682,9 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 
 ### 15.2 CI（GitHub Actions）
 
-每次推送和 PR：类型检查、lint、单元测试、Worker 集成测试、构建、包体积检查；主分支额外运行端到端测试。发布由打标签触发 `wrangler deploy`。
+每次推送和 PR：类型检查、lint、单元测试、Worker 集成测试、构建、包体积检查；主分支额外运行端到端测试。
+
+发布不由 GitHub Actions 承担：部署主路径是 Workers Builds（Git 推送触发，见 15.5），避免两套部署通道互相覆盖。
 
 ### 15.3 环境【架构定】
 
@@ -689,13 +692,38 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 |---|---|
 | 本地开发 | Vite 开发服务器 + `@cloudflare/vite-plugin`（本地模拟 Worker、D1、R2） |
 | 测试环境 | 独立的 Worker、D1、R2（同一免费账户内另建一套），用于 CPU 实测与发布前验证 |
-| 生产环境 | 用户自己的 Cloudflare 账户；部署说明另写（需求“后续深入设计清单”第 1 项涉及域名） |
+| 生产环境 | 部署者自己的 Cloudflare 账户，从 GitHub 一键部署（见 15.5），资源部署时自动创建 |
 
 ### 15.4 数据库迁移【依需求 18.1】
 
 - 迁移脚本放在 `apps/worker/src/db/migrations/`，按序号命名，每个脚本幂等（`CREATE TABLE IF NOT EXISTS` 等），单个脚本的语句数不超过 45 条。
 - 每个 isolate 首次请求读取 `app_meta.schema_version`；低于代码期望值时，先用条件更新抢占 `app_meta` 中的迁移锁（带过期时间，防止并发执行），再按序执行迁移并校验必需的表与索引，最后写入新版本号。
 - 需要数据回填的迁移（例如补 `sync_seq`）拆成分批任务，由 Cron 推进，不在请求路径中一次做完。
+
+### 15.5 部署：从 GitHub 一键部署到 Cloudflare【已定·用户确认 2026-09-26】
+
+目标：部署者（本人或想自部署的家人）在自己的 Cloudflare 账户上从 GitHub 仓库完成部署，**不提前手动创建任何资源**——Worker、D1、R2、Cron 触发器均在部署时自动创建并绑定。
+
+分三层实现，全部使用 Cloudflare 官方机制（2026-09 查证）：
+
+1. **声明式资源与自动供给（Wrangler ≥ 4.45）**：`wrangler.jsonc` 中的 D1 / R2 绑定只写 `binding` 与默认资源名、**不写资源 ID**，`wrangler deploy` 时若资源不存在会自动创建并回写 ID（开放 beta；资源创建后即使不回写也保持绑定关系）。Cron 触发器写在 `wrangler.jsonc` 的 `triggers.crons`，随部署生效，无需单独创建。
+2. **Deploy to Cloudflare 按钮**：README 放置 `https://deploy.workers.cloudflare.com/?url=<仓库地址>`。点击后 Cloudflare 会：克隆仓库到部署者的 GitHub/GitLab 账户 → 解析 `wrangler.jsonc`，自动供给并绑定全部受支持资源（KV、D1、R2、Durable Objects、Queues 等）→ 配置好 Workers Builds。部署设置页可自定义 Worker 名与资源名，并逐项提示填入必需机密。
+3. **Workers Builds（Git CI/CD）**：此后每次推送到生产分支自动构建并部署；非生产分支与 PR 生成预览 URL 并回贴到 GitHub。部署通道只有这一条，与 §15.2 的测试职责分离。
+
+仓库为满足一键部署需要遵守的约定：
+
+- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建；机密以 `"secrets": { "required": ["BACKUP_CRED_KEY", "SESSION_SECRET", ...] }` 声明，另配 `.dev.vars.example` 说明每项的格式与生成方式，部署页据此逐项提示。
+- **`package.json` 的 `deploy` 脚本**：`wrangler d1 migrations apply DB --remote && wrangler deploy`——迁移放在部署命令内一键完成，且引用**绑定名**而非库名（部署者可能自定义库名）。
+- **不硬编码域名**：`*.workers.dev` 子域因账户而异。§13.2 的 Origin 校验、分享链接、MCP 端点地址均从请求的 `URL.origin` 推导；自定义域名作为可选后置步骤（dashboard 添加），代码不依赖它。
+- **仓库可见性**：仓库须为 public，其他人才可能通过按钮部署；本人部署自己的仓库（含私有）可直接走 dashboard「Import a repository」，自动供给行为相同。
+
+边界与已知坑：
+
+- **R2 自动创建不豁免绑卡**：免费账户未绑定支付方式时 R2 资源无法创建，一键部署会在 R2 绑定处失败（对应需求文档待裁决事项）。未绑卡时可先移除 R2 绑定做 D1-only 部署，附件功能后补。
+- **机密不进仓库**：`BACKUP_CRED_KEY` 等只在部署页填入；若改用命令行部署，则 `wrangler secret put` 设置一次。
+- **按钮部署会克隆出新仓库**：Deploy 按钮把源仓库克隆为部署者账户下的**新仓库**并接管后续 Git 推送。本人自部署若不想产生分叉仓库，走 dashboard 导入原仓库即可，效果一致。
+- **测试环境**（15.3）是一次性手动创建的独立资源，不参与一键流程。
+- 平台事实【待核实→已核实 2026-09】：自动供给支持 KV / D1 / R2 / Hyperdrive / Vectorize / Durable Objects / Queues / Workers AI；monorepo 若用按钮的子目录模式，该子目录必须依赖自包含。本仓库 `wrangler.jsonc` 在根目录，不受影响。
 
 ---
 

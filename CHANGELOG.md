@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- 预开发 — 新增 docs/todo/Menote-开发计划-v1.md（前置准备评估 + M0-M6 里程碑规划，草案待确认）
 - 预开发 / 1cc0ec5 — 文档规划指南 v1.1：补 API 与接口文档规划
 - 预开发 / 9268ac1 — DESIGN.md 首稿：结构 / 交互 / 用法已定（布局尺寸、间距原则、组件用法与层级、交互与状态、无障碍底线、16 条禁止项），视觉语言整章待定；components.md 同步令牌引用
 - 预开发 / f3f3585 — components.md 补 SegmentedControl 的用法交叉引用（ComposerModeTabs / DocModeSwitch 等同族，非独立控件）

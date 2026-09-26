@@ -4,6 +4,7 @@
  * 视图只决定"列表里显示哪些条目"，不改变数据模型——四个视图（笔记本 / 最近编辑 / 收藏 / 标签）
  * 共用同一套列表 + 正文双栏（M2-3 的验收点）。这里保持纯函数，便于单测与前端本地计算。
  *
+ * 文件夹的领域规则（两层限制、可移动目标）在 `folders.ts`。
  * M2 的边界：`首页` / `Memo` / `待办` 三个视图分别在 M2-8 / M2-4 / M2-5 落地，
  * 在那之前导航项按"禁用并说明原因"呈现，不做空入口。
  */
@@ -75,23 +76,5 @@ export function collectTags(
     .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag, "zh-Hans-CN"));
 }
 
-// ——————————————————————————— 文件夹的两层限制（需求 §4.5） ———————————————————————————
-
-/** 需求 §4.5：最多两层嵌套（加密空间的 depth 0 属 M3） */
-export const MAX_FOLDER_DEPTH = 2;
-
-/** 在某个父文件夹下新建时的深度；父不存在则为第 1 层 */
-export function folderDepthFor(parent: { depth: number } | null | undefined): number {
-  return parent ? parent.depth + 1 : 1;
-}
-
-/**
- * 能否在某个文件夹下继续新建子文件夹。
- *
- * 第 2 层返回 false —— 界面上**不渲染**"新建子文件夹"入口（不是禁用：那个位置永远没有合法动作），
- * 服务端也会再校验一遍（`depthUnder`）。
- */
-export function canCreateChildFolder(parent: { depth: number } | null | undefined): boolean {
-  return folderDepthFor(parent) <= MAX_FOLDER_DEPTH;
-}
+// ——————————————————————————— 文件夹相关的视图筛选 ———————————————————————————
 

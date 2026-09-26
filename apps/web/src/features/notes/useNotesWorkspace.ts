@@ -16,6 +16,8 @@ import {
   listItemSummaries,
   listLocalFolders,
   listLocalItems,
+  moveLocalFolder,
+  renameLocalFolder,
   type LocalFolder,
   type LocalItem,
 } from "../../data/db";
@@ -24,11 +26,10 @@ import {
   collectTags,
   DEFAULT_VIEW,
   filterByView,
-  folderDepthFor,
-  MAX_FOLDER_DEPTH,
   viewTitle,
   type NotesView,
 } from "./views";
+import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
 
 const DEFAULT_TITLE = "未命名笔记";
 
@@ -80,6 +81,10 @@ export interface NotesWorkspace {
   changeTitle: (title: string) => Promise<void>;
   /** 新建文件夹（深度超限时抛错，界面本该不给出入口） */
   createFolder: (name: string, parentId: string | null) => Promise<void>;
+  /** 重命名文件夹（走 meta_rev，不生成冲突副本） */
+  renameFolder: (folderId: string, name: string) => Promise<void>;
+  /** 移动文件夹到某个父级（`null` = 根目录） */
+  moveFolder: (folderId: string, parentId: string | null) => Promise<void>;
   /** 把条目移入文件夹（`null` = 根目录） */
   moveItemToFolder: (itemId: string, folderId: string | null) => Promise<void>;
   /** 置顶 / 收藏：都走元数据补丁（服务端白名单已含这两列） */
@@ -206,8 +211,30 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [folders, onLocalWrite, refresh],
   );
 
-  const patchItem = useCallback(
-    async (itemId: string, patch: Partial<Pick<LocalItem, "folder_id" | "pinned" | "starred">>) => {
+  const renameFolder = useCallback(
+    async (folderId: string, name: string) => {
+      await renameLocalFolder(folderId, name, Date.now());
+      await refresh();
+      onLocalWrite?.();
+    },
+    [onLocalWrite, refresh],
+  );
+
+  const moveFolder = useCallback(
+    async (folderId: string, parentId: string | null) => {
+      const parent = parentId === null ? null : (folders.find((row) => row.id === parentId) ?? null);
+      const depth = folderDepthFor(parent);
+      if (depth > MAX_FOLDER_DEPTH) {
+        throw new Error(`最多支持 ${MAX_FOLDER_DEPTH} 层文件夹`);
+      }
+      await moveLocalFolder(folderId, parentId, depth, Date.now());
+      await refresh();
+      onLocalWrite?.();
+    },
+    [folders, onLocalWrite, refresh],
+  );
+
+  const patchItem = useCallback(    async (itemId: string, patch: Partial<Pick<LocalItem, "folder_id" | "pinned" | "starred">>) => {
       const item = await getLocalItem(itemId);
       if (!item) return;
       await db.items.update(itemId, { ...patch, updated_at: Date.now() });
@@ -266,6 +293,8 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       createNote,
       changeTitle,
       createFolder,
+      renameFolder,
+      moveFolder,
       moveItemToFolder,
       togglePinned,
       toggleStarred,
@@ -288,6 +317,8 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       moveItemToFolder,
       open,
       refresh,
+      renameFolder,
+      moveFolder,
       selected,
       selectedId,
       snapshot,

@@ -116,12 +116,12 @@ M1 已收口（`docs/archive/Menote-M1-实施计划-v1.md`），但有几项当�
 
 ### M2-3 笔记本与文件夹
 
-> **状态：🟡 客户端闭环已完成（v0.2.6）；重命名/移动的界面入口与删除两项待定**。
-> 已落地：服务端创建/改名/移动与两层校验（M1 完成，`depthUnder` + MAX_FOLDER_DEPTH）；客户端文件夹本地写与入队（`createLocalFolder` / `renameLocalFolder` / `moveLocalFolder` / `enqueueFolderPatch`）、计数与行内摘要、`NotebookPanel`（组头 + `+` 菜单 + 内联命名）、`FolderTree`（两层、计数、待上传标记）、`NbAddButton`、条目行标记（置顶/收藏/摘要）与行内「更多」菜单（移动到…／置顶／收藏）、视图按文件夹筛选。
+> **状态：✅ 完成（v0.2.7；删除项按下方修正移至 M4）**。
+> 已落地：服务端创建/改名/移动与两层校验（M1 完成，`depthUnder` + MAX_FOLDER_DEPTH）；客户端文件夹本地写与入队（`createLocalFolder` / `renameLocalFolder` / `moveLocalFolder` / `enqueueFolderPatch`）、计数与行内摘要、`NotebookPanel`（组头 + `+` 菜单 + 内联命名）、`FolderTree`（两层、计数、待上传标记、节点「更多」菜单）、`NbAddButton`（表格项占位禁用）、条目行标记（置顶/收藏/摘要）与行内「更多」菜单（移动到…／置顶／收藏）、按文件夹筛选视图；共享控件 `Modal`/`Overlay` 落地（重命名与移动走弹窗）；文件夹规则抽成 `features/notes/folders.ts`（`folderDepthFor` / `canCreateChildFolder` / `folderMoveTargets`，非法移动目标带原因）。
 >
 > **计划修正（v0.2.6）**：验收点里的"删除（Q12）"整体**后移到 M4**——本计划的范围边界已把回收站界面划给 M4/M12，且 outbox 无删除类 op；没有回收站的删除对用户不可逆。Q12 的规则（确认框写清"文件夹及其中 N 条内容、M 个子文件夹将移入回收站"、保留原路径、恢复时父不在则回根目录）继续作为 **M4 的验收依据**。
 >
-> **剩余**：① 文件夹重命名 / 移动的界面入口（需要一个 Modal 或树内行内编辑组件）；② 条目菜单的其余项分别属 M3（加密）、M4（版本/删除）、M5（分享/导出）。
+> **条目菜单的其余项**分属 M3（加密）、M4（版本/删除）、M5（分享/导出）。
 
 **涉及文件**：`apps/web/src/features/notes/`（`FolderTree`、`FolderNode`、`NbAddButton`、移动/重命名菜单）、`apps/worker/src/routes/folders.ts` + `services/folders.ts`（补全）、`apps/web/src/data/db/`（文件夹仓储）。
 

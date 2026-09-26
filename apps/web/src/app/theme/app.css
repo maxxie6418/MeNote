@@ -1069,6 +1069,29 @@ button.chip--tag:hover {
   font-weight: 600;
 }
 
+/* 树节点的"更多"菜单：悬停/聚焦时出现，触屏常显（与条目行同一套做法） */
+.tree-row__wrap {
+  position: relative;
+}
+
+.tree-row__menu {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  opacity: 0;
+}
+
+.tree-row__wrap:hover .tree-row__menu,
+.tree-row__wrap:focus-within .tree-row__menu {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .tree-row__menu {
+    opacity: 1;
+  }
+}
+
 /* 新建文件夹的内联命名行（Enter 确认 / Esc 取消，Esc 或空名不创建） */
 .tree__new {
   padding: var(--sp-1) var(--sp-2);
@@ -1353,4 +1376,93 @@ button.chip--tag:hover {
     --list-w: 280px;
     --fnbar-w: 260px;
   }
+}
+
+/* —— 模态与遮罩（原型 .overlay / .modal；间距按 DESIGN.md §4.3 刻度收敛） —— */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 400px;
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+
+.modal__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+}
+
+.modal__title {
+  margin: 0;
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.modal__desc {
+  margin: 0;
+  padding: 0 var(--sp-5) var(--sp-3);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.modal__body {
+  padding: 0 var(--sp-5) var(--sp-1);
+}
+
+.modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+/* 移动目标的候选列表（禁用项必须带原因，见 DESIGN.md §6.1） */
+.target-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.target-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  text-align: left;
+}
+
+.target-list__item:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.target-list__item[aria-pressed="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+.target-list__item:disabled {
+  opacity: 0.5;
 }

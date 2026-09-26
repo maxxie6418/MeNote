@@ -218,6 +218,8 @@ export default function App() {
                 folders={workspace.folders}
                 counts={workspace.folderCounts}
                 onCreateFolder={workspace.createFolder}
+                onRenameFolder={workspace.renameFolder}
+                onMoveFolder={workspace.moveFolder}
               />
             }
           />

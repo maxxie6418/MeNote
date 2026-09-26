@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  canCreateChildFolder,
   collectTags,
   filterByView,
-  folderDepthFor,
-  MAX_FOLDER_DEPTH,
   viewTitle,
   viewKey,
   type ViewableItem,
@@ -50,19 +47,7 @@ describe("视图过滤", () => {
   });
 });
 
-describe("文件夹的两层限制（需求 §4.5）", () => {
-  it("深度：根下为第 1 层，第 1 层之下为第 2 层", () => {
-    expect(folderDepthFor(null)).toBe(1);
-    expect(folderDepthFor({ depth: 1 })).toBe(2);
-    expect(MAX_FOLDER_DEPTH).toBe(2);
-  });
-
-  it("第 2 层不能再建子文件夹（第 3 层非法）", () => {
-    expect(canCreateChildFolder(null)).toBe(true);
-    expect(canCreateChildFolder({ depth: 1 })).toBe(true);
-    expect(canCreateChildFolder({ depth: 2 })).toBe(false);
-  });
-
+describe("文件夹视图筛选", () => {
   it("文件夹视图只显示该文件夹直接包含的条目", () => {
     const scoped: ViewableItem[] = [
       { starred: 0, tags: [], updated_at: 3, folder_id: "f1" },

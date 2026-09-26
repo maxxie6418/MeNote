@@ -37,32 +37,49 @@ const TREE = [folder("f1", "学习", null, 1), folder("f2", "英语", "f1", 2)];
 
 function renderPanel(overrides: Partial<Parameters<typeof NotebookPanel>[0]> = {}) {
   const onCreateFolder = vi.fn(async () => undefined);
+  const onRenameFolder = vi.fn(async () => undefined);
+  const onMoveFolder = vi.fn(async () => undefined);
   const onViewChange = vi.fn();
-  render(
+  const { container } = render(
     <NotebookPanel
       view={{ kind: "notebook", folderId: null }}
       onViewChange={onViewChange}
       folders={TREE}
       counts={{ f1: 2, f2: 1 }}
       onCreateFolder={onCreateFolder}
+      onRenameFolder={onRenameFolder}
+      onMoveFolder={onMoveFolder}
       {...overrides}
     />,
   );
-  return { onCreateFolder, onViewChange };
+  return { container, onCreateFolder, onRenameFolder, onMoveFolder, onViewChange };
+}
+
+/**
+ * 取树行的按钮。
+ *
+ * 不能用 `getByRole("button", { name: /学习/ })`：同一节点还有一个"学习 的更多操作"的菜单按钮，
+ * 无障碍名以文件夹名开头会与树行同时命中（这正是 RTL 报 multiple elements 的原因）。
+ */
+function treeRow(container: HTMLElement, name: string): HTMLButtonElement {
+  const rows = [...container.querySelectorAll<HTMLButtonElement>(".tree-row")];
+  const matched = rows.find((row) => row.textContent?.includes(name));
+  if (!matched) throw new Error(`没找到树行：${name}`);
+  return matched;
 }
 
 describe("笔记本面板", () => {
   it("树渲染两层，节点带计数", () => {
-    renderPanel();
-    expect(screen.getByRole("button", { name: /学习/ }).textContent).toContain("2");
-    expect(screen.getByRole("button", { name: /英语/ }).textContent).toContain("1");
+    const { container } = renderPanel();
+    expect(treeRow(container, "学习").textContent).toContain("2");
+    expect(treeRow(container, "英语").textContent).toContain("1");
   });
 
   it("点文件夹切换视图（笔记本视图 + 该文件夹）", async () => {
     const user = userEvent.setup();
-    const { onViewChange } = renderPanel();
+    const { container, onViewChange } = renderPanel();
 
-    await user.click(screen.getByRole("button", { name: /学习/ }));
+    await user.click(treeRow(container, "学习"));
     expect(onViewChange).toHaveBeenCalledWith({ kind: "notebook", folderId: "f1" });
   });
 
@@ -126,7 +143,76 @@ describe("笔记本面板", () => {
   });
 
   it("节点显示待上传标记", () => {
-    renderPanel({ folders: [{ ...folder("f9", "待传", null, 1), pending: "create_folder" }] });
-    expect(screen.getByRole("button", { name: /待传/ }).textContent).toContain("待上传");
+    const { container } = renderPanel({
+      folders: [{ ...folder("f9", "待传", null, 1), pending: "create_folder" }],
+    });
+    expect(treeRow(container, "待传").textContent).toContain("待上传");
+  });
+});
+
+describe("文件夹的重命名与移动", () => {
+  it("重命名：弹窗改名后保存（空名时保存按钮禁用并说明原因）", async () => {
+    const user = userEvent.setup();
+    const { onRenameFolder } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "学习 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "重命名" }));
+
+    const dialog = screen.getByRole("dialog", { name: "重命名文件夹" });
+    const input = within(dialog).getByLabelText("文件夹名称") as HTMLInputElement;
+    expect(input.value).toBe("学习");
+
+    await user.clear(input);
+    const save = within(dialog).getByRole("button", { name: "保存" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(save.title).toContain("不能为空");
+
+    await user.type(input, "进修");
+    await user.click(within(dialog).getByRole("button", { name: "保存" }));
+    expect(onRenameFolder).toHaveBeenCalledWith("f1", "进修");
+  });
+
+  it("移动：候选列出根目录与合法的第 1 层；非法目标置灰并写明原因", async () => {
+    const user = userEvent.setup();
+    // 用三节点的树：学习（有子夹）· 工作（空）· 英语（学习之下）
+    renderPanel({
+      folders: [...TREE, folder("f3", "工作", null, 1)],
+    });
+
+    // 学习下面有子夹，所以移不到"工作"（会把子夹顶到第三层）
+    await user.click(screen.getByRole("button", { name: "学习 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "移动到…" }));
+
+    const dialog = screen.getByRole("dialog", { name: "移动文件夹" });
+    const intoWork = within(dialog).getByRole("button", { name: /工作/ }) as HTMLButtonElement;
+    expect(intoWork.disabled).toBe(true);
+    expect(intoWork.title).toContain("超过两层");
+
+    // 根目录：已经在根目录 → 置灰
+    const root = within(dialog).getByRole("button", { name: /根目录/ }) as HTMLButtonElement;
+    expect(root.disabled).toBe(true);
+    expect(root.title).toContain("已经在根目录");
+  });
+
+  it("移动：第 2 层文件夹可以移回根目录", async () => {
+    const user = userEvent.setup();
+    const { onMoveFolder } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "英语 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "移动到…" }));
+    const dialog = screen.getByRole("dialog", { name: "移动文件夹" });
+    await user.click(within(dialog).getByRole("button", { name: /根目录/ }));
+
+    expect(onMoveFolder).toHaveBeenCalledWith("f2", null);
+  });
+
+  it("第 2 层节点的菜单里没有「新建子文件夹」（合法动作不存在，就不出现入口）", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "英语 的更多操作" }));
+    const menu = screen.getByRole("menu", { name: "英语 的更多操作" });
+    expect(within(menu).queryByRole("menuitem", { name: "新建子文件夹" })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: "重命名" })).toBeTruthy();
   });
 });

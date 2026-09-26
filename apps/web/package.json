@@ -7,8 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json",
-    "deploy": "wrangler deploy"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@menote/shared": "workspace:*",

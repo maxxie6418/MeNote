@@ -1,0 +1,2 @@
+# M1 起放置 D1 迁移脚本（架构 §15.4）：按序号命名、幂等、单脚本 ≤ 45 条语句。
+# 迁移经根 deploy 脚本的 `wrangler d1 migrations apply DB --remote` 执行（见 local-dev.md §7）。

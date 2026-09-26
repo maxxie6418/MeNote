@@ -7,14 +7,20 @@
   // 唯一 Worker 入口（架构 §2.3.1）：只做装配，业务在 routes/ 与 services/
   "main": "apps/worker/src/index.ts",
   "assets": {
-    // SPA：未命中静态资源时回 index.html；/api/* 一律由 Worker 处理
+    // SPA：未命中静态资源时回 index.html；/api 与 /api/* 一律由 Worker 处理
+    // （只写 "/api/*" 时，无尾斜杠的 /api 会落 SPA 回退返回 HTML）
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"],
+    "run_worker_first": ["/api", "/api/*"],
     "binding": "ASSETS"
   },
   // 不写 database_id：部署时自动供给并回写（架构 §15.5，wrangler ≥ 4.45）
   "d1_databases": [
-    { "binding": "DB", "database_name": "menote-db" }
+    {
+      "binding": "DB",
+      "database_name": "menote-db",
+      // 显式指定：插件会把默认值改写为 <仓库根>/migrations（不存在）导致迁移报错
+      "migrations_dir": "apps/worker/src/db/migrations"
+    }
   ],
   "observability": {
     "enabled": true

@@ -148,8 +148,8 @@ MeNote/
 │   │   ├── src/app/                # 路由、布局、功能栏
 │   │   ├── src/features/           # notes / tables / memos / tasks / search / settings / share-viewer ...
 │   │   ├── src/data/               # Dexie 模式、仓储、outbox、同步引擎
-│   │   ├── src/crypto/             # 密钥服务客户端（调用加密 Worker）
-│   │   ├── src/workers/            # search.worker / media.worker / crypto.worker / session.sharedworker
+│   │   ├── src/crypto/             # 隐私门禁与备份导出加密（PBKDF2、信封）
+│   │   ├── src/workers/            # search.worker / media.worker
 │   │   └── src/sw/                 # Service Worker
 │   └── worker/                     # Cloudflare Worker
 │       ├── src/routes/             # api / public / mcp
@@ -160,7 +160,7 @@ MeNote/
 ├── packages/
 │   ├── shared/                     # 前后端共享：类型、Valibot schema、错误码、常量（上限、阈值）
 │   ├── mdcore/                     # front matter、标签与任务字段派生、表格编解码、快照格式、附件引用改写
-│   └── crypto-format/              # 密文信封格式的编码与解析（纯函数，不含密钥操作）
+│   └── crypto-format/              # 备份导出信封格式的编码与解析（纯函数，不含密钥操作）
 ├── wrangler.jsonc
 └── .github/workflows/ci.yml
 ```
@@ -221,7 +221,7 @@ flowchart TB
 
 | 表 | 主键 / 索引 | 内容 |
 |---|---|---|
-| `items` | `id`；`[folderId+updatedAt]`、`memoAt`、`syncSeq`、`isTask` | 条目元数据（与服务端 `items` 同构；加密空间内标题存密文） |
+| `items` | `id`；`[folderId+updatedAt]`、`memoAt`、`syncSeq`、`isTask` | 条目元数据（与服务端 `items` 同构；隐私空间内条目同样明文，带 `in_enc_space` 标记） |
 | `bodies` | `itemId` | 正文缓存：明文字符串；带 `rev`、`contentHash` |
 | `drafts` | `itemId` | 未上传的编辑稿（每 2 秒写一次） |
 | `folders` | `id`；`parentId`、`syncSeq` | 文件夹树 |
@@ -342,8 +342,8 @@ flowchart LR
 |---|---|---|---|
 | `a/{uid}/{sha256}` | 明文附件原图 | 客户端流式上传 | `private, max-age=31536000, immutable` |
 | `a/{uid}/{sha256}.t` | 明文缩略图 | 同上 | 同上 |
-| `e/{uid}/{id}` | 加密附件或缩略图（密文） | 同上 | `private, max-age=31536000` |
-| `v/{uid}/{item_id}/{version_id}` | 版本正文（gzip 或原样；加密条目为密文） | 客户端或 Worker | 不缓存 |
+| `e/{uid}/{id}` | （v1.1 废弃：不再有静态密文附件） | — | — |
+| `v/{uid}/{item_id}/{version_id}` | 版本正文（gzip 或原样） | 客户端或 Worker | 不缓存 |
 | `snap/{uid}/...` | md 快照目录（需求 3.2 的结构） | Cron | 不缓存 |
 
 【v1.1 注】`e/` 前缀（静态密文附件）不再使用——所有附件明文存储，隐私条目仅在出站备份时加密（7.3、7.4）。
@@ -595,7 +595,7 @@ sequenceDiagram
 
 ### 12.3 永久删除【依需求 14.4】
 
-一个 D1 batch 内完成：删除 `items`、`item_bodies`、`attachment_refs`、`data_keys`、`shares` / `share_items` 中的相关行，删除 `item_versions` 并把它们的 R2 键登记到 `r2_gc_queue`，写入墓碑，写入快照队列（删除快照文件，Memo 则重写月份文件）。不再被引用的附件由每日维护任务标记与删除。条目数量多（例如清空回收站）时，由客户端按每批 10 条分多个请求提交，保证每个请求的语句数在上限以内。
+一个 D1 batch 内完成：删除 `items`、`item_bodies`、`attachment_refs`、`shares` / `share_items` 中的相关行，删除 `item_versions` 并把它们的 R2 键登记到 `r2_gc_queue`，写入墓碑，写入快照队列（删除快照文件，Memo 则重写月份文件）。不再被引用的附件由每日维护任务标记与删除。条目数量多（例如清空回收站）时，由客户端按每批 10 条分多个请求提交，保证每个请求的语句数在上限以内。
 
 ### 12.4 快照与外部备份【依需求 16.3】
 
@@ -641,7 +641,7 @@ sequenceDiagram
 | 项 | 预算 |
 |---|---|
 | 首屏 JS（gzip） | ≤ 200 KB（界面框架 + 布局 + 列表 + Dexie） |
-| 按需加载的模块 | 编辑器、表格编辑器、Markdown 渲染、搜索 Worker、加密 Worker（含 Argon2 wasm）、设置页、分享查看器各自独立分包 |
+| 按需加载的模块 | 编辑器、表格编辑器、Markdown 渲染、搜索 Worker、媒体 Worker、备份导出加密、设置页、分享查看器各自独立分包 |
 | 冷启动到可操作（已缓存外壳） | 中端手机 1.5 秒内显示本地列表，不等待网络 |
 | 输入延迟 | 2MB 文档中连续输入无可感知卡顿：大小计量与补丁生成增量计算，预览按块增量渲染 |
 | 备份导出加密（单文件 ≤ 数 MB） | 浏览器端执行，不阻塞主线程 |
@@ -663,7 +663,7 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 | Cron 备份出站加密（≤ 4 MB/轮） | AES-GCM（WebCrypto） | ≈ 2–4 ms（待实测校准） | 每轮加密字节配额，超出留到下一轮 |
 | Cron 每轮 | 多个小任务 | 按配额控制 | 配额可调，每轮可中断 |
 
-实测方法：部署测试环境，用脚本构造 64 KB、512 KB、1 MB、1.9 MB 的明文与密文，逐个接口压测，从 Workers 日志读取每次调用的 CPU 时间；结论写回本节，并据此确认需求 19.6 的备选方案是否需要启用。
+实测方法：部署测试环境，用脚本构造 64 KB、512 KB、1 MB、1.9 MB 的明文与备份信封密文，逐个接口压测，从 Workers 日志读取每次调用的 CPU 时间；结论写回本节，并据此确认需求 19.6 的备选方案是否需要启用。
 
 ---
 

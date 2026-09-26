@@ -328,6 +328,24 @@ button {
   display: flex;
 }
 
+/* 主操作区双栏容器：四个视图共用（M2-3 验收点）；首页等单栏视图靠开关让位 */
+.two-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.two-pane__doc {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.two-pane__doc--center {
+  display: grid;
+  place-items: center;
+}
+
 .listpane {
   width: var(--list-w);
   flex: none;
@@ -816,13 +834,24 @@ button {
   font-weight: 600;
 }
 
+/* 诊断信息（地址 / 协议 / 安全上下文 / WebCrypto）：等宽、靠右，便于用户原样抄给开发者 */
+.banner__facts {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .skeleton {
   height: 14px;
   border-radius: var(--radius-sm);
   background: var(--panel-3);
 }
 
-/* 可选胶囊（录入框的模式附加项）：20px 高，与只展示的 chip 区别在可切换（DESIGN.md §5.3） */
+/* —— 可选胶囊（录入框的模式附加项）：20px 高，与只展示的 chip 区别在可切换（DESIGN.md §5.3） —— */
 .sw {
   display: inline-flex;
   align-items: center;
@@ -834,6 +863,207 @@ button {
   font-size: var(--fs-micro);
   color: var(--muted);
   white-space: nowrap;
+}
+
+.sw--primary {
+  border-color: var(--primary-line);
+  color: var(--primary-ink);
+}
+
+.sw--amber {
+  border-color: var(--amber-line);
+  color: var(--amber);
+}
+
+.sw--green {
+  border-color: var(--green-line);
+  color: var(--green);
+}
+
+.sw--red {
+  border-color: var(--red-line);
+  color: var(--red);
+}
+
+.sw[data-disabled] {
+  opacity: 0.6;
+}
+
+/* —— 实底信息胶囊与标签胶囊（components.md §八 `Chip`；值取自原型 .chip / .chip.tag） —— */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 21px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--panel-3);
+  color: var(--text-2);
+}
+
+.chip--primary {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+
+.chip--amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.chip--green {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.chip--red {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.chip--tag {
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+}
+
+button.chip--tag {
+  cursor: pointer;
+}
+
+button.chip--tag:hover {
+  color: var(--text);
+  border-color: var(--line-2);
+}
+
+.chip--tag.chip--active {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+
+/* —— 功能栏分组、组头与计数 —— */
+.fnbar__group {
+  margin-top: var(--sp-4);
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px var(--sp-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.nb-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.nav-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-item__count {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 9px;
+}
+
+/* —— 浏览三段：下划线页签（与盒式分段控件刻意区分，DESIGN.md §2.5-4） —— */
+.nav-seg {
+  display: flex;
+  gap: 2px;
+  margin: 6px 0 var(--sp-2);
+  padding: 0 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.seg-item {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  height: 29px;
+  font-size: var(--fs-small);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.seg-item:hover:not(:disabled) {
+  color: var(--text-2);
+}
+
+.seg-item[aria-current="true"] {
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+.seg-item[aria-current="true"]::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--primary);
+}
+
+.seg-item:disabled {
+  opacity: 0.55;
+}
+
+/* 录入框的模式行：分段控件占满余下宽度（原型 .mode-tabs{flex:1;min-width:0}） */
+.segmented--compact {
+  flex: 1;
+  min-width: 0;
+}
+
+/* —— 加密空间：贴底固定，不随导航滚动（DESIGN.md §2.2；M2 只做外观与占位） —— */
+.fnbar__vault {
+  flex: none;
+  padding: var(--sp-2) var(--sp-3) 10px;
+  border-top: 1px solid var(--line);
+}
+
+.vault-node {
+  border: 1px dashed var(--line-2);
+}
+
+.vault-node[data-locked="true"] {
+  border-style: solid;
+  background: var(--hairline);
+  color: var(--muted);
+}
+
+.vault-node__tagline {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  color: var(--muted);
 }
 
 .brandmark {

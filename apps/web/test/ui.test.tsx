@@ -125,7 +125,16 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
 describe("功能栏与录入框占位", () => {
   it("三档模式可切换、附加项容器恒在、发布按钮禁用且说明原因", async () => {
     const user = userEvent.setup();
-    render(<FnBar onNewNote={vi.fn()} />);
+    render(
+      <FnBar
+        onNewNote={vi.fn()}
+        onPublishNote={vi.fn()}
+        view={{ kind: "notebook" }}
+        onViewChange={vi.fn()}
+        counts={{ notebook: 0 }}
+        tags={[]}
+      />,
+    );
 
     // 结构不变量：新建按钮 + 录入框三行
     expect(screen.getByRole("button", { name: /新建笔记/ })).toBeTruthy();
@@ -152,9 +161,20 @@ describe("功能栏与录入框占位", () => {
     // 容器始终存在（切换模式不换高度靠 CSS 固定 26px，这里断言容器没被移除）
     expect(screen.getByTestId("composer-extras")).toBeTruthy();
 
+    // 笔记档已可用：禁用原因是"还没写内容"，不再是"M2 未提供"
     const publish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
     expect(publish.disabled).toBe(true);
-    expect(publish.title).toContain("M2");
+    expect(publish.title).toContain("先写点内容");
+
+    // 未接入的档位必须说明原因（DESIGN.md §6.1：禁用要给理由）
+    await user.click(screen.getByRole("button", { name: "Memo" }));
+    const memoPublish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
+    expect(memoPublish.disabled).toBe(true);
+    expect(memoPublish.title).toContain("M2-4");
+
+    await user.click(screen.getByRole("button", { name: "待办" }));
+    const taskPublish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
+    expect(taskPublish.title).toContain("M2-5");
   });
 });
 
@@ -165,6 +185,7 @@ describe("笔记列表空状态", () => {
     render(
       <NoteList
         items={[]}
+        title="全部笔记"
         selectedId={null}
         loading={false}
         onSelect={vi.fn()}
@@ -182,6 +203,7 @@ describe("笔记列表空状态", () => {
     render(
       <NoteList
         items={[note("a"), note("b", { pending: "save_body" })]}
+        title="全部笔记"
         selectedId="a"
         loading={false}
         onSelect={vi.fn()}
@@ -324,8 +346,18 @@ describe("设置壳", () => {
 });
 
 describe("非安全连接的常驻警告", () => {
-  it("http 打开时给出可行动的解释（不是 TypeError）", () => {
-    const { rerender } = render(<InsecureContextBanner secure={false} />);
+  it("给出可行动的解释，并把观测到的事实一并显示", () => {
+    const { rerender } = render(
+      <InsecureContextBanner
+        environment={{
+          secure: false,
+          protocol: "http:",
+          href: "http://me.example/app",
+          hasSubtle: false,
+          reason: "页面是用 http 打开的。请改用 https 访问。",
+        }}
+      />,
+    );
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("https");
     expect(alert.textContent).toContain("无法登录");
@@ -341,6 +373,7 @@ describe("可点元素键盘可达", () => {
     render(
       <NoteList
         items={[note("a")]}
+        title="全部笔记"
         selectedId={null}
         loading={false}
         onSelect={onSelect}

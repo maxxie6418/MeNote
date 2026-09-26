@@ -12,13 +12,22 @@ export type IconName =
   | "plus"
   | "search"
   | "chevron-down"
+  | "chevron-right"
   | "settings"
   | "logout"
   | "info"
   | "cloud-ok"
   | "cloud-off"
   | "alert"
-  | "note";
+  | "note"
+  | "home"
+  | "clock"
+  | "check-square"
+  | "refresh"
+  | "star"
+  | "folder"
+  | "tag"
+  | "lock";
 
 export function IconSprite() {
   return (
@@ -60,6 +69,39 @@ export function IconSprite() {
       <symbol id="i-note" viewBox="0 0 16 16">
         <path d="M3.6 2.5h6.2l2.6 2.6v8.4H3.6z" />
         <path d="M9.6 2.6v2.6h2.6M5.6 8.4h4.8M5.6 10.8h3.4" />
+      </symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 16 16">
+        <path d="M6 3.5 10.5 8 6 12.5" />
+      </symbol>
+      <symbol id="i-home" viewBox="0 0 16 16">
+        <path d="M2.8 7.2 8 2.8l5.2 4.4v5.6a1 1 0 0 1-1 1H3.8a1 1 0 0 1-1-1z" />
+        <path d="M6.4 13.6V9.4h3.2v4.2" />
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="5.6" />
+        <path d="M8 4.8V8l2.2 1.6" />
+      </symbol>
+      <symbol id="i-check-square" viewBox="0 0 16 16">
+        <rect x="2.8" y="2.8" width="10.4" height="10.4" rx="2" />
+        <path d="M5.6 8.2 7.4 10l3-3.6" />
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 16 16">
+        <path d="M13 8a5 5 0 1 1-1.6-3.7" />
+        <path d="M13.2 2.6v3.2h-3.2" />
+      </symbol>
+      <symbol id="i-star" viewBox="0 0 16 16">
+        <path d="M8 2.6l1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 11.3l-3.4 1.8.7-3.8L2.5 6.6l3.8-.5z" />
+      </symbol>
+      <symbol id="i-folder" viewBox="0 0 16 16">
+        <path d="M2.6 4.4a1 1 0 0 1 1-1h2.6l1.4 1.6h4.8a1 1 0 0 1 1 1v5.6a1 1 0 0 1-1 1H3.6a1 1 0 0 1-1-1z" />
+      </symbol>
+      <symbol id="i-tag" viewBox="0 0 16 16">
+        <path d="M8.4 2.6H13v4.6l-5.6 5.6-4.6-4.6z" />
+        <path d="M10.6 5.4v.4" />
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 16 16">
+        <rect x="3.6" y="7" width="8.8" height="6.4" rx="1.4" />
+        <path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7" />
       </symbol>
     </svg>
   );

@@ -5,7 +5,7 @@
  * 切换条目由 `key={item.id}` 重新挂载编辑器；切换编辑/预览模式**不重建文档**（架构 §3.3）。
  */
 import { Suspense, lazy, useState } from "react";
-import { EmptyState } from "../../../app/ui/Controls";
+import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
 import type { LocalItem } from "../../../data/db";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
@@ -50,12 +50,7 @@ export function NoteWorkspace({
   if (!item) {
     return (
       <div className="docpane">
-        <div className="docpane__center">
-          <EmptyState
-            title="还没有打开任何笔记"
-            hint="从左侧选一篇，或者用功能栏顶部的「新建笔记」开始写。"
-          />
-        </div>
+        <EmptyDocPanel />
       </div>
     );
   }

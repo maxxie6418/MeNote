@@ -115,6 +115,17 @@ describe("功能栏几何（DESIGN.md §2.5-2 不变量）", () => {
       expect(app).toMatch(new RegExp(`${selector}\\s*\\{[^}]*overflow-y:\\s*auto`));
     }
   });
+
+  it("加密空间贴底固定：容器 flex:none，且不在滚动区里（M2-2 验收点）", () => {
+    expect(app).toMatch(/\.fnbar__vault\s*\{[^}]*flex:\s*none/);
+    expect(app).toMatch(/\.fnbar__vault\s*\{[^}]*padding:/);
+    // 贴底固定靠"不在滚动容器里"实现，结构由 fnbar.test.tsx 的 DOM 断言守住
+  });
+
+  it("录入框模式行的分段控件占满余下宽度（原型 .mode-tabs 的 flex:1/min-width:0）", () => {
+    expect(app).toMatch(/\.segmented--compact\s*\{[^}]*flex:\s*1/);
+    expect(app).toMatch(/\.segmented--compact\s*\{[^}]*min-width:\s*0/);
+  });
 });
 
 describe("组件硬性规范（DESIGN.md §3.2 / §5.5）", () => {

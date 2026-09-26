@@ -7,6 +7,7 @@
 import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
+import { ItemListHead } from "../../../app/workarea/ItemListHead";
 
 const PENDING_LABEL: Record<string, string> = {
   create: "待上传",
@@ -26,19 +27,37 @@ function summaryOf(item: LocalItem): string {
 
 export interface NoteListProps {
   items: LocalItem[];
+  /** 列表头标题（随视图变化：全部笔记 / 最近编辑 / 收藏 / #标签） */
+  title: string;
   selectedId: string | null;
   loading: boolean;
   onSelect: (id: string) => void;
   onNewNote: () => void;
 }
 
-export function NoteList({ items, selectedId, loading, onSelect, onNewNote }: NoteListProps) {
+/** 空状态的文案随视图不同——收藏空与笔记空的原因不一样，出口也不一样 */
+function emptyCopy(title: string): { title: string; hint: string } {
+  if (title === "收藏") {
+    return {
+      title: "还没有收藏的笔记",
+      hint: "在条目的更多菜单里点「收藏」，它就会出现在这里。",
+    };
+  }
+  if (title.startsWith("# ")) {
+    return { title: "这个标签下还没有笔记", hint: "换一个标签，或给笔记写上前缀 # 的标签。" };
+  }
+  return {
+    title: "还没有笔记",
+    hint: "点左上角的「新建笔记」开始写第一篇；写下的内容会先存在本机，联网后自动上传。",
+  };
+}
+
+export function NoteList({ items, title, selectedId, loading, onSelect, onNewNote }: NoteListProps) {
+  const empty = emptyCopy(title);
+
   return (
     <section className="listpane" aria-label="笔记列表">
-      <div className="listpane__head">
-        <h2 className="listpane__title">全部笔记</h2>
-        <span className="listpane__count">{items.length} 条</span>
-      </div>
+      <ItemListHead title={title} count={items.length} />
 
       <div className="listpane__scroll">
         {loading ? (
@@ -50,8 +69,8 @@ export function NoteList({ items, selectedId, loading, onSelect, onNewNote }: No
         ) : items.length === 0 ? (
           <div style={{ padding: "var(--sp-6) var(--sp-4)" }}>
             <EmptyState
-              title="还没有笔记"
-              hint="点左上角的「新建笔记」开始写第一篇；写下的内容会先存在本机，联网后自动上传。"
+              title={empty.title}
+              hint={empty.hint}
               action={
                 <Button variant="secondary" size="sm" onClick={onNewNote}>
                   <Icon name="plus" size={13} />

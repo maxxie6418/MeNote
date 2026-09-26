@@ -1,25 +1,38 @@
 /**
- * 非安全连接的常驻警告。
+ * 加密能力不可用时的常驻警告（DESIGN.md：破坏性后果必须保持可见，不进 InfoHint）。
  *
- * 为什么必须有：浏览器只在**安全上下文**（https 或 localhost）提供 WebCrypto。
- * 用 `http://` 打开部署好的站点时，`crypto.subtle` 不存在，登录/注册/保存全都会失败，
- * 而用户看到的是一句 "Cannot read properties of undefined (reading 'importKey')"（M1 实测踩到）。
- *
- * 按 DESIGN.md：**破坏性后果必须保持可见**，所以这里用常驻横幅而不是 InfoHint。
+ * 文案不再写死"是 http"——改为**显示观测到的事实**（地址 / 协议 / 安全上下文 / WebCrypto），
+ * 因为"https 下却报非安全上下文"是真实发生过的情况（证书警告被跳过、页面被嵌在 http iframe 里、
+ * 或经由代理与内置浏览器打开）。见 `cryptoEnvironment.ts` 的起因说明。
  */
-export function InsecureContextBanner({ secure }: { secure: boolean }) {
-  if (secure) return null;
+import {
+  describeCryptoEnvironment,
+  inspectCryptoEnvironment,
+  type CryptoEnvironment,
+} from "./cryptoEnvironment";
+
+export interface InsecureContextBannerProps {
+  /** 调用方已探好的环境（App 用）；不传则自行探测 */
+  environment?: CryptoEnvironment;
+  /**
+   * 显式指定可用性，跳过自检：
+   * - `true` → 确定可用，不渲染
+   * - `false` → 确定不可用，**必定渲染**（测试与"已知不可用"的场景用）
+   * - 不传 → 按自检结果决定
+   */
+  secure?: boolean;
+}
+
+export function InsecureContextBanner({ environment, secure }: InsecureContextBannerProps) {
+  if (secure === true) return null;
+
+  const env = environment ?? inspectCryptoEnvironment();
+  if (secure === undefined && env.secure && env.hasSubtle) return null;
 
   return (
     <div className="banner banner--danger" role="alert">
-      当前页面不是安全连接（http），浏览器不提供加密能力，无法登录、注册或保存笔记。请改用
-      https 打开本应用。
+      <span>浏览器不提供加密能力，无法登录、注册或保存笔记。{env.reason}</span>
+      <code className="banner__facts">{describeCryptoEnvironment(env)}</code>
     </div>
   );
-}
-
-/** 当前是否处于安全上下文（非浏览器环境按安全处理，避免误报） */
-export function isSecureContextNow(): boolean {
-  if (typeof window === "undefined") return true;
-  return window.isSecureContext !== false;
 }

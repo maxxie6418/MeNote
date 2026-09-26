@@ -15,6 +15,13 @@ import {
   type LocalItem,
 } from "../../data/db";
 import { createNoteEditor, type NoteEditorController, type NoteEditorSnapshot } from "./model";
+import {
+  collectTags,
+  DEFAULT_VIEW,
+  filterByView,
+  viewTitle,
+  type NotesView,
+} from "./views";
 
 const DEFAULT_TITLE = "未命名笔记";
 
@@ -42,15 +49,22 @@ function sameItems(left: LocalItem[], right: LocalItem[]): boolean {
 }
 
 export interface NotesWorkspace {
+  /** 当前视图下的条目（已过滤、已排序） */
   items: LocalItem[];
+  /** 全部未删除条目（计数与标签云用，不受视图过滤影响） */
+  allItems: LocalItem[];
   loading: boolean;
+  view: NotesView;
+  viewTitle: string;
+  setView: (view: NotesView) => void;
+  tags: Array<{ tag: string; count: number }>;
   selectedId: string | null;
   selected: LocalItem | null;
   initialBody: string;
   snapshot: NoteEditorSnapshot | null;
   refresh: () => Promise<void>;
   open: (id: string) => Promise<void>;
-  createNote: () => Promise<void>;
+  createNote: (options?: { title?: string; body?: string }) => Promise<void>;
   changeTitle: (title: string) => Promise<void>;
   input: (text: string) => void;
   notifyUploaded: () => void;
@@ -61,11 +75,12 @@ export interface NotesWorkspace {
 }
 
 export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): NotesWorkspace {
-  const [items, setItems] = useState<LocalItem[]>([]);
+  const [allItems, setAllItems] = useState<LocalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [initialBody, setInitialBody] = useState("");
   const [snapshot, setSnapshot] = useState<NoteEditorSnapshot | null>(null);
+  const [view, setView] = useState<NotesView>(DEFAULT_VIEW);
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;
@@ -73,7 +88,7 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   /** 内容没变就不要替换数组：每次同步都塞新数组会让下游依赖无谓地变身份 */
   const refresh = useCallback(async () => {
     const rows = await listLocalItems();
-    setItems((previous) => (sameItems(previous, rows) ? previous : rows));
+    setAllItems((previous) => (sameItems(previous, rows) ? previous : rows));
   }, []);
 
   // 首次加载：setState 放在 then 回调里，不在 effect 体内同步触发（react-hooks/set-state-in-effect）
@@ -81,7 +96,7 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     let alive = true;
     void listLocalItems().then((rows) => {
       if (!alive) return;
-      setItems(rows);
+      setAllItems(rows);
       setLoading(false);
     });
     return () => {
@@ -106,13 +121,16 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [onLocalWrite],
   );
 
-  const createNote = useCallback(async () => {
-    const id = newUlid();
-    await createLocalNote(id, DEFAULT_TITLE, "", Date.now());
-    await refresh();
-    await open(id);
-    onLocalWrite?.();
-  }, [onLocalWrite, open, refresh]);
+  const createNote = useCallback(
+    async (options?: { title?: string; body?: string }) => {
+      const id = newUlid();
+      await createLocalNote(id, options?.title ?? DEFAULT_TITLE, options?.body ?? "", Date.now());
+      await refresh();
+      await open(id);
+      onLocalWrite?.();
+    },
+    [onLocalWrite, open, refresh],
+  );
 
   const changeTitle = useCallback(
     async (title: string) => {
@@ -128,6 +146,8 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [onLocalWrite, refresh, selectedId],
   );
 
+  const items = useMemo(() => filterByView(allItems, view), [allItems, view]);
+  const tags = useMemo(() => collectTags(allItems), [allItems]);
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
   /**
@@ -137,7 +157,12 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   return useMemo<NotesWorkspace>(
     () => ({
       items,
+      allItems,
       loading,
+      view,
+      viewTitle: viewTitle(view),
+      setView,
+      tags,
       selectedId,
       selected,
       initialBody,
@@ -152,6 +177,20 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       notifyConflict: () => editorRef.current?.notifyConflict(),
       refreshEditorState: () => editorRef.current?.refreshState() ?? Promise.resolve(),
     }),
-    [changeTitle, createNote, initialBody, items, loading, open, refresh, selected, selectedId, snapshot],
+    [
+      allItems,
+      changeTitle,
+      createNote,
+      initialBody,
+      items,
+      loading,
+      open,
+      refresh,
+      selected,
+      selectedId,
+      snapshot,
+      tags,
+      view,
+    ],
   );
 }

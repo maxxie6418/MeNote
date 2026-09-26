@@ -10,17 +10,20 @@ import {
   base64UrlEncode,
   type AuthKdfParams,
 } from "@menote/shared";
+import { describeCryptoEnvironment, inspectCryptoEnvironment } from "../../app/ui/cryptoEnvironment";
 
 export async function deriveLoginKey(
   password: string,
   saltBase64Url: string,
   kdf: AuthKdfParams = LOGIN_KDF_DEFAULT,
 ): Promise<string> {
-  // 非安全上下文（http 打开的页面）里浏览器不提供 WebCrypto：必须给出人话解释，
-  // 而不是让用户看到 "Cannot read properties of undefined (reading 'importKey')"。
+  // 浏览器不提供加密能力时必须给出**可行动的诊断**，而不是
+  // "Cannot read properties of undefined (reading 'importKey')"。
+  // 文案不写死"是 http"——https 下也可能因证书警告被跳过等原因被判为非安全上下文。
   if (typeof crypto === "undefined" || !crypto.subtle) {
+    const env = inspectCryptoEnvironment();
     throw new Error(
-      "当前页面不是安全连接（http），浏览器不提供加密能力，无法登录或注册。请改用 https 打开本应用。",
+      `浏览器不提供加密能力，无法登录或注册。${env.reason}（${describeCryptoEnvironment(env)}）`,
     );
   }
 

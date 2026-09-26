@@ -16,6 +16,7 @@
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@menote/mdcore": "workspace:*",
     "@menote/shared": "workspace:*",
     "dexie": "^4.4.6",
     "dompurify": "^3.4.16",

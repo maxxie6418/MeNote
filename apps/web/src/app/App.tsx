@@ -23,9 +23,11 @@ import { useRoute } from "./router";
 import { useTheme } from "./theme/useTheme";
 import { Topbar } from "./topbar/Topbar";
 import { IconSprite } from "./ui/Icon";
-import { InsecureContextBanner, isSecureContextNow } from "./ui/InsecureContextBanner";
+import { InsecureContextBanner } from "./ui/InsecureContextBanner";
+import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnvironment";
 import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
+import { TwoPane } from "./workarea/TwoPane";
 
 export default function App() {
   const { route, navigate } = useRoute();
@@ -35,6 +37,15 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>("idle");
   const [pendingCount, setPendingCount] = useState(0);
   const [registration, setRegistration] = useState<RegistrationState | null>(null);
+
+  /**
+   * 加密能力环境只在挂载时探一次：它会决定"能不能登录/保存"，而浏览器在会话中途改变
+   * 安全上下文的情况极罕见；探一次可以避免每次渲染都读 location。
+   */
+  const insecureEnvironment: CryptoEnvironment | null = (() => {
+    const env = inspectCryptoEnvironment();
+    return env.secure && env.hasSubtle ? null : env;
+  })();
 
   const engineRef = useRef<SyncEngine | null>(null);
 
@@ -123,7 +134,7 @@ export default function App() {
     return (
       <>
         <IconSprite />
-        <InsecureContextBanner secure={isSecureContextNow()} />
+        <InsecureContextBanner />
         <div className="authpage">正在检查登录状态…</div>
       </>
     );
@@ -133,7 +144,7 @@ export default function App() {
     return (
       <>
         <IconSprite />
-        <InsecureContextBanner secure={isSecureContextNow()} />
+        <InsecureContextBanner />
         {route.name === "register" ? (
           <RegisterPage
             firstUser={!auth.snapshot.hasUsers}
@@ -168,8 +179,8 @@ export default function App() {
       <IconSprite />
       <AppShell
         banner={
-          !isSecureContextNow() ? (
-            <InsecureContextBanner secure={false} />
+          insecureEnvironment ? (
+            <InsecureContextBanner environment={insecureEnvironment} />
           ) : syncStatus === "offline" ? (
             <div className="banner" role="status">
               离线，改动会在联网后上传
@@ -192,6 +203,14 @@ export default function App() {
             onNewNote={() => {
               void workspace.createNote();
             }}
+            onPublishNote={(title, body) => {
+              void workspace.createNote({ title, body });
+              pushToast("已新建笔记", "success");
+            }}
+            view={workspace.view}
+            onViewChange={workspace.setView}
+            counts={{ notebook: workspace.allItems.length }}
+            tags={workspace.tags}
           />
         }
       >
@@ -222,30 +241,35 @@ export default function App() {
             }}
           />
         ) : (
-          <>
-            <NoteList
-              items={workspace.items}
-              selectedId={workspace.selectedId}
-              loading={workspace.loading}
-              onSelect={(id) => {
-                void workspace.open(id);
-              }}
-              onNewNote={() => {
-                void workspace.createNote();
-              }}
-            />
-            {/* key 用条目 id：切换条目必须重挂载正文区，否则新条目会沿用上一篇的文本 */}
-            <NoteWorkspace
-              key={workspace.selectedId ?? "none"}
-              item={workspace.selected}
-              initialBody={workspace.initialBody}
-              snapshot={workspace.snapshot}
-              onInput={workspace.input}
-              onTitleChange={(title) => {
-                void workspace.changeTitle(title);
-              }}
-            />
-          </>
+          <TwoPane
+            list={
+              <NoteList
+                items={workspace.items}
+                title={workspace.viewTitle}
+                selectedId={workspace.selectedId}
+                loading={workspace.loading}
+                onSelect={(id) => {
+                  void workspace.open(id);
+                }}
+                onNewNote={() => {
+                  void workspace.createNote();
+                }}
+              />
+            }
+            doc={
+              /* key 用条目 id：切换条目必须重挂载正文区，否则新条目会沿用上一篇的文本 */
+              <NoteWorkspace
+                key={workspace.selectedId ?? "none"}
+                item={workspace.selected}
+                initialBody={workspace.initialBody}
+                snapshot={workspace.snapshot}
+                onInput={workspace.input}
+                onTitleChange={(title) => {
+                  void workspace.changeTitle(title);
+                }}
+              />
+            }
+          />
         )}
       </AppShell>
       <ToastHost />

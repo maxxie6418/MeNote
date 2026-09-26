@@ -47,6 +47,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.13
         version: 6.43.13
+      '@menote/mdcore':
+        specifier: workspace:*
+        version: link:../../packages/mdcore
       '@menote/shared':
         specifier: workspace:*
         version: link:../../packages/shared

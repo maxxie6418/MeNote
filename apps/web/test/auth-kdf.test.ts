@@ -14,13 +14,15 @@ describe("登录密钥派生", () => {
     expect(key.length).toBeGreaterThanOrEqual(42);
   });
 
-  it("非安全上下文（http 页面无 crypto.subtle）下给出可行动的错误，而不是 TypeError", async () => {
+  it("无 WebCrypto 时给出可行动的诊断，而不是 TypeError", async () => {
     const original = globalThis.crypto;
-    // 模拟 http 页面：crypto 存在但没有 subtle
+    // 模拟浏览器不提供加密能力：crypto 存在但没有 subtle
     vi.stubGlobal("crypto", {
       getRandomValues: original.getRandomValues.bind(original),
     });
 
-    await expect(deriveLoginKey("Passw0rd!demo", SALT)).rejects.toThrow(/https/);
+    await expect(deriveLoginKey("Passw0rd!demo", SALT)).rejects.toThrow(/WebCrypto|https/);
+    // 文案必须带上观测到的事实（地址/协议/安全上下文/WebCrypto），便于原样反馈
+    await expect(deriveLoginKey("Passw0rd!demo", SALT)).rejects.toThrow(/WebCrypto 缺失/);
   });
 });

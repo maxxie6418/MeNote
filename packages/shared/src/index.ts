@@ -56,3 +56,10 @@ export interface HealthResponse {
   app: string;
   time: string;
 }
+
+// —— 以下按主题分模块，统一从这里再导出（两端只 import "@menote/shared"）——
+export * from "./auth";
+export * from "./base64url";
+export * from "./items";
+export * from "./limits";
+export * from "./sync";

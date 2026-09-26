@@ -9,10 +9,11 @@
      NODE_PATH=<node_modules 路径> node verify-prototype.js
 
    覆盖：导航顺序与路由（首页 / Memo / 待办 分离）/ 账户入口唯一性 /
-         首页三类内容与隐私占位 / 启动视图 / 笔记本双栏 / 正文层级归并 /
-         Memo 两视图 / 待办列表与看板 / 快速录入框三模式（无加密选项）/
-         新建直连笔记 / 笔记本新建入口 / 表格更多菜单 / 滑出详情侧栏 /
-         隐私锁锁定与解锁 / Memo 隐私门禁 / 恢复码流程 / 搜索 / 表格视图切换
+         首页三类内容与隐私占位 / 启动视图 / 主题（Claude 橙白双主题）/
+         笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
+         快速录入框三模式（无加密选项）/ 新建直连笔记 / 笔记本新建入口 /
+         表格更多菜单 / 滑出详情侧栏 / 隐私锁锁定与解锁 / Memo 隐私门禁 /
+         恢复码流程 / 搜索 / 表格视图切换
    ============================================================ */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
@@ -208,6 +209,42 @@ step('启动视图：切到「收藏」隐藏首页项，切回首页恢复（v2
   if ($('#navHome').style.display !== 'none') throw new Error('未选首页时首页项仍显示');
   click(set.querySelector('.radio-opt[data-sv="home"]'));
   if ($('#navHome').style.display === 'none') throw new Error('选回首页后首页项仍隐藏');
+});
+
+/* ---------- 主题：Claude 橙白双主题 ---------- */
+step('主题：默认浅色，设置里可切深色 / 跟随系统（§7.5 界面偏好）', () => {
+  const root = doc.documentElement;
+  if (root.getAttribute('data-theme') !== 'light') throw new Error('默认不是浅色：' + root.getAttribute('data-theme'));
+  const set = $('#themeSet');
+  if (!set) throw new Error('设置 › 通用 缺「界面偏好 · 主题」');
+  click(set.querySelector('.radio-opt[data-th="dark"]'));
+  if (root.getAttribute('data-theme') !== 'dark') throw new Error('未切到深色');
+  if (!set.querySelector('.radio-opt[data-th="dark"]').classList.contains('on')) throw new Error('深色选项未高亮');
+  click(set.querySelector('.radio-opt[data-th="auto"]'));
+  if (!/^(light|dark)$/.test(root.getAttribute('data-theme') || '')) throw new Error('「跟随系统」未落到具体主题');
+  click(set.querySelector('.radio-opt[data-th="light"]'));
+  if (root.getAttribute('data-theme') !== 'light') throw new Error('未切回浅色');
+  if (!set.querySelector('.radio-opt[data-th="light"]').classList.contains('on')) throw new Error('浅色选项未高亮');
+});
+
+step('主题令牌：浅色与深色两套变量都已定义', () => {
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const rootBlk = css.match(/:root\{[\s\S]*?\n\}/);
+  if (!rootBlk) throw new Error('未找到 :root 令牌块');
+  if (!/--bg:#faf9f5/.test(rootBlk[0])) throw new Error('浅色底色不是奶油白');
+  const dark = css.match(/\[data-theme="dark"\]\{[\s\S]*?\n\}/);
+  if (!dark) throw new Error('缺深色令牌块');
+  ['--bg', '--panel', '--text', '--primary', '--primary-line', '--shadow-1'].forEach(v => {
+    if (!dark[0].includes(v + ':')) throw new Error('深色块缺变量 ' + v);
+  });
+});
+
+step('主色为 Claude 陶土橙，无蓝色系残留', () => {
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const rootBlk = css.match(/:root\{[\s\S]*?\n\}/)[0];
+  if (!/--primary:#d97757/.test(rootBlk)) throw new Error('浅色主色不是陶土橙');
+  const blue = css.match(/#5b8cff|#7ba3ff|#8fa6c9|#cfe0f7|#4f7ff0|#6d5ce8/);
+  if (blue) throw new Error('仍有蓝色系硬编码残留：' + blue[0]);
 });
 
 /* ---------- 笔记本 / 正文 ---------- */

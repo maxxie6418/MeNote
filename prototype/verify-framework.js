@@ -12,9 +12,9 @@
 
    覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
          区块名与说明文字齐全 / 导航顺序与首页项 / 待办独立视图 /
-         Memo 去清单 / 录入框三模式与去加密 / 点块进块详情 /
-         嵌套块选内层 / 返回页面说明 / chip 反向跳转 / Esc 退出 /
-         键盘左右切页 / 切页清选中 / 块说明与网格两个开关
+         Memo 去清单 / 录入框三模式与去加密 / 主题（Claude 橙白双主题）/
+         点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
+         Esc 退出 / 键盘左右切页 / 切页清选中 / 块说明与网格两个开关
    ============================================================ */
 const fs = require('fs');
 const path = require('path');
@@ -226,6 +226,30 @@ step('设置页：含通用 › 启动视图 与 版本与回收站', () => {
   if (!$('#canvas [data-b="startViewSet"]')) throw new Error('设置页无「通用 › 启动视图」');
   if (!$('#canvas [data-b="setTrash"]')) throw new Error('设置页无「版本与回收站」');
   if (!blockText('startViewSet').includes('不显示')) throw new Error('启动视图未说明首页项显隐规则');
+  if (!blockText('startViewSet').includes('主题')) throw new Error('通用页未列入主题偏好');
+});
+
+step('主题：默认浅色，可切到深色并写回 data-theme（Claude 橙白双主题）', () => {
+  const html = $('#canvas').ownerDocument.documentElement;
+  if (html.getAttribute('data-theme') !== 'light') throw new Error('默认不是浅色：' + html.getAttribute('data-theme'));
+  const btn = $('#swTheme');
+  if (!btn) throw new Error('工具栏缺主题开关');
+  if (!btn.textContent.includes('浅色')) throw new Error('主题开关文案未跟随：' + btn.textContent);
+  click(btn);
+  if (html.getAttribute('data-theme') !== 'dark') throw new Error('未切到深色');
+  if (!btn.textContent.includes('深色')) throw new Error('深色下文案未更新：' + btn.textContent);
+  click(btn);
+  if (html.getAttribute('data-theme') !== 'light') throw new Error('未切回浅色');
+});
+
+step('主题令牌：浅色与深色两套变量都已定义', () => {
+  const css = $$('style').map(s => s.textContent).join('\n');
+  if (!/[^-]:root\{[\s\S]*?--bg:#faf9f5/.test(css)) throw new Error('缺浅色令牌（--bg:#faf9f5）');
+  const dark = css.match(/\[data-theme="dark"\]\{[\s\S]*?\}/);
+  if (!dark) throw new Error('缺深色令牌块');
+  ['--bg', '--text', '--wf-sel'].forEach(v => {
+    if (!dark[0].includes(v + ':')) throw new Error('深色块缺变量 ' + v);
+  });
 });
 
 step('笔记本正文：加密状态条与尺寸提示条已并入状态栏', () => {

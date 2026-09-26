@@ -221,8 +221,9 @@ a{color:inherit;text-decoration:none}
 .composer:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
 .composer textarea{width:100%;min-height:40px;max-height:180px;resize:vertical;font-size:13px;line-height:1.6;background:transparent}
 .composer textarea::placeholder{color:var(--muted);font-size:12.5px}
-/* 7.4 修订：模式选择（左）与发布按钮（右）同一行，取消独立发布行 */
-.mode-row{display:flex;align-items:center;gap:7px;margin-top:8px}
+/* 7.4 修订：模式选择（左）与发布按钮（右）同一行，取消独立发布行。
+   2026-09-26 调整：整行下移到附加项之下，上间距由 8px 收到 6px（总高度不变）。 */
+.mode-row{display:flex;align-items:center;gap:7px;margin-top:6px}
 .mode-row>#composerPublish{flex:none;height:27px;padding:0 11px;font-size:11.5px}
 .mode-tabs{flex:1;min-width:0;display:flex;gap:3px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px}
 .mode-tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;height:23px;
@@ -232,8 +233,9 @@ a{color:inherit;text-decoration:none}
 .mode-tabs .ic{width:12px;height:12px}
 /* 7.4 修订：附加项锁定为「一排」高度，切换模式只换内容不换高度，绝不推挤下方导航。
    内容按 248px 可用宽度排布（功能栏 294 - 左右内边距 46），实测两模式均约 212px，留有余量。
-   若日后新增标签导致超宽，这里允许横向滚动而不换行，避免撑高。 */
-.composer-extra{display:flex;align-items:center;gap:5px;margin-top:6px;
+   若日后新增标签导致超宽，这里允许横向滚动而不换行，避免撑高。
+   2026-09-26 调整：本行移到模式行之上、紧贴输入区，上间距 6px → 8px 与下方 6px 对调，总高不变。 */
+.composer-extra{display:flex;align-items:center;gap:5px;margin-top:8px;
   flex-wrap:nowrap;height:26px;overflow-x:auto;overflow-y:hidden;
   scrollbar-width:none;-ms-overflow-style:none}
 .composer-extra::-webkit-scrollbar{height:0}
@@ -748,6 +750,8 @@ table.data tbody tr:hover{background:var(--panel-2)}
         <!-- 快速录入框（7.4：Memo 默认 / 待办 / 笔记 三档） -->
         <div class="composer">
           <textarea id="composerInput" placeholder="记点什么……  Ctrl+Enter 发布"></textarea>
+          <!-- 2026-09-26 调整：模式附加项移到模式选择之上，紧贴输入区 -->
+          <div class="composer-extra" id="composerExtra"></div>
           <!-- 7.4 修订：模式选择与发布按钮并为一行，取消原来的独立发布行，整体更紧凑 -->
           <div class="mode-row">
             <div class="mode-tabs" id="composerModes">
@@ -757,7 +761,6 @@ table.data tbody tr:hover{background:var(--panel-2)}
             </div>
             <button class="btn primary sm" id="composerPublish" title="Ctrl+Enter 发布">发布</button>
           </div>
-          <div class="composer-extra" id="composerExtra"></div>
         </div>
       </div>
 

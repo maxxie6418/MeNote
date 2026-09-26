@@ -12,7 +12,8 @@
 
    覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
          区块名与说明文字齐全 / 导航顺序与首页项 / 待办独立视图 /
-         Memo 去清单 / 录入框三模式与去加密 / 主题（Claude 橙白双主题）/
+         Memo 去清单 / 录入框三模式与去加密 / 录入框行序（附加项在模式行之上）/
+         主题（Claude 橙白双主题）/
          点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
          Esc 退出 / 键盘左右切页 / 切页清选中 / 块说明与网格两个开关
    ============================================================ */
@@ -207,6 +208,26 @@ step('模式附加项：锁定只占一排（26px），切换不推挤', () => {
   if (!n.includes('一排')) throw new Error('附加项未标注排数：' + n);
   const style = $('#canvas [data-b="composerExtra"]').getAttribute('style') || '';
   if (!/height:\s*26px/.test(style)) throw new Error('附加项容器不是一排高度：' + style);
+});
+
+step('录入框顺序：输入区 → 附加项 → 模式行（2026-09-26 调整）', () => {
+  gotoPage('功能栏');
+  const all = $$('#canvas [data-b]').map(el => el.getAttribute('data-b'));
+  const iInput = all.indexOf('composerInput');
+  const iExtra = all.indexOf('composerExtra');
+  const iTabs = all.indexOf('modeTabs');
+  const iPub = all.indexOf('composerPublish');
+  if ([iInput, iExtra, iTabs, iPub].some(i => i < 0)) {
+    throw new Error('录入框区块有缺失：' + all.join(','));
+  }
+  const seq = [iInput, iExtra, iTabs, iPub];
+  for (let i = 1; i < seq.length; i++) {
+    if (seq[i] < seq[i - 1]) {
+      throw new Error('录入框顺序应为主要 → 附加项 → 模式行，实际 ' + all.slice(iInput, iPub + 1).join(' → '));
+    }
+  }
+  const n = noteOf('composerExtra');
+  if (!n.includes('之上')) throw new Error('附加项未标注位于模式选择之上：' + n);
 });
 
 step('录入框已压缩：取消独立发布行，发布按钮与模式选择同行', () => {

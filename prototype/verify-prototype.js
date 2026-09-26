@@ -11,7 +11,8 @@
    覆盖：导航顺序与路由（首页 / Memo / 待办 分离）/ 账户入口唯一性 /
          首页三类内容与隐私占位 / 启动视图 / 主题（Claude 橙白双主题）/
          笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
-         快速录入框三模式（无加密选项）/ 新建直连笔记 / 笔记本新建入口 /
+         快速录入框三模式（无加密选项）/ 录入框行序（输入区 → 附加项 → 模式行）/
+         新建直连笔记 / 笔记本新建入口 /
          表格更多菜单 / 滑出详情侧栏 / 隐私锁锁定与解锁 / Memo 隐私门禁 /
          恢复码流程 / 搜索 / 表格视图切换
    ============================================================ */
@@ -148,6 +149,22 @@ step('录入框已压缩：取消发布行，发布按钮与模式选择同行�
   click($('#composerModes button[data-mode="task"]'));
   if (!$('#composerPublish').title) throw new Error('发布按钮未承接快捷键提示');
   click($('#composerModes button[data-mode="memo"]'));
+});
+
+step('录入框顺序：输入区 → 模式附加项 → 模式行（2026-09-26 调整）', () => {
+  const kids = Array.from($('.composer').children)
+    .map(el => el.id || String(el.className).split(/\s+/)[0]);
+  const want = ['composerInput', 'composerExtra', 'mode-row'];
+  if (kids.join('/') !== want.join('/')) {
+    throw new Error('录入框子元素顺序为 ' + kids.join(' → ') + '，应为 ' + want.join(' → '));
+  }
+  // 间距对调：附加项在上 8px、模式行在下 6px（总高与调整前一致）
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const extra = css.match(/\.composer-extra\{[^}]*\}/);
+  const row = css.match(/\.mode-row\{[^}]*\}/);
+  if (!extra || !row) throw new Error('未找到 .composer-extra 或 .mode-row 规则');
+  if (!/margin-top:\s*8px/.test(extra[0])) throw new Error('附加项上间距应为 8px：' + extra[0]);
+  if (!/margin-top:\s*6px/.test(row[0])) throw new Error('模式行上间距应为 6px：' + row[0]);
 });
 
 /* ---------- Memo 与待办分离（v2 Q1） ---------- */

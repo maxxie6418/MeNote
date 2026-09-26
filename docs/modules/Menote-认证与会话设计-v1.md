@@ -14,6 +14,7 @@
 |---|---|---|---|---|
 | v1 | v0.1.2 | 2026-09-26 | 初稿：KDF 参数定稿、接口契约、会话与 CSRF、节流曲线、机密清单（取消 SESSION_SECRET）、环境数、M1 最小设置入口落点 | deepseek-v4.1-flash |
 | v1.1 | v0.1.3 | 2026-09-26 | 状态改「生效」；据实测与独立复核修正（改密请求体不再要求浏览器产出 `newVerifier`、注册需捕获唯一约束异常、prelogin 的 CSRF 口径统一、设置壳补「通用」默认分类）；应用已批准决定：登出不清除本机缓存、`site_settings` 暂不建表 | deepseek-v4.1-flash |
+| v1.2 | v0.1.5 | 2026-09-26 | M1-3 落地回写：§4.1 的 CSRF 口径修正为「`Origin` 缺失放行、在场必须匹配」并说明理由（主防线是 `X-Menote` 自定义头）；标注 dev 浏览器验证仍待 M1-10 补做；§5.3 的设置壳分类与实现一致 | deepseek-v4.1-flash |
 
 ---
 
@@ -128,10 +129,12 @@ UPDATE sessions
 
 ### 4.1 CSRF 与请求头
 
-- 所有**非 GET** 的 `/api/*` 请求必须带 `X-Menote: 1`，且 `Origin` 必须等于 `new URL(c.req.url).origin`（架构 §13.2，不硬编码域名）。不满足 → `403 csrf`。
+- 所有**非 GET** 的 `/api/*` 请求必须带 `X-Menote: 1`；`Origin` **在场时**必须等于 `new URL(c.req.url).origin`（架构 §13.2，不硬编码域名）。不满足 → `403 csrf`。
 - `SameSite=Lax` 是第二层；两层都要，不互相替代。
 - `POST /api/auth/prelogin` 与 `/api/auth/login` 同样受 CSRF 约束（它们是 POST），`/api/health` 不受。
-- **dev 待验**：Vite 插件下 `Origin` 是否等于 Worker 看到的 `URL.origin`；不一致时只在 `import.meta.env.DEV` 分支放行 `http://localhost:*`。
+- **实现口径修正（v1.2）**：v1 写的是"Origin 必须等于本域"，实现改为 **`Origin` 缺失时放行、在场时必须匹配**。理由：跨站写请求由浏览器发起时一定带 `Origin`（表单提交与 fetch 都带），缺失只可能是非浏览器客户端，而这类客户端没有受害者 Cookie、不构成 CSRF 场景；反过来，严格"缺失即拒绝"会在本地 Vite dev 等环境下拦掉正常的同源写请求，把一个安全问题换成一个开发期故障。**主防线始终是 `X-Menote` 自定义头**（跨站无法携带、跨站 fetch 会先触发不获放行的 CORS 预检）。
+- **dev 待验（仍未验，M1-10 接前端时在浏览器里过一遍）**：Vite 插件下同源请求的 `Origin` 与本机 `URL.origin` 是否一致。当前只在 vitest 集成测试里验过 `https://menote.test` 的同源/异源两路；真实浏览器 + `pnpm dev` 下的 `Secure` Cookie 与 `Origin` 行为**尚未验证**。若届时发现不一致，按上面的口径只在 dev 分支放宽（不改生产逻辑）。
+- **实现状态**：以上四条已按本节口径落地（`middleware/csrf.ts`、`middleware/session.ts`），并有用例覆盖（缺头 403、异源 403、GET 不受约束、伪造令牌 401）。
 
 ---
 

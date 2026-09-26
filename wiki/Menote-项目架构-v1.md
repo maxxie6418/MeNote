@@ -23,6 +23,7 @@
 | v1.8 | 2026-09-26 | 文件位置迁移执行完毕【已定·用户确认】：三份主线文档移入 `wiki/`，功能拆解 v1 移入 `docs/archive/`，根目录新增 `README.md`；本文路径变为 `wiki/Menote-项目架构-v1.md` |
 | v1.9 | 2026-09-26 | M1 开工前同步【已定·用户确认 2026-09-26】：①§15.4/§15.5 迁移机制统一为**运行时自愈**，删除部署脚本里的 `wrangler d1 migrations apply` 写法（该命令在全新账户上会因查不到库而失败、且对 Workers Builds 通道无效）；②§5.1 建表改指向新隐私模型权威 DDL（`docs/modules/Menote-数据模型与迁移设计-v1.md` §3，需求 18.2 原文勿直接照抄）；③§6.1/§6.3 清理 v1.0 遗留（拉取实体清单里的“数据密钥”、outbox 的 `key` 实体）；④§15.5 机密清单删 `SESSION_SECRET`（会话令牌随机 256 位、库里只存 SHA-256，不需要服务端密钥）；⑤§2.3.2 补落点行（`/api/health`、`services/auth.ts`、`/api/admin/*` 归 `routes/settings.ts`）并在目录树补 `middleware/`；⑥表头文档版本由 v1.1 更正为 v1.9 |
 | v1.10 | 2026-09-26 | M1 收口回写【已定·用户确认 2026-09-26】：①§15.5 **删除 `wrangler.jsonc` 的 `"secrets": { "required": [...] }` 写法**——实测它是 deploy 硬门禁（机密未设即部署失败，而首次部署时 Worker 不存在、无法先设机密，等于堵死一键部署）；改为「Dashboard / `wrangler secret put` 设机密 + 运行时 `middleware/config-guard.ts` fail-closed（缺机密返回 503 并说明缺哪项）」；②§6.x `prelogin` 行补全确定盐口径（`HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:" + 用户名小写)[0..16]`，注册与改密沿用同一个盐，否则注册/改密后立即登不进去；附带收益是不泄露用户名是否存在），并补公开接口 `GET /api/auth/registration-state`（不受机密缺失影响）；③§2.3 目录树 `middleware/` 注释补 `config-guard` |
+| v1.11 | 2026-09-26 | M2 收口回写【已定·用户确认 2026-09-26】：①§2.3.2 Worker 侧补落点——`POST /api/batch`（`routes/items.ts` + `services/batch.ts`）、搜索兜底 `GET /api/search`（`routes/search.ts` + `services/search.ts`）、用户级设置 `GET/PUT /api/settings` 归 `routes/settings.ts`、迁移目录注明 0001 建表与 0002 任务字段约束触发器，并在同步行注明响应另带 `user_settings` 且**不参与游标**；②§2.3.2 Web 侧补落点——`data/sync/`（含 broadcast）与 `data/db/`（含 search / settings / conflicts）不属任何 feature、`features/notes/` 含文件夹与冲突处理、各 feature 的 `model.ts`/`actions.ts` 分工、搜索的 `useSearch.ts`，并**订正**「索引在 `workers/search.worker.ts`」为本地增量索引 `data/db/search.ts`（Worker 化未做，属 M2 已知偏离）、补 `packages/mdcore/` 一行；③`app/` 落点写明子目录（`ui/`、`fnbar/`、`topbar/`、`workarea/`、`theme/`） |
 
 ### 标注约定
 
@@ -219,29 +220,33 @@ Worker 侧（`apps/worker/src/`）：
 | 健康检查（`GET /api/health`，存活探针，不依赖 D1） | `health.ts` | — | — |
 | 注册 / 登录 / 会话 | `auth.ts` | `auth.ts`、`tokens.ts`、`sessions.ts` | middleware/session.ts、middleware/csrf.ts |
 | 条目与文件夹（增删改查、移动、回收站、批量标记） | `items.ts`、`folders.ts` | `items.ts`、`folders.ts`、`trash.ts` | db/tables.ts（SQL 常量） |
-| 增量同步（拉取 / 推送 / 墓碑） | `sync.ts` | `sync.ts` | — |
+| 批量写入（`POST /api/batch`，单批 ≤10 个操作；逐操作独立判定冲突）【M2-9 落地】 | `items.ts` | `batch.ts` | — |
+| 搜索的服务端兜底（`GET /api/search`，`instr()` 子串扫描 + 与客户端同源的隐私过滤）【M2-6 落地】 | `search.ts` | `search.ts` | — |
+| 增量同步（拉取 / 推送 / 墓碑；响应另带 `user_settings`，**不参与游标**） | `sync.ts` | `sync.ts` | — |
 | 版本历史 | `versions.ts` | `versions.ts` | — |
 | 附件上传 / 下载 / GC | `attachments.ts` | `attachments.ts` | adapters/r2.ts、jobs/gc.ts |
 | 分享（创建 / 公开访问 / 撤销） | `shares.ts`、`public.ts` | `shares.ts` | — |
 | MCP | `mcp.ts` | `mcp.ts` | middleware/ 下令牌与限速 |
-| 设置与隐私标记（含 `GET/PUT /api/admin/registration`、`GET /api/admin/usage`） | `settings.ts` | `settings.ts` | — |
+| 设置与隐私标记（含 `GET/PUT /api/admin/registration`、`GET /api/admin/usage`；**用户级设置 `GET/PUT /api/settings`** 也归这里） | `settings.ts` | `settings.ts` | — |
 | Cron：快照 / 外部备份 / 维护 | —（无路由） | `jobs.ts` 调度 | jobs/snapshot.ts、jobs/backup.ts、jobs/maintenance.ts；adapters/webdav.ts、s3.ts、git.ts |
-| 迁移与自愈 | — | — | db/migrations/、db/selfheal.ts |
+| 迁移与自愈 | — | — | db/migrations/（0001 建表；0002 任务字段字面量约束触发器）、db/selfheal.ts |
 
 Web 侧（`apps/web/src/`，每个 feature 目录内 `ui/`（组件）+ `model.ts`（状态与动作）两件套，禁止 feature 互相 import）：
 
 | 功能 | 落点 |
 |---|---|
-| 布局 / 功能栏 / 导航 / 主题 | `app/` |
-| 笔记编辑（CodeMirror 封装为公共编辑器组件放 `app/editor/`） | `features/notes/` |
+| 布局 / 功能栏 / 导航 / 主题（含账户快捷菜单、搜索框、模态与菜单等公共控件） | `app/`（`app/ui/`、`app/fnbar/`、`app/topbar/`、`app/workarea/`、`app/theme/`） |
+| 同步引擎与本地库（**不属任何 feature**） | `data/sync/`（engine / push / pull / leader / **broadcast**）、`data/db/`（schema / repository / **search**（本地增量索引）/ **settings** / **conflicts**） |
+| 笔记编辑（CodeMirror 封装为公共编辑器组件放 `app/editor/`） | `features/notes/`（含文件夹树、笔记本面板、冲突提示与处理） |
 | 表格 / 图册 | `features/tables/` |
-| Memo（时间轴 / 瀑布流） | `features/memos/` |
-| 待办（列表 / 看板） | `features/tasks/` |
+| Memo（时间轴 / 瀑布流） | `features/memos/`（`model.ts` 时间轴分组与筛选、`actions.ts` 转笔记） |
+| 待办（列表 / 看板） | `features/tasks/`（`model.ts` 排序筛选、`actions.ts` 改状态与去掉标记） |
 | 首页概括 | `features/home/` |
-| 搜索界面 | `features/search/`；索引在 `workers/search.worker.ts` |
+| 搜索界面 | `features/search/`（`useSearch.ts` 接线、`model.ts` 检索纯函数、`ui/SearchPanel.tsx`）；本地索引在 `data/db/search.ts`。**`workers/search.worker.ts` 未做**（检索在纯函数模块里，M2 的已知偏离） |
 | 附件 / 媒体处理 | `features/attachments/`；哈希与缩略图在 `workers/media.worker.ts` |
 | 隐私门禁（解锁框、锁定清理、多设备 verifier） | `features/privacy/` + `crypto/keystore.ts` |
 | 备份导出（信封打包、外部解密工具说明） | `features/backup/` + `crypto/envelope.ts`（编解码调 packages/crypto-format） |
+| Markdown 核心（front matter 读写、标签与任务字段派生；前后端同一份实现）【M2 建】 | `packages/mdcore/`（零运行时依赖；**不得依赖 apps/**） |
 | 同步引擎 / outbox | `data/sync/`（不属于任何 feature） |
 | 本地库 Dexie / 本地仓储 | `data/db/` |
 | 设置（含 MCP 配置、备份目标配置） | `features/settings/` |

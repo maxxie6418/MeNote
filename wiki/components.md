@@ -25,6 +25,7 @@
 | 版本 | 日期 | 内容 |
 |---|---|---|
 | v1 | 2026-09-26 | 首稿。以原型已落地的组件为主体（第四至九章），附通用控件库与映射矩阵，并单列预留组件（第十二章） |
+| v2 | 2026-09-26 | M2 收口回写【已定·用户确认 2026-09-26】：新增第十四章「M2 落地后的组件与收敛记录」——列出 M2 实际新增的组件（含实现名与落点）、五处**文档与实现不一致**的收敛去向（`Placeholder`→`EmptyState`、`Menu`→`DropdownMenu`、`Button.secondary`、`Pill.err`、`SegmentedControl` 未抽共享件），以及两项**已知未实现**（锚点自动上翻、共享 `SegmentedControl`） |
 
 ---
 
@@ -582,3 +583,44 @@ AppShell                                    app/
 5. **不写行号**：引用原型一律写元素名 / 选择器（沿用功能拆解 v2.1 的约定）。
 6. **组件名是实现契约**：实现阶段如认为某个组件应改名或合并，先回报本文再改，避免文档与代码长期漂移。
 7. **验证脚本对应**：`prototype/verify-prototype.js` 与 `prototype/verify-framework.js` 里的断言，多半可平移为组件级单测的验收点（尤其顶栏 6 块、录入框高度与导航位移、两条导航造型的区分、设置两栏分页）。新增组件时同步登记需要哪一条断言。
+
+---
+
+## 十四、M2 落地后的组件与收敛记录【M2 收口回写】
+
+本章是 M2 收口时（v0.3.0）按实现回写的一节：**实现名优先**（组件名是实现契约，见 §十三 第 6 条）。落点全部对得上架构 §2.3.2（v1.11）。
+
+### 14.1 M2 新增组件（实现名与落点）
+
+| 组件 | 落点 | 职责（一句话） | 关键 props / 契约 |
+|---|---|---|---|
+| `Composer` | `app/fnbar/` | 快捷录入框（笔记 / Memo / 待办三档） | `onPublishNote` / `onPublishMemo` / `onPublishTask`；`mode` + `onModeChange`（**受控/非受控两用**，首页快捷方式用它切档） |
+| `NavSegmented` | `app/fnbar/` | 顶部分级浏览导航（下划线页签） | `active` / `onSelect` / `showHome`（未选首页为启动视图时**不渲染首页项**，其余两项均分） |
+| `FnBar` | `app/fnbar/` | 左功能栏装配（录入框 + 导航 + 笔记本组 + 标签组 + 加密空间节点） | 各面板以 slot 传入；**不含账户区**（账户入口在顶栏） |
+| `TwoPane` | `app/workarea/` | 右主操作区两栏骨架（列表 + 正文） | `listHidden` / `list` / `doc` |
+| `HomeView` / `SearchView` | `app/workarea/` | 首页 / 搜索结果的单栏装配 | 数据与回调由 `App` 递入（`app/` 不 import `features/*`） |
+| `SearchPanel` | `features/search/ui/` | 搜索结果（单栏）+ 筛选抽屉 | `query` / `results` / `folderNames` / `filters` / `onFiltersChange` / `tags` / `staleNotice` / `onOpen` / `onClose` |
+| `TaskPanel` / `TaskListView` / `TaskKanban` / `TaskFilterBar` / `TaskCard` | `features/tasks/ui/` | 待办主面板、列表、看板、筛选栏、卡片 | 面板用 `panel`/`header`/`items` 三类**数据槽**（不用 children） |
+| `MemoPanel` | `features/memos/ui/` | Memo 时间轴（分天 / 筛选 / 原地编辑 / 发布） | 同上三类数据槽；`tags` 供筛选 |
+| `NotebookPanel` / `NoteList` / `NoteWorkspace` | `features/notes/ui/` | 笔记本与文件夹树、条目列表、正文区 | `NoteWorkspace` 含模式切换、**跨标签页提示条**与**冲突处理条** |
+| `HomePanel` / `StatCards` / `TodayTasks` / `RecentActivity` / `ShortcutGrid` / `QuickNav` | `features/home/ui/` | 首页三块：概括预览（三卡）→ 快捷方式 → 快速导航 | `memoLocked`（M2 恒 false，M3 接门禁）；各卡自带空态 |
+| `SettingsPanel` + `CardGeneral` / `CardQuickMenu` 等卡片 | `features/settings/ui/` | 设置两栏分页（六个分类）与各分类卡片 | 即时生效 + 整份上传（`useUserSettings`） |
+| `AccountQuickMenu` | `app/topbar/` | 账户快捷菜单（账户头 → 可配置功能项 → 设置 / 退出登录） | 显示项由 `settings.quick_menu` 决定；`MenuItemSpec.keepOpen` 让主题切换**不收起菜单** |
+
+### 14.2 五处「文档与实现不一致」的收敛去向
+
+| # | 文档原写法 | M1/M2 实现 | 收敛 |
+|---|---|---|---|
+| 1 | `Placeholder`（`icon` / `title` / `desc` / `action`） | `EmptyState`（`title` / `hint` / `action`） | **以实现名为准**：本章起写 `EmptyState`；`icon` / `desc` 未做（空态用文字说明即可，不靠图标区分） |
+| 2 | `Menu`（`anchor` / `items` / `align` / `onPick`，锚点自动上翻） | `DropdownMenu`（`label` / `trigger` / `header` / `items` / `align` / `blocks`） | **以实现名为准**；`blocks` 是 M2 新增（账户菜单里的「主题一排三档」这类整块内容需要它）。**锚点自动上翻未实现**（见 14.3） |
+| 3 | `Button` 变体 `.primary` / `.danger` / `.ghost` / `.sm` | 另有 `.secondary` | **补进文档**：`.secondary` 用于空状态次操作与提示条里的动作按钮 |
+| 4 | `Pill` 变体 `.ok` / `.busy` | 另有 `.err` | **补进文档**：`.err` 用于顶栏「同步失败」 |
+| 5 | `SegmentedControl` 是**共享控件** | 仍在 `Composer` / `NoteWorkspace`（模式切换）/ `SettingsPanel`（单选组）三处内联 | **未收敛**（见 14.3）：文档保留「应为共享件」的结论，实现按 §十三 第 6 条留待抽出 |
+
+### 14.3 已知未实现（登记在案，避免长期漂移）
+
+1. **锚点自动上翻**：`DropdownMenu` 目前按 `align` 定位，未做「贴底时自动上翻」。原型已有该行为，实现缺；触发场景是功能栏底部的菜单。
+2. **共享 `SegmentedControl`**：三处内联结构尚未抽出共享件（14.2 第 5 条）。抽的时候同时替换三处，避免新旧并存。
+3. **`search.worker.ts`**：本地搜索索引在 `data/db/search.ts`（按 `sync_seq` 增量），检索在 `features/search/model.ts` 纯函数里；Worker 化未做（M2 已知偏离，接口不变）。
+
+> 三项均为**实现侧待办**，不影响本文其余契约；做完后回写本节并去掉对应条目。

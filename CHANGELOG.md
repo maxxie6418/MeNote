@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- 预开发 / 1cc0ec5 — 文档规划指南 v1.1：补 API 与接口文档规划
 - 预开发 / f3f3585 — components.md 补 SegmentedControl 的用法交叉引用（ComposerModeTabs / DocModeSwitch 等同族，非独立控件）
 - 预开发 / 0bc6d80 — 新增 wiki/components.md 组件规划（组件清单 + 落点 / 职责 / props / 复用 / 原型对应，附功能点映射矩阵与预留组件）
 - 预开发 / aba789e — 新增 wiki/guides/docs-roadmap.md 文档规划指南（通用模板 + 本项目落地对照）

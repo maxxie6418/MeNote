@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- v0.2.1 — 站点图标（用户提供的 SVG）：新增 `apps/web/public/icon.svg` 并在 `index.html` 挂 `rel="icon"`；渐变 id 加 `mn-` 前缀（避免将来内联进页面时与其它 SVG 的 id 撞车），补 `role="img"` 与 `<title>`。只上 SVG 形态：现代浏览器都支持；iOS 主屏与 PWA manifest 需要的 PNG 等 M6 接 PWA 时一并生成
 - v0.2.0 / 0425225 — **wiki 收口同步（用户确认后修改）**：项目架构 §15.5 删除 `secrets.required` 写法（deploy 硬门禁）改为运行时 `config-guard` 检查、§6.x 补全 prelogin 确定盐口径与公开注册状态接口、§2.3 目录树补 `config-guard`；local-dev 指南更正 `config-guard` 端点范围、新增 §九「本地数据与安全上下文」（重置本地数据在 `apps/web/.wrangler/state`、必须 https 或 localhost、线上诊断三连）；架构文档版本 v1.9 → v1.10
 - **v0.2.0 — M1 收口（核心闭环完成）**：注册登录 → 建笔记 → 编辑保存 → 第二台设备同步看到，全线闭环并在真实浏览器与云端验证。
   - **功能**：认证（浏览器 PBKDF2 600k 派生、服务端只做一次 HMAC 比对、会话 Cookie、CSRF、实例级注册开关与 owner/member）、笔记最小集（新建/标题/正文/自动保存/大小档位与硬上限）、同步最小版（D1 游标增量、outbox 条件批写、退避重试、失败列表语义、冲突副本 + 提示）、最小设置入口（通用/账户与安全/实例管理）。

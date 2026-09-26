@@ -174,9 +174,9 @@ M1 已收口（`docs/archive/Menote-M1-实施计划-v1.md`），但有几项当�
 
 ### M2-6 搜索
 
-> **状态：🟡 第一批完成（v0.2.12）；服务端兜底与 Worker 化待做**。已落地：本地 `searchIndex` 表（Dexie v2，按 `sync_seq` 增量）、隐私过滤单点 `isSearchVisible()`、纯函数检索（`Intl.Segmenter('zh')` 分词 + 中文二元组退化 + **子串命中** + 打分排序 + `{before,match,after}` 片段）、顶栏 `SearchBox` 启用（`Ctrl/Cmd+K` / `Esc`）、`SearchPanel`（单栏占满、命中数、类型/时间/位置/标签筛选、`<mark>` 高亮、空结果出口、索引未建完的可见提示）、清空即回原视图。
+> **状态：✅ 完成（v0.2.13；一处实现方式偏离，见下）**。已落地：本地 `searchIndex` 表（Dexie v2，按 `sync_seq` 增量）、隐私过滤单点 `isSearchVisible()`、纯函数检索（`Intl.Segmenter('zh')` 分词 + 中文二元组退化 + **子串命中** + 打分排序 + `{before,match,after}` 片段）、顶栏 `SearchBox` 启用（`Ctrl/Cmd+K` / `Esc`）、`SearchPanel`（单栏占满、命中数、类型/时间/位置/标签筛选、`<mark>` 高亮、空结果出口、索引未建完的可见提示）、清空即回原视图；服务端兜底 `GET /api/search`（`instr()` 子串扫描 + 与客户端同源的隐私过滤 + 四类筛选 + 50 条上限 + SQL 侧片段），客户端在索引没建完时回退并**按 id 合并**（本地在前）。
 >
-> **两处待做**：① `GET /api/search` 服务端兜底（`instr()` 子串扫描 + 隐私过滤）——目前索引未建完时只给"结果可能不完整"的提示，没有回退；② `search.worker.ts`（Web Worker 化）——本轮检索跑在纯函数模块里（个人量级不阻塞界面），Worker 化只改调用方式、`searchLocal` / `searchRows` 接口不变。
+> **一处实现偏离**：`search.worker.ts`（Web Worker 化）**未做**——检索目前跑在纯函数模块里，个人量级不阻塞界面；Worker 化只改调用方式（`searchLocal` / `searchRows` 接口不变），等有实测卡顿或数据量上来再补。
 
 **涉及文件**：`apps/web/src/workers/search.worker.ts`、`apps/web/src/features/search/`（`SearchPanel`）、`apps/web/src/data/db/`（`searchIndex` 表）、`apps/web/src/app/topbar/SearchBox.tsx`（启用）。
 

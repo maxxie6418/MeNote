@@ -405,7 +405,7 @@ AppShell                                    app/
 | `Icon` | `.ic` / `.sprite`（`<symbol>`） | `.sm` `.lg` | `name`（symbol id 去掉 `i-` 前缀）、`size?` |
 | `Button` | `.btn` | `.primary` `.danger` `.ghost` `.sm`、`[disabled]` | `variant`、`size`、`icon?`、`onClick` |
 | `IconButton` | `.icon-btn` | — | `icon`、`label`（`title` + `aria-label`）、`onClick` |
-| `SegmentedControl` | `.seg` > `button.on` | — | `options`、`value`、`onChange`。**盒式**（外框 + `--panel-3` 灰实底选中） |
+| `SegmentedControl` | `.seg` > `button.on`；`.mode-tabs` 同族 | — | `options`、`value`、`onChange`。**盒式**（外框 + `--panel-3` 灰实底选中）。第六章的 `ComposerModeTabs`（`.mode-tabs`）与第七章的 `DocModeSwitch`（`#docMode`）、`TableMode`（`#tableMode`）、`MemoMode`（`#memoMode`）、`TaskView`（`#taskView`）**都是它的用法，不是各自独立的控件**——差异只在尺寸（`.mode-tabs` 更矮更紧凑） |
 | `UnderlineTabs`（下划线页签） | `.nav-seg` / `.seg-item.active::after` | — | `options`、`value`、`onChange`。**与 `SegmentedControl` 刻意不同**，见 6.2 不变量 2 |
 | `Chip` | `.chip` | `.blue` `.amber` `.green` `.red` `.purple` `.tag` `.clickable` | `tone`、`icon?`、`onClick?` |
 | `Pill` | `.pill` | `.ok` `.busy` | `tone`、`icon`、`text` |

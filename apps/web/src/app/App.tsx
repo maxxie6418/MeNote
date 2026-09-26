@@ -22,6 +22,7 @@ import { useUserSettings } from "../features/settings/useUserSettings";
 import type { UserSettings } from "@menote/shared";
 import { AppShell } from "./AppShell";
 import { FnBar } from "./fnbar/FnBar";
+import type { ComposerMode } from "./fnbar/Composer";
 import type { BrowsableView } from "./fnbar/NavSegmented";
 import { useRoute } from "./router";
 import { useTheme } from "./theme/useTheme";
@@ -32,21 +33,15 @@ import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnv
 import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { TwoPane } from "./workarea/TwoPane";
+import { HomeView } from "./workarea/HomeView";
+import { SearchView } from "./workarea/SearchView";
 import { MemoPanel } from "../features/memos/ui/MemoPanel";
 import { convertMemoToNote } from "../features/memos/actions";
 import { TaskPanel } from "../features/tasks/ui/TaskPanel";
 import { clearTaskMarker, setTaskStatus } from "../features/tasks/actions";
 import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
-import {
-  EMPTY_SEARCH_STATE,
-  SearchPanel,
-  type SearchFiltersState,
-  type SearchResult,
-} from "../features/search/ui/SearchPanel";
-import { isSearchIndexComplete, searchLocal } from "../data/db";
-import { searchApi } from "../data/api/endpoints";
-import { makeSnippet, mergeBy } from "../features/search/model";
+import { useSearch } from "../features/search/useSearch";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -62,6 +57,8 @@ export default function App() {
    * 笔记侧的任何导航（最近编辑 / 收藏 / 笔记本 / 标签）都会把它重置回 `null`。
    */
   const [browse, setBrowse] = useState<BrowsableView | null>(null);
+  /** 录入框模式（受控）：首页的「记录 Memo / 新建待办」会切档（M2-8） */
+  const [composerMode, setComposerMode] = useState<ComposerMode>("memo");
 
   /**
    * 加密能力环境只在挂载时探一次：它会决定"能不能登录/保存"，而浏览器在会话中途改变
@@ -112,92 +109,35 @@ export default function App() {
   }, []);
 
   /**
-   * 搜索（M2-6）：查询与筛选由 App 持有，**不改浏览视图状态**——所以清空搜索框就自然回到
-   * 进入搜索前的视图，不需要额外的"保存/恢复"逻辑。
+   * 搜索（M2-6）：整段接线在 `useSearch` 里（查询、筛选、本地检索、索引未建完时的服务端回退）。
+   * 它**不改浏览视图状态**——所以清空搜索框就自然回到进入搜索前的视图。
    */
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchFilters, setSearchFilters] = useState<SearchFiltersState>(EMPTY_SEARCH_STATE);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchStale, setSearchStale] = useState(false);
-
-  /** 搜索：本地索引检索（离线优先）；索引没建完时说明结果可能不完整（M2-6） */
-  useEffect(() => {
-    const query = searchQuery.trim();
-    let alive = true;
-
-    // setState 一律放在异步回调里（effect 体内同步 setState 会引发级联渲染，react-hooks/set-state-in-effect）
-    void (async () => {
-      if (query === "") {
-        if (!alive) return;
-        setSearchResults([]);
-        setSearchStale(false);
-        return;
-      }
-
-      const now = Date.now();
-      const days = searchFilters.range === "week" ? 7 : searchFilters.range === "month" ? 30 : 365;
-      const from = searchFilters.range === "all" ? null : now - days * 24 * 60 * 60 * 1000;
-
-      const complete = await isSearchIndexComplete();
-      const localResults: SearchResult[] = await searchLocal(query, {
-        type: searchFilters.type,
-        folderId: searchFilters.folderId,
-        tag: searchFilters.tag,
-        from,
-      });
-
-      // 索引还没建完 → 回退服务端补齐（离线或失败就只用本地结果，不弹错）
-      let remoteResults: SearchResult[] = [];
-      if (!complete) {
-        try {
-          const remote = await searchApi.query({
-            q: query,
-            type: searchFilters.type,
-            folder:
-              searchFilters.folderId === "all"
-                ? undefined
-                : searchFilters.folderId === null
-                  ? "root"
-                  : searchFilters.folderId,
-            tag: searchFilters.tag ?? undefined,
-            from: from ?? undefined,
-          });
-          remoteResults = remote.results.map((row) => ({
-            item: {
-              id: row.id,
-              type: row.type,
-              folder_id: row.folder_id,
-              title: row.title,
-              tags: row.tags,
-              updated_at: row.updated_at,
-            },
-            snippet: makeSnippet(row.snippet, query),
-            score: 0,
-          }));
-        } catch {
-          remoteResults = [];
-        }
-      }
-
-      if (!alive) return;
-      setSearchResults(mergeBy((row) => row.item.id, localResults, remoteResults));
-      // 索引没建完时说明"结果可能不完整"（此刻的结果已尽量由服务端补齐）
-      setSearchStale(!complete);
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [searchFilters, searchQuery]);
+  const search = useSearch({ items: workspace.allItems, memos: workspace.memos });
 
   /**
    * 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎。
    * 放在"今天"之前：待办视图的日期口径要用它的时区。
+   *
+   * `onLoaded` 里应用**启动视图**（M2-8）：设置是异步从本地库读出来的，所以在读到的这一刻
+   * 决定进入哪个视图；只在首次读盘时生效一次，之后用户的导航不再被覆盖。
    */
+  const startViewApplied = useRef(false);
+
   const userSettings = useUserSettings({
     onWrite: () => {
       engineRef.current?.notifyLocalWrite();
       void refreshPending();
+    },
+    onLoaded: (loaded) => {
+      if (startViewApplied.current) return;
+      startViewApplied.current = true;
+
+      if (loaded.start_view === "home") {
+        setBrowse("home");
+        return;
+      }
+      setBrowse(null);
+      workspace.setView(loaded.start_view === "starred" ? { kind: "starred" } : { kind: "recent" });
     },
   });
   const patchSettings = useCallback(
@@ -282,17 +222,6 @@ export default function App() {
       .catch(() => setRegistration(null));
   }, [route, auth.snapshot.user?.role]);
 
-  /** 搜索筛选用的标签候选：笔记与 Memo 的标签并集（按出现次数倒序） */
-  const searchTags = (() => {
-    const counts = new Map<string, number>();
-    for (const item of [...workspace.allItems, ...workspace.memos]) {
-      for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hans-CN"))
-      .map(([tag]) => tag);
-  })();
-
   if (auth.snapshot.status === "loading") {
     return (
       <>
@@ -355,7 +284,7 @@ export default function App() {
             breadcrumb={
               route.name === "settings"
                 ? "设置"
-                : searchQuery.trim() !== ""
+                : search.query.trim() !== ""
                   ? "搜索结果"
                   : browse === "memo"
                     ? "Memo"
@@ -363,8 +292,8 @@ export default function App() {
                       ? "待办"
                       : workspace.viewTitle
             }
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
+            searchQuery={search.query}
+            onSearchChange={search.setQuery}
             userSettings={userSettings.settings}
             themeMode={theme.mode}
             onThemeMode={theme.setMode}
@@ -401,6 +330,9 @@ export default function App() {
             tags={workspace.tags}
             browseView={browse ?? undefined}
             onBrowseChange={(next) => setBrowse(next)}
+            showHome={userSettings.settings.start_view === "home"}
+            composerMode={composerMode}
+            onComposerModeChange={setComposerMode}
             notebookPanel={
               <NotebookPanel
                 view={workspace.view}
@@ -443,31 +375,71 @@ export default function App() {
               void auth.logout().then(() => navigate({ name: "login" }));
             }}
           />
-        ) : searchQuery.trim() !== "" ? (
-          /* 搜索：结果在主操作区单栏占满（M2-6） */
-          <TwoPane
-            listHidden={true}
-            list={null}
-            doc={
-              <SearchPanel
-                query={searchQuery.trim()}
-                results={searchResults}
-                folderNames={Object.fromEntries(
-                  workspace.folders.map((folder) => [folder.id, folder.name]),
-                )}
-                filters={searchFilters}
-                onFiltersChange={setSearchFilters}
-                tags={searchTags}
-                staleNotice={
-                  searchStale ? "正在建立本地索引，当前结果可能不完整。" : undefined
-                }
-                onOpen={(id) => {
-                  setSearchQuery("");
-                  void workspace.open(id);
-                }}
-                onClose={() => setSearchQuery("")}
-              />
-            }
+        ) : search.query.trim() !== "" ? (
+          <SearchView
+            query={search.query.trim()}
+            results={search.results}
+            folderNames={Object.fromEntries(
+              workspace.folders.map((folder) => [folder.id, folder.name]),
+            )}
+            filters={search.filters}
+            onFiltersChange={search.setFilters}
+            tags={search.tags}
+            staleNotice={search.stale ? "正在建立本地索引，当前结果可能不完整。" : undefined}
+            onOpen={(id) => {
+              search.clear();
+              void workspace.open(id);
+            }}
+            onClose={search.clear}
+          />
+        ) : browse === "home" ? (
+          /* 首页（M2-8）：数据全部由本地元数据算，不发额外请求 */
+          <HomeView
+            items={workspace.allItems}
+            memos={workspace.memos}
+            folders={workspace.folders.map((folder) => ({ id: folder.id, name: folder.name }))}
+            titles={Object.fromEntries(
+              Object.entries(workspace.memoContents).map(([id, entry]) => [
+                id,
+                taskTitle(entry.content),
+              ]),
+            )}
+            onNewNote={() => {
+              void workspace.createNote();
+            }}
+            onFocusComposer={(mode) => {
+              setComposerMode(mode);
+              focusComposer();
+            }}
+            onFocusSearch={() => {
+              document.getElementById("search-input")?.focus();
+            }}
+            onOpenItem={(id) => {
+              setBrowse(null);
+              void workspace.open(id);
+            }}
+            onOpenView={(view) => {
+              if (view === "memo" || view === "task") {
+                setBrowse(view);
+                return;
+              }
+              setBrowse(null);
+              workspace.setView(
+                view === "recent"
+                  ? { kind: "recent" }
+                  : view === "starred"
+                    ? { kind: "starred" }
+                    : { kind: "notebook" },
+              );
+            }}
+            onOpenFolder={(folderId) => {
+              setBrowse(null);
+              workspace.setView({ kind: "notebook", folderId });
+            }}
+            onOpenTag={(tag) => {
+              setBrowse(null);
+              workspace.setView({ kind: "tag", tag });
+            }}
           />
         ) : browse === "task" ? (
           /* 待办视图：单栏占满（列表 / 看板由面板内部切换） */

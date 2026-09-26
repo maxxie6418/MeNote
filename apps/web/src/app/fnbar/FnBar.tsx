@@ -11,7 +11,7 @@
  */
 import { Icon } from "../ui/Icon";
 import type { TaskPriority } from "@menote/mdcore";
-import { Composer } from "./Composer";import { NavList } from "./NavList";
+import { Composer, type ComposerMode } from "./Composer";import { NavList } from "./NavList";
 import { NavSegmented, type BrowsableView } from "./NavSegmented";
 import { TagGroup } from "./TagGroup";
 import { VaultNode } from "./VaultNode";
@@ -36,6 +36,11 @@ export interface FnBarProps {
   /** 浏览三段的当前项（M2-4/M2-5/M2-8 接入前恒为空） */
   browseView?: BrowsableView;
   onBrowseChange?: (view: BrowsableView) => void;
+  /** 未选首页作为启动视图时不显示首页项（需求 §7.4） */
+  showHome?: boolean;
+  /** 录入框模式受控（M2-8 首页的「记录 Memo / 新建待办」要切档） */
+  composerMode?: ComposerMode;
+  onComposerModeChange?: (mode: ComposerMode) => void;
 }
 
 export function FnBar({
@@ -49,6 +54,9 @@ export function FnBar({
   notebookPanel,
   browseView,
   onBrowseChange,
+  showHome = true,
+  composerMode,
+  onComposerModeChange,
 }: FnBarProps) {
   return (
     <aside className="fnbar">
@@ -61,11 +69,13 @@ export function FnBar({
           onPublishNote={onPublishNote}
           onPublishMemo={onPublishMemo}
           onPublishTask={onPublishTask}
+          mode={composerMode}
+          onModeChange={onComposerModeChange}
         />
       </div>
 
       <div className="fnbar__scroll">
-        <NavSegmented active={browseView} onSelect={onBrowseChange} />
+        <NavSegmented active={browseView} onSelect={onBrowseChange} showHome={showHome} />
         <NavList view={view} onViewChange={onViewChange} />
         {notebookPanel}
         <TagGroup view={view} onViewChange={onViewChange} tags={tags} />

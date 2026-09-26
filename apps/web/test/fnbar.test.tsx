@@ -69,16 +69,17 @@ describe("功能栏结构", () => {
     expect(segmented?.querySelectorAll(".segmented__item")).toHaveLength(3);
   });
 
-  it("浏览三段：Memo 与待办已可用，只剩首页禁用并说明原因", async () => {
+  it("浏览三段全部可用；未选首页作为启动视图时不显示首页项", async () => {
     const user = userEvent.setup();
     const onBrowseChange = vi.fn();
-    renderFnBar({ onBrowseChange });
+    const { unmount } = renderFnBar({ onBrowseChange });
 
+    // 首页（M2-8）已可用：不再是禁用占位
     const home = screen.getByRole("tab", { name: /首页/ }) as HTMLButtonElement;
-    expect(home.disabled).toBe(true);
-    expect(home.title).toContain("M2-8");
+    expect(home.disabled).toBe(false);
+    await user.click(home);
+    expect(onBrowseChange).toHaveBeenCalledWith("home");
 
-    // Memo（M2-4）与待办（M2-5）都已可用
     const memo = screen.getByRole("tab", { name: /Memo/ }) as HTMLButtonElement;
     expect(memo.disabled).toBe(false);
     await user.click(memo);
@@ -88,6 +89,13 @@ describe("功能栏结构", () => {
     expect(task.disabled).toBe(false);
     await user.click(task);
     expect(onBrowseChange).toHaveBeenCalledWith("task");
+
+    unmount();
+
+    // 未选首页作为启动视图：首页项不出现，只剩两项（由 flex:1 等分）
+    renderFnBar({ showHome: false });
+    expect(screen.queryByRole("tab", { name: /首页/ })).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
   });
 
   it("导航与分组：最近编辑/收藏可切换、笔记本分组是插槽、标签云来自条目", async () => {

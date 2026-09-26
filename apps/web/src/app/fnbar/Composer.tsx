@@ -135,13 +135,31 @@ export interface ComposerProps {
   onPublishMemo?: (text: string, options: { asTask: boolean }) => void;
   /** 待办模式发布（M2-5）：新建清单默认状态"待办" */
   onPublishTask?: (text: string, options: { due: string | null; priority: TaskPriority }) => void;
+  /**
+   * 受控模式（M2-8）：首页的「记录 Memo / 新建待办」需要从外部把录入框切到指定档。
+   * 不传则自己管（非受控），两种用法都支持。
+   */
+  mode?: ComposerMode;
+  onModeChange?: (mode: ComposerMode) => void;
 }
 
 const TASK_PRIORITY_OPTIONS: ReadonlyArray<{ value: TaskPriority; label: string }> =
   TASK_PRIORITIES.map((priority) => ({ value: priority, label: TASK_PRIORITY_LABELS[priority] }));
 
-export function Composer({ onPublishNote, onPublishMemo, onPublishTask }: ComposerProps) {
-  const [mode, setMode] = useState<ComposerMode>("memo");
+export function Composer({
+  onPublishNote,
+  onPublishMemo,
+  onPublishTask,
+  mode: controlledMode,
+  onModeChange,
+}: ComposerProps) {
+  const [innerMode, setInnerMode] = useState<ComposerMode>("memo");
+  // 受控/非受控都支持：外部给了 mode 就用外部的，否则自己管（既有用法不受影响）
+  const mode = controlledMode ?? innerMode;
+  const setMode = (next: ComposerMode): void => {
+    setInnerMode(next);
+    onModeChange?.(next);
+  };
   const [text, setText] = useState("");
   const [taskRequested, setTaskRequested] = useState(false);
   const [taskDue, setTaskDue] = useState("");

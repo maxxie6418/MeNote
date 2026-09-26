@@ -1947,3 +1947,209 @@ button.chip--tag:hover {
   color: var(--primary-ink);
   font-weight: 600;
 }
+
+/* ============================================================
+   首页（M2-8；需求 §7.4）——横向成组，纵向两层
+   ============================================================ */
+.home {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.pane-head h1 {
+  margin: 0;
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.pane-head .sub {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.home__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.home__grid {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+
+.home-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.home-card__hd {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-2);
+}
+
+.home-card__hd h3 {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.home-card__note {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.home-card__bd {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-stats {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.home-stat {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.home-stat__n {
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-stat__l {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.home-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.home-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  padding: var(--sp-1) 0;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  text-align: left;
+}
+
+.home-line--btn:hover {
+  color: var(--text);
+}
+
+.home-line__main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-line__meta {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.home-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-circle);
+  background: var(--primary);
+}
+
+.home-locked {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.home-empty {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.hint-line {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.home-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.home-act {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.home-act:hover:not(:disabled) {
+  border-color: var(--primary-line);
+  color: var(--primary-ink);
+}
+
+.home-act:disabled {
+  opacity: 0.5;
+}
+
+.home-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.home-nav__title {
+  margin-bottom: var(--sp-1);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}

@@ -7,7 +7,7 @@
  * 主题不在这里：它是**设备级**偏好（同一账号在手机与桌面可以不同），M1 起存在 `localStorage`，
  * 由 `app/theme/useTheme` 管。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_USER_SETTINGS, type UserSettings } from "@menote/shared";
 import { getLocalSettings, saveLocalSettings } from "../../data/db";
 
@@ -23,11 +23,23 @@ export interface UserSettingsState {
   reload: () => Promise<void>;
 }
 
-export function useUserSettings(options: { onWrite?: () => void } = {}): UserSettingsState {
+export function useUserSettings(
+  options: { onWrite?: () => void; onLoaded?: (settings: UserSettings) => void } = {},
+): UserSettingsState {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [pending, setPending] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const onWrite = options.onWrite;
+  const onLoaded = options.onLoaded;
+  /**
+   * 回调放进 ref：调用方通常传内联箭头（要闭包最新的 workspace 等），若直接进 effect 依赖，
+   * 每次渲染都会重新读盘。用 ref 保证"只在首次读盘时通知一次"。
+   */
+  const onLoadedRef = useRef(onLoaded);
+  // 在 effect 里同步 ref（渲染期写 ref 违反 React 规则）
+  useEffect(() => {
+    onLoadedRef.current = onLoaded;
+  }, [onLoaded]);
 
   const reload = useCallback(async () => {
     const local = await getLocalSettings();
@@ -43,6 +55,9 @@ export function useUserSettings(options: { onWrite?: () => void } = {}): UserSet
       setSettings(local.settings);
       setPending(local.pending);
       setLoaded(true);
+      // 首次读盘后回调一次：调用方据此决定"启动视图"（设置是异步读出来的，
+      // 在 effect 体内同步 setState 会触发级联渲染，所以走这个回调）
+      onLoadedRef.current?.(local.settings);
     });
     return () => {
       alive = false;

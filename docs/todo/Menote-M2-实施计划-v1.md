@@ -98,6 +98,10 @@ M1 已收口（`docs/archive/Menote-M1-实施计划-v1.md`），但有几项当�
 
 ### M2-2 界面框架填充
 
+> **状态：✅ 已完成（v0.2.5）**。落地：`app/ui/` 抽出 `SegmentedControl`（盒式）/ `NavItem` / `Chip`（三形态）；`app/fnbar/` 落 `Composer`（三行结构 + 笔记档发布）+ `NavSegmented`（浏览三段，下划线页签）+ `NavList`（最近编辑/收藏）+ `NotebookGroup` + `TagGroup`（标签云）+ `VaultNode`（贴底固定）；`app/workarea/` 落 `TwoPane` / `ItemListHead` / `EmptyDocPanel`；`features/notes/views.ts` 落视图筛选与标签统计。验收点逐条有用例：三行结构不变量（附加项恒 26px/nowrap/不塌陷）、两种导航造型可区分、加密空间是滚动容器的兄弟、功能栏内无账户区、note 档无加密胶囊、Ctrl+Enter 发布。
+>
+> **三处范围决定**（按"不做空入口"的既有口径）：① 浏览三段的首页 / Memo / 待办**禁用并说明原因**（M2-8 / M2-4 / M2-5），造型先就位以便对照"两条导航造型区分"这条验收；② 笔记本组只落组头（文件夹树 / `+` 菜单在 M2-3），`+` 按钮禁用说明原因；③ 加密空间按用户口径**只做外观与占位**，禁用并说明 M3 启用。`Ctrl/Cmd+K` 聚焦搜索留到 M2-6（搜索框目前仍是禁用占位，先接会比"无反应"更糟）。
+
 **涉及文件**：`apps/web/src/app/fnbar/`（`Composer` 及三行子组件、`NavSegmented`、`NavList`、`NotebookGroup`、`TagGroup`、`VaultNode`）、`apps/web/src/app/workarea/`（`TwoPane`、`ItemListHead`、`EmptyDocPanel`）、`apps/web/src/app/ui/`（`SegmentedControl`、`UnderlineTabs`、`Chip`、`Pill`、`Capsule`、`Menu`、`Modal`、`Toast`、`Placeholder`、`InfoHint` 等）。
 
 **验收点**

@@ -4,6 +4,7 @@
  * 传输细节（超时、CSRF、错误映射）在 `client.ts`；这里只描述"有哪些接口、带什么参数"。
  */
 import {
+  BatchResponseSchema,
   ITEM_BASE_REV_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
@@ -13,6 +14,8 @@ import {
   encodeItemWriteMeta,
   type AuthKdfParams,
   type AuthSessionResponse,
+  type BatchOp,
+  type BatchResponse,
   type ChangePasswordResponse,
   type FolderCreate,
   type SearchResponse,
@@ -102,6 +105,12 @@ export const itemsApi = {
       method: "PATCH",
       body: patch,
     }),
+
+  /** 批量写入（M2-9）：一串条目操作一次请求；服务端恒 200，逐条结果在 results 里 */
+  batch: async (ops: BatchOp[]): Promise<BatchResponse> => {
+    const raw = await apiRequest<unknown>("/api/batch", { method: "POST", body: { ops } });
+    return v.parse(BatchResponseSchema, raw);
+  },
 };
 
 export const foldersApi = {

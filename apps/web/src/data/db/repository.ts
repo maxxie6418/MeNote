@@ -533,6 +533,22 @@ export async function headOutbox(now: number): Promise<OutboxRow | undefined> {
     .first();
 }
 
+/**
+ * 取队首一串"到点了"的操作（FIFO 顺序）。
+ *
+ * 批量写入（M2-9）用：把连续的条目操作合并成一次请求。**只按顺序取前缀**——
+ * 中间夹着一个还没到重试时间的行就停下，避免"后面的先传"破坏 FIFO 语义。
+ */
+export async function listDueOutbox(now: number, limit: number): Promise<OutboxRow[]> {
+  const rows = await db.outbox.orderBy("seq").limit(limit).toArray();
+  const due: OutboxRow[] = [];
+  for (const row of rows) {
+    if (row.next_retry_at > now) break;
+    due.push(row);
+  }
+  return due;
+}
+
 export async function removeOutbox(seq: number): Promise<void> {
   await db.outbox.delete(seq);
 }

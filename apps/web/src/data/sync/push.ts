@@ -10,8 +10,13 @@
  * - 422/403/404 这类不可重试的错误 → 移入"上传失败"列表（排到队尾，不阻塞其他项）。
  */
 import {
+  BATCH_MAX_OPS,
   newUlid,
   sha256Hex,
+  type ApiErrorCode,
+  type BatchOp,
+  type BatchResponse,
+  type BatchResult,
   type FolderCreate,
   type FolderPatch,
   type FolderWriteResponse,
@@ -35,6 +40,7 @@ import {
   getLocalItem,
   getLocalSettings,
   headOutbox,
+  listDueOutbox,
   markFolderSynced,
   markItemSynced,
   markOutboxFailure,
@@ -61,6 +67,11 @@ export interface PushApi {
   patchFolder(id: string, patch: FolderPatch): Promise<FolderWriteResponse>;
   /** 用户设置：整份覆盖（M2-7） */
   putSettings(input: UserSettingsWrite): Promise<UserSettingsPayload>;
+  /**
+   * 批量写入（M2-9，可选）：把一串条目操作合并成一次请求，省的是客户端到 Worker 的网络往返。
+   * 不实现时队列退回逐条调用（假实现与测试用得上）。
+   */
+  batch?(ops: BatchOp[]): Promise<BatchResponse>;
 }
 
 const httpPushApi: PushApi = {
@@ -70,6 +81,7 @@ const httpPushApi: PushApi = {
   createFolder: foldersApi.create,
   patchFolder: foldersApi.patch,
   putSettings: settingsApi.put,
+  batch: itemsApi.batch,
 };
 
 export interface PushContext {
@@ -363,6 +375,126 @@ async function pushOne(row: OutboxRow, ctx: ResolvedContext): Promise<PushOutcom
   }
 }
 
+// ——————————————————————————— 批量路径（M2-9） ———————————————————————————
+
+/** 可批量的三类条目操作（文件夹与设置不走批量：它们不是同步热点） */
+const BATCHABLE_OPS = new Set(["create", "save_body", "patch_meta"]);
+
+interface PreparedBatchOp {
+  op: BatchOp;
+  /** `create` / `save_body` 才有：成功后要写回本地正文与哈希 */
+  body?: string;
+  contentHash?: string;
+}
+
+/**
+ * 把一行 outbox 准备成批量操作。
+ *
+ * 返回 `null` 表示"这一行不该进批次"：要么类型不可批量，要么本地条目已被删除（调用方直接出队）。
+ * 入参形状与 `pushCreate` / `pushBodySave` / `pushMetaPatch` 完全一致——**同一个本地状态来源**，
+ * 避免批量与单条两条路径各写一份 payload 逻辑。
+ */
+async function prepareBatchOp(row: OutboxRow): Promise<PreparedBatchOp | null> {
+  if (!BATCHABLE_OPS.has(row.op)) return null;
+
+  const item = await getLocalItem(row.entity_id);
+  if (!item) return null;
+
+  if (row.op === "patch_meta") {
+    return {
+      op: {
+        kind: "patch_meta",
+        id: item.id,
+        patch: {
+          base_meta_rev: row.base_meta_rev,
+          title: item.title,
+          folder_id: item.folder_id,
+          tags: item.tags,
+          pinned: item.pinned,
+          starred: item.starred,
+        },
+      },
+    };
+  }
+
+  const { body } = await getEditableBody(item.id);
+  const contentHash = await sha256Hex(body);
+
+  if (row.op === "create") {
+    return {
+      op: {
+        kind: "create",
+        id: item.id,
+        meta: {
+          type: item.type,
+          title: item.title,
+          folder_id: item.folder_id,
+          tags: item.tags,
+          memo_at: item.memo_at,
+          is_task: item.is_task,
+          task_status: item.task_status,
+          task_due: item.task_due,
+          task_priority: item.task_priority,
+          content_hash: contentHash,
+        },
+        body,
+      },
+      body,
+      contentHash,
+    };
+  }
+
+  return {
+    op: {
+      kind: "save_body",
+      id: item.id,
+      base_rev: row.base_rev,
+      content_hash: contentHash,
+      body,
+    },
+    body,
+    contentHash,
+  };
+}
+
+/** 把批量里的一条结果落到本地：成功照单条路径写回，失败按单条路径的规则分派 */
+async function applyBatchResult(
+  row: OutboxRow,
+  prepared: PreparedBatchOp,
+  result: BatchResult,
+  ctx: ResolvedContext,
+  seq: number,
+): Promise<PushOutcome> {
+  if (result.ok) {
+    if (result.kind === "patch_meta") {
+      await markItemSynced(row.entity_id, { meta_rev: result.rev });
+      await removeOutbox(seq);
+      return "done";
+    }
+    await afterBodySynced(
+      row.entity_id,
+      prepared.body ?? "",
+      prepared.contentHash ?? "",
+      { id: row.entity_id, rev: result.rev, bytes: result.bytes ?? 0, chars: result.chars ?? 0 },
+      ctx,
+      seq,
+    );
+    return "done";
+  }
+
+  // 失败：按单条路径同一套规则分派（冲突 → 副本；可重试 → 退避；其余 → 上传失败列表）
+  const error = new ApiError(result.code as ApiErrorCode, result.message, 0, result.detail);
+  if (error.code === "rev_conflict" || error.code === "meta_conflict") {
+    return await handleConflict(row, error, ctx, seq);
+  }
+  if (error.retryable) {
+    await scheduleRetry(row, error.message, ctx, seq);
+    return "failed";
+  }
+  await failPermanently(row, error.message, seq);
+  return "failed";
+}
+
 /** 推送队列：按顺序处理到点的项，最多 `MAX_OPS_PER_RUN` 项 */
 export async function pushQueue(context: PushContext = {}): Promise<PushBatchResult> {
   const ctx: ResolvedContext = {
@@ -380,7 +512,57 @@ export async function pushQueue(context: PushContext = {}): Promise<PushBatchRes
     more: false,
   };
 
+  /** 一批最多 `BATCH_MAX_OPS` 个操作（服务端按 3 条写语句/操作、45 条上限算出来的） */
+  const batchApi = ctx.api.batch?.bind(ctx.api);
+
   for (let guard = 0; guard < MAX_OPS_PER_RUN; guard += 1) {
+    // 批量快路径：队首连续 ≥2 个可批量操作时合并成一次请求（省的是客户端到 Worker 的往返）
+    if (batchApi) {
+      const head = await listDueOutbox(ctx.now(), BATCH_MAX_OPS);
+      const prepared: Array<{ row: OutboxRow; ready: PreparedBatchOp }> = [];
+
+      for (const row of head) {
+        // 队首一旦遇到不可批量的操作就停：保持 FIFO，不让后面的操作抢先上传
+        if (!BATCHABLE_OPS.has(row.op)) break;
+        if (row.seq === undefined) continue;
+
+        const ready = await prepareBatchOp(row);
+        if (!ready) {
+          // 本地条目已删（例如建完又删）：没有可上传的内容，直接出队
+          await removeOutbox(row.seq);
+          continue;
+        }
+        prepared.push({ row, ready });
+      }
+
+      if (prepared.length > 1) {
+        const ops = prepared.map((entry) => entry.ready.op);
+        const response = await batchApi(ops);
+
+        for (const [index, entry] of prepared.entries()) {
+          const seq = entry.row.seq;
+          if (seq === undefined) continue;
+
+          // 结果按**批次内序号**对齐；服务端漏回某条时当可重试失败处理（不放任它静默丢失）
+          const opResult: BatchResult = response.results.find((row) => row.index === index) ?? {
+            ok: false,
+            index,
+            kind: entry.ready.op.kind,
+            id: entry.ready.op.id,
+            code: "retry_later",
+            message: "服务端未返回该操作的结果",
+          };
+
+          const outcome = await applyBatchResult(entry.row, entry.ready, opResult, ctx, seq);
+          result.processed += 1;
+          if (outcome === "done") result.succeeded += 1;
+          else if (outcome === "conflict") result.conflicted += 1;
+          else result.failed += 1;
+        }
+        continue;
+      }
+    }
+
     const row = await headOutbox(ctx.now());
     if (!row) break;
 

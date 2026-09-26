@@ -8,7 +8,7 @@
  * - 两条导航造型必须**同时存在且可区分**：浏览三段是下划线页签、录入框模式是盒式分段控件；
  * - 三档附加项：memo 空容器占位、task 截止+优先级、note 首行作标题+根目录，且**无加密胶囊**。
  */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "../src/app/fnbar/Composer";
@@ -21,6 +21,7 @@ function renderFnBar(overrides: Partial<Parameters<typeof FnBar>[0]> = {}) {
     <FnBar
       onNewNote={vi.fn()}
       onPublishNote={vi.fn()}
+      onPublishMemo={vi.fn()}
       view={{ kind: "notebook" }}
       onViewChange={vi.fn()}
       notebookPanel={<div data-testid="notebook-panel" />}
@@ -67,13 +68,21 @@ describe("功能栏结构", () => {
     expect(segmented?.querySelectorAll(".segmented__item")).toHaveLength(3);
   });
 
-  it("未接入的浏览三段禁用并说明原因（不做空入口）", () => {
-    renderFnBar();
+  it("未接入的浏览三段禁用并说明原因（Memo 已接入，故不再禁用）", async () => {
+    const user = userEvent.setup();
+    const onBrowseChange = vi.fn();
+    renderFnBar({ onBrowseChange });
+
     const home = screen.getByRole("tab", { name: /首页/ }) as HTMLButtonElement;
     expect(home.disabled).toBe(true);
     expect(home.title).toContain("M2-8");
-    expect((screen.getByRole("tab", { name: /Memo/ }) as HTMLButtonElement).title).toContain("M2-4");
     expect((screen.getByRole("tab", { name: /待办/ }) as HTMLButtonElement).title).toContain("M2-5");
+
+    // Memo 已可用（M2-4）：可点、可选中
+    const memo = screen.getByRole("tab", { name: /Memo/ }) as HTMLButtonElement;
+    expect(memo.disabled).toBe(false);
+    await user.click(memo);
+    expect(onBrowseChange).toHaveBeenCalledWith("memo");
   });
 
   it("导航与分组：最近编辑/收藏可切换、笔记本分组是插槽、标签云来自条目", async () => {
@@ -141,11 +150,52 @@ describe("录入框三档附加项", () => {
     const onPublishNote = vi.fn();
     render(<Composer onPublishNote={onPublishNote} />);
 
+    await user.click(screen.getByRole("button", { name: "待办" }));
     const input = screen.getByLabelText("快速录入");
     await user.click(input);
     await user.keyboard("随手一记");
     await user.keyboard("{Control>}{Enter}{/Control}");
 
     expect(onPublishNote).not.toHaveBeenCalled();
+  });
+
+  it("Memo 档 Ctrl+Enter 发布：清空输入框、带上 asTask", async () => {
+    const user = userEvent.setup();
+    const onPublishMemo = vi.fn();
+    render(<Composer onPublishMemo={onPublishMemo} />);
+
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+    await user.click(input);
+    await user.keyboard("随手一记 #灵感");
+    await user.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(onPublishMemo).toHaveBeenCalledWith("随手一记 #灵感", { asTask: false });
+    expect(input.value).toBe("");
+  });
+
+  it("写了 - [ ] 才提示「设为清单？」：点了才带清单标记，删掉清单项则自动作废", async () => {
+    const user = userEvent.setup();
+    const onPublishMemo = vi.fn();
+    render(<Composer onPublishMemo={onPublishMemo} />);
+
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+    const extras = screen.getByTestId("composer-extras");
+
+    // 普通 Memo：不出现提示（不自动改语义）
+    await user.click(input);
+    await user.type(input, "普通一条");
+    expect(extras.textContent).not.toContain("设为清单");
+
+    // 写了 - [ ] 才出现（user.type 会把 [ 当特殊键，所以直接赋值）
+    fireEvent.change(input, { target: { value: "普通一条\n- [ ] 买牛奶" } });
+    expect(extras.textContent).toContain("设为清单？");
+
+    // 点一下才带上标记（点按钮会移走焦点，发布前先点回输入框）
+    await user.click(screen.getByRole("button", { name: /设为清单/ }));
+    expect(extras.textContent).toContain("已设为清单");
+
+    await user.click(input);
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(onPublishMemo).toHaveBeenCalledWith("普通一条\n- [ ] 买牛奶", { asTask: true });
   });
 });

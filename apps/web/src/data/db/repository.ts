@@ -15,6 +15,7 @@ import {
   type ItemMeta,
   type ItemType,
 } from "@menote/shared";
+import { stripFrontmatter } from "@menote/mdcore";
 import { db } from "./database";
 import {
   SYNC_STATE_KEY,
@@ -113,6 +114,26 @@ export async function listLocalMemos(): Promise<LocalItem[]> {
   return rows
     .filter((row) => row.deleted_at === null && row.type === "memo")
     .sort((a, b) => (b.memo_at ?? 0) - (a.memo_at ?? 0));
+}
+
+/**
+ * Memo 的正文（已剥掉 YAML front matter），供时间轴渲染。
+ *
+ * 时间轴要显示**渲染后的正文**，而本地缓存里存的是原始 md（可能带 front matter）；
+ * 剥壳放在数据层，界面层不该关心 md 的格式细节。
+ */
+export async function listMemoContents(): Promise<Record<string, string>> {
+  const rows = await db.items.toArray();
+  const memoIds = new Set(
+    rows.filter((row) => row.deleted_at === null && row.type === "memo").map((row) => row.id),
+  );
+  const bodies = await db.bodies.toArray();
+  const out: Record<string, string> = {};
+  for (const body of bodies) {
+    if (!memoIds.has(body.item_id)) continue;
+    out[body.item_id] = stripFrontmatter(body.body);
+  }
+  return out;
 }
 
 export async function getLocalItem(id: string): Promise<LocalItem | undefined> {
@@ -263,7 +284,8 @@ export async function listItemSummaries(): Promise<Record<string, string>> {
   const rows = await db.bodies.toArray();
   const out: Record<string, string> = {};
   for (const row of rows) {
-    for (const rawLine of row.body.split("\n")) {
+    // 先剥掉 YAML front matter：否则摘要把 `menote:` 当成正文首行显示
+    for (const rawLine of stripFrontmatter(row.body).split("\n")) {
       const line = rawLine
         .replace(/^#{1,6}\s*/, "")
         .replace(/^[-*+]\s+(\[[ xX]\]\s*)?/, "")

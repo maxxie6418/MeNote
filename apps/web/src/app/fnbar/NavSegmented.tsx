@@ -22,7 +22,7 @@ interface TabSpec {
 
 const TABS: readonly TabSpec[] = [
   { view: "home", label: "首页", icon: "home", pendingStep: "M2-8" },
-  { view: "memo", label: "Memo", icon: "clock", pendingStep: "M2-4" },
+  { view: "memo", label: "Memo", icon: "clock", pendingStep: null },
   { view: "task", label: "待办", icon: "check-square", pendingStep: "M2-5" },
 ];
 

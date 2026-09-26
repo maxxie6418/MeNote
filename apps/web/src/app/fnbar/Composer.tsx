@@ -24,19 +24,32 @@ export type ComposerMode = (typeof COMPOSER_MODES)[number]["value"];
 
 /** 各模式「发布」的接入状态（未接入的给出可见原因） */
 const PUBLISH_READY: Record<ComposerMode, boolean> = {
-  memo: false,
+  memo: true,
   task: false,
   note: true,
 };
 
 const MODE_DISABLED_REASON: Record<ComposerMode, string> = {
-  memo: "Memo 发布将在 M2-4 提供",
+  memo: "",
   task: "待办发布将在 M2-5 提供",
   note: "",
 };
 
+/** `- [ ]` 清单项：写了它就在录入框里提示"设为清单？"（需求 §9.3） */
+const TASK_ITEM_PATTERN = /^\s*[-*+]\s+\[[ xX]\]/m;
+
 /** 模式附加项：内容随模式变，**容器高度恒定** */
-function ModeExtras({ mode }: { mode: ComposerMode }) {
+function ModeExtras({
+  mode,
+  showTaskPrompt,
+  asTask,
+  onSetTask,
+}: {
+  mode: ComposerMode;
+  showTaskPrompt: boolean;
+  asTask: boolean;
+  onSetTask: (value: boolean) => void;
+}) {
   if (mode === "task") {
     return (
       <>
@@ -60,18 +73,51 @@ function ModeExtras({ mode }: { mode: ComposerMode }) {
       </>
     );
   }
-  // memo：空容器占位（不得 display:none 塌陷）
+  // memo：写了 `- [ ]` 才提示"设为清单？"（需求 §9.3：由用户确认，不自动改语义）
+  if (asTask) {
+    return (
+      <Chip
+        variant="compact"
+        tone="primary"
+        active
+        title="发布后这条 Memo 带清单标记；再点一次取消"
+        onClick={() => onSetTask(false)}
+      >
+        已设为清单
+      </Chip>
+    );
+  }
+  if (showTaskPrompt) {
+    return (
+      <Chip
+        variant="compact"
+        tone="amber"
+        title="正文里有 - [ ] 清单项；点这里让这条 Memo 变成清单"
+        onClick={() => onSetTask(true)}
+      >
+        设为清单？
+      </Chip>
+    );
+  }
+  // 没有结构化内容：空容器占位（不得 display:none 塌陷）
   return null;
 }
 
 export interface ComposerProps {
   /** 笔记模式发布：首行作标题，其余为正文 */
   onPublishNote?: (title: string, body: string) => void;
+  /** Memo 模式发布：`asTask` = 用户确认了"设为清单？" */
+  onPublishMemo?: (text: string, options: { asTask: boolean }) => void;
 }
 
-export function Composer({ onPublishNote }: ComposerProps) {
+export function Composer({ onPublishNote, onPublishMemo }: ComposerProps) {
   const [mode, setMode] = useState<ComposerMode>("memo");
   const [text, setText] = useState("");
+  const [taskRequested, setTaskRequested] = useState(false);
+
+  const hasTaskItem = TASK_ITEM_PATTERN.test(text);
+  // 用户把 `- [ ]` 删掉后，清单标记自动作废（不靠 effect 同步状态）
+  const asTask = taskRequested && hasTaskItem;
 
   const ready = PUBLISH_READY[mode] && text.trim() !== "";
   const disabledReason = !PUBLISH_READY[mode]
@@ -86,6 +132,13 @@ export function Composer({ onPublishNote }: ComposerProps) {
       const { title, body } = splitFirstLineAsTitle(text);
       onPublishNote?.(title === "" ? "未命名笔记" : title, body);
       setText("");
+      return;
+    }
+    if (mode === "memo") {
+      // 乐观发布：界面立刻清空，条目由调用方先落本地再后台上传
+      onPublishMemo?.(text, { asTask });
+      setText("");
+      setTaskRequested(false);
     }
   }
 
@@ -106,7 +159,12 @@ export function Composer({ onPublishNote }: ComposerProps) {
       />
 
       <div className="composer__extras" data-testid="composer-extras">
-        <ModeExtras mode={mode} />
+        <ModeExtras
+          mode={mode}
+          showTaskPrompt={hasTaskItem}
+          asTask={asTask}
+          onSetTask={setTaskRequested}
+        />
       </div>
 
       <div className="composer__modes">

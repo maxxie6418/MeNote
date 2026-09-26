@@ -129,6 +129,7 @@ describe("功能栏与录入框占位", () => {
       <FnBar
         onNewNote={vi.fn()}
         onPublishNote={vi.fn()}
+        onPublishMemo={vi.fn()}
         view={{ kind: "notebook" }}
         onViewChange={vi.fn()}
         notebookPanel={null}
@@ -166,12 +167,13 @@ describe("功能栏与录入框占位", () => {
     expect(publish.disabled).toBe(true);
     expect(publish.title).toContain("先写点内容");
 
-    // 未接入的档位必须说明原因（DESIGN.md §6.1：禁用要给理由）
+    // Memo 档也已可用（M2-4）：同样只是"还没写内容"
     await user.click(screen.getByRole("button", { name: "Memo" }));
     const memoPublish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
     expect(memoPublish.disabled).toBe(true);
-    expect(memoPublish.title).toContain("M2-4");
+    expect(memoPublish.title).toContain("先写点内容");
 
+    // 未接入的档位必须说明原因（DESIGN.md §6.1：禁用要给理由）
     await user.click(screen.getByRole("button", { name: "待办" }));
     const taskPublish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
     expect(taskPublish.title).toContain("M2-5");

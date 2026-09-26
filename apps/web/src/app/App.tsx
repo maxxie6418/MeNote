@@ -20,6 +20,7 @@ import { changeLoginPassword } from "../features/settings/model";
 import { SettingsPanel } from "../features/settings/ui/SettingsPanel";
 import { AppShell } from "./AppShell";
 import { FnBar } from "./fnbar/FnBar";
+import type { BrowsableView } from "./fnbar/NavSegmented";
 import { useRoute } from "./router";
 import { useTheme } from "./theme/useTheme";
 import { Topbar } from "./topbar/Topbar";
@@ -29,6 +30,8 @@ import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnv
 import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { TwoPane } from "./workarea/TwoPane";
+import { MemoPanel } from "../features/memos/ui/MemoPanel";
+import type { NotesView } from "../features/notes/views";
 
 export default function App() {
   const { route, navigate } = useRoute();
@@ -38,6 +41,11 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>("idle");
   const [pendingCount, setPendingCount] = useState(0);
   const [registration, setRegistration] = useState<RegistrationState | null>(null);
+  /**
+   * 浏览三段（首页 / Memo / 待办）的当前项；`null` = 停留在笔记视图。
+   * 笔记侧的任何导航（最近编辑 / 收藏 / 笔记本 / 标签）都会把它重置回 `null`。
+   */
+  const [browse, setBrowse] = useState<BrowsableView | null>(null);
 
   /**
    * 加密能力环境只在挂载时探一次：它会决定"能不能登录/保存"，而浏览器在会话中途改变
@@ -70,6 +78,22 @@ export default function App() {
     await workspace.refreshEditorState();
     await refreshPending();
   }, [refreshPending, workspace]);
+
+  /** 切换笔记视图时同时退出浏览三段，避免"看起来在 Memo 页、却在改笔记视图" */
+  const showNotesView = useCallback(
+    (view: NotesView) => {
+      setBrowse(null);
+      workspace.setView(view);
+    },
+    [workspace],
+  );
+
+  /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
+  const focusComposer = useCallback(() => {
+    const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="快速录入"]');
+    input?.focus();
+    input?.scrollIntoView({ block: "nearest" });
+  }, []);
 
   /**
    * 同步引擎必须**只随登录状态**创建/销毁。
@@ -191,7 +215,13 @@ export default function App() {
         topbar={
           <Topbar
             user={{ username: user.username, role: user.role }}
-            breadcrumb={route.name === "settings" ? "设置" : "全部笔记"}
+            breadcrumb={
+              route.name === "settings"
+                ? "设置"
+                : browse === "memo"
+                  ? "Memo"
+                  : workspace.viewTitle
+            }
             sync={sync}
             onOpenSettings={() => navigate({ name: "settings", page: "general" })}
             onLogout={() => {
@@ -208,13 +238,20 @@ export default function App() {
               void workspace.createNote({ title, body });
               pushToast("已新建笔记", "success");
             }}
+            onPublishMemo={(text, options) => {
+              // 乐观发布：条目先落本地并标"待上传"，由 outbox 后台上传
+              void workspace.publishMemo(text, options);
+              pushToast("已记录", "success");
+            }}
             view={workspace.view}
-            onViewChange={workspace.setView}
+            onViewChange={showNotesView}
             tags={workspace.tags}
+            browseView={browse ?? undefined}
+            onBrowseChange={(next) => setBrowse(next)}
             notebookPanel={
               <NotebookPanel
                 view={workspace.view}
-                onViewChange={workspace.setView}
+                onViewChange={showNotesView}
                 folders={workspace.folders}
                 counts={workspace.folderCounts}
                 onCreateFolder={workspace.createFolder}
@@ -250,6 +287,25 @@ export default function App() {
             onLogout={() => {
               void auth.logout().then(() => navigate({ name: "login" }));
             }}
+          />
+        ) : browse === "memo" ? (
+          /* Memo 视图：单栏占满（时间轴），列表让位 */
+          <TwoPane
+            listHidden={true}
+            list={null}
+            doc={
+              <MemoPanel
+                memos={workspace.memos}
+                contents={workspace.memoContents}
+                onSave={(id, text) => {
+                  void workspace.updateMemo(id, text);
+                }}
+                onTogglePinned={(id) => {
+                  void workspace.togglePinned(id);
+                }}
+                onAdd={focusComposer}
+              />
+            }
           />
         ) : (
           <TwoPane

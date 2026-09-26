@@ -6,18 +6,24 @@
  */
 import { newUlid } from "@menote/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildDocument, deriveTags, deriveTaskFields } from "@menote/mdcore";
 import {
   countItemsByFolder,
   createLocalFolder,
+  createLocalItem,
   createLocalNote,
   db,
+  enqueueBodySave,
   enqueueMetaPatch,
   getLocalItem,
   listItemSummaries,
   listLocalFolders,
   listLocalItems,
+  listLocalMemos,
+  listMemoContents,
   moveLocalFolder,
   renameLocalFolder,
+  saveDraft,
   type LocalFolder,
   type LocalItem,
 } from "../../data/db";
@@ -79,6 +85,17 @@ export interface NotesWorkspace {
   open: (id: string) => Promise<void>;
   createNote: (options?: { title?: string; body?: string }) => Promise<void>;
   changeTitle: (title: string) => Promise<void>;
+  /** 时间轴上的 Memo（不含已删除的；按 memo_at 倒序，置顶由界面层再排） */
+  memos: LocalItem[];
+  /** Memo 的正文（已剥 front matter），供时间轴渲染 */
+  memoContents: Record<string, string>;
+  /**
+   * 发布 Memo（乐观：先落本地并标"待上传"，出队由 outbox 后台上传；写入**永远免密**）。
+   * `asTask` = 用户在录入框确认了"设为清单？"，正文会带上 `menote.task` 标记。
+   */
+  publishMemo: (text: string, options?: { asTask?: boolean }) => Promise<void>;
+  /** 编辑 Memo 正文（Q19：`memo_at` 不变，只改正文与派生标签） */
+  updateMemo: (itemId: string, text: string) => Promise<void>;
   /** 新建文件夹（深度超限时抛错，界面本该不给出入口） */
   createFolder: (name: string, parentId: string | null) => Promise<void>;
   /** 重命名文件夹（走 meta_rev，不生成冲突副本） */
@@ -108,22 +125,28 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   const [folders, setFolders] = useState<LocalFolder[]>([]);
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [memos, setMemos] = useState<LocalItem[]>([]);
+  const [memoContents, setMemoContents] = useState<Record<string, string>>({});
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;
 
   /** 内容没变就不要替换数组：每次同步都塞新数组会让下游依赖无谓地变身份 */
   const refresh = useCallback(async () => {
-    const [rows, folderRows, counts, bodySummaries] = await Promise.all([
+    const [rows, folderRows, counts, bodySummaries, memoRows, memoBodies] = await Promise.all([
       listLocalItems(),
       listLocalFolders(),
       countItemsByFolder(),
       listItemSummaries(),
+      listLocalMemos(),
+      listMemoContents(),
     ]);
     setAllItems((previous) => (sameItems(previous, rows) ? previous : rows));
     setFolders(folderRows);
     setFolderCounts(counts);
     setSummaries(bodySummaries);
+    setMemos((previous) => (sameItems(previous, memoRows) ? previous : memoRows));
+    setMemoContents(memoBodies);
   }, []);
 
   // 首次加载：setState 放在 then 回调里，不在 effect 体内同步触发（react-hooks/set-state-in-effect）
@@ -211,8 +234,87 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [folders, onLocalWrite, refresh],
   );
 
-  const renameFolder = useCallback(
-    async (folderId: string, name: string) => {
+  /**
+   * 发布 Memo。
+   *
+   * `type: memo` **不写进正文**（type 是条目的元数据列，md 只承载内容与结构化字段），
+   * 只有存在标签或清单标记时才写 front matter——这样纯文本 Memo 的正文就是用户写的那几行，
+   * 原位编辑时不会看到 YAML。
+   */
+  const publishMemo = useCallback(
+    async (text: string, options?: { asTask?: boolean }) => {
+      const tags = deriveTags(text);
+      const asTask = options?.asTask ?? false;
+      const body =
+        tags.length > 0 || asTask
+          ? buildDocument(
+              {
+                type: "memo",
+                tags,
+                task: asTask ? { status: null, due: null, priority: null } : null,
+                preservedLines: [],
+              },
+              text,
+            )
+          : text;
+
+      const id = newUlid();
+      const now = Date.now();
+      await createLocalItem(
+        {
+          id,
+          type: "memo",
+          title: null,
+          folder_id: null,
+          tags,
+          memo_at: now,
+          body,
+          task: deriveTaskFields(body),
+        },
+        now,
+      );
+      await refresh();
+      onLocalWrite?.();
+    },
+    [onLocalWrite, refresh],
+  );
+
+  /**
+   * 原位编辑 Memo 正文（Q19）。
+   *
+   * 用户编辑的是**内容**：front matter 由这里按"是否清单 + 新标签"重新生成，
+   * 因此正文里的 YAML 永远不会被用户改坏；`memo_at` 不动（编辑不改变时间轴位置）。
+   */
+  const updateMemo = useCallback(
+    async (itemId: string, text: string) => {
+      const item = await getLocalItem(itemId);
+      if (!item) return;
+
+      const tags = deriveTags(text);
+      // 清单标记与三个字段由条目元数据承载：编辑正文不改它们（Q19 只改内容）
+      const taskFields =
+        item.is_task === 1
+          ? { status: item.task_status, due: item.task_due, priority: item.task_priority }
+          : null;
+      const body =
+        tags.length > 0 || taskFields !== null
+          ? buildDocument({ type: "memo", tags, task: taskFields, preservedLines: [] }, text)
+          : text;
+
+      const now = Date.now();
+      await saveDraft(itemId, body, now);
+      await enqueueBodySave(itemId, item.rev, now);
+      await db.items.update(itemId, { tags, updated_at: now });
+      if (item.tags.join("\u0000") !== tags.join("\u0000")) {
+        await enqueueMetaPatch(itemId, item.meta_rev, now);
+      }
+      await refresh();
+      onLocalWrite?.();
+    },
+    [onLocalWrite, refresh],
+  );
+
+  const renameFolder = useCallback(    async (folderId: string, name: string) => {
       await renameLocalFolder(folderId, name, Date.now());
       await refresh();
       onLocalWrite?.();
@@ -293,6 +395,10 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       createNote,
       changeTitle,
       createFolder,
+      memos,
+      memoContents,
+      publishMemo,
+      updateMemo,
       renameFolder,
       moveFolder,
       moveItemToFolder,
@@ -314,8 +420,11 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       initialBody,
       items,
       loading,
+      memos,
+      memoContents,
       moveItemToFolder,
       open,
+      publishMemo,
       refresh,
       renameFolder,
       moveFolder,
@@ -327,6 +436,7 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       title,
       togglePinned,
       toggleStarred,
+      updateMemo,
       view,
     ],
   );

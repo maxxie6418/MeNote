@@ -1466,3 +1466,170 @@ button.chip--tag:hover {
 .target-list__item:disabled {
   opacity: 0.5;
 }
+
+/* ============================================================
+   Memo 视图（需求 §8.4；间距按 §4.3 刻度）
+   ============================================================ */
+.memopanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.memopanel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.memopanel__title {
+  margin: 0;
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.memopanel__head .btn {
+  margin-left: auto;
+}
+
+.memopanel__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.memopanel__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.memopanel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.timeline__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.timeline__date {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.memo {
+  position: relative;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.memo__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.memo__time {
+  font-size: var(--fs-micro);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.memo__flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+.memo__menu {
+  margin-left: auto;
+}
+
+.memo__body {
+  font-size: var(--fs-body);
+}
+
+.memo__body > .markdown-body > :first-child {
+  margin-top: 0;
+}
+
+.memo__body > .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.memo__edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.memo__input {
+  min-height: 72px;
+  max-height: 320px;
+  padding: var(--sp-2);
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-body);
+  resize: vertical;
+}
+
+.memo__editfoot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.memo__hint {
+  margin-right: auto;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+.memo__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+}
+
+.memo-empty {
+  padding: var(--sp-6) 0;
+  text-align: center;
+}
+
+.memo-empty__title {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.memo-empty__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}

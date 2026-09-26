@@ -21,6 +21,8 @@ export interface FnBarProps {
   onNewNote: () => void;
   /** 笔记模式发布：首行作标题 */
   onPublishNote: (title: string, body: string) => void;
+  /** Memo 模式发布：`asTask` = 用户确认了"设为清单？" */
+  onPublishMemo: (text: string, options: { asTask: boolean }) => void;
   view: NotesView;
   onViewChange: (view: NotesView) => void;
   tags: ReadonlyArray<{ tag: string; count: number }>;
@@ -37,6 +39,7 @@ export interface FnBarProps {
 export function FnBar({
   onNewNote,
   onPublishNote,
+  onPublishMemo,
   view,
   onViewChange,
   tags,
@@ -51,7 +54,7 @@ export function FnBar({
           <Icon name="plus" size={16} />
           新建笔记
         </button>
-        <Composer onPublishNote={onPublishNote} />
+        <Composer onPublishNote={onPublishNote} onPublishMemo={onPublishMemo} />
       </div>
 
       <div className="fnbar__scroll">

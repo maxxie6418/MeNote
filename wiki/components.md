@@ -433,7 +433,7 @@ AppShell                                    app/
 
 **通用控件铁律**：
 
-1. **任何颜色都走令牌**，含条纹（`--ph-stripe`）、遮罩（`--scrim`）、阴影（`--shadow-1..3`）、`--on-primary`。**禁蓝色系**（`DESIGN.md` 有正则扫描；注意 `linear-gradient()` 里的硬编码色不会被扫到，须手工核对）。
+1. **任何颜色都走令牌**，含条纹（`--ph-stripe`）、遮罩（`--scrim`）、阴影（`--shadow-1..3`）、`--on-primary`。完整规则见 `DESIGN.md` §3.2。注意 `linear-gradient()` 里的硬编码色**不会**被回归脚本的正则扫到，须手工核对（原型现有 14 处硬编码渐变、仅 3 处走令牌）。
 2. **不在通用控件内写业务语义**。`Chip tone="amber"` 而不是 `Chip kind="encrypted"`。
 3. **不引第二套 UI 库**（AGENTS.md「界面怎么做」）。
 4. 图标一律走 `<symbol>` sprite，不内联 path、不引外部图标库。
@@ -457,7 +457,7 @@ AppShell                                    app/
 
 ### 9.2 设计令牌
 
-- **令牌的唯一定义处是 `DESIGN.md`**（从原型 `:root` / `[data-theme="dark"]` 两套落稿）。本文**不复制令牌值**，只约定「走令牌」。
+- **令牌的唯一定义处是 `DESIGN.md`**（从原型 `:root` / `[data-theme="dark"]` 两套落稿）。本文**不复制令牌值**，只约定「走令牌」。注意：`DESIGN.md` 的第三章「视觉语言」现为**【待定】**（配色、字体、字号刻度、圆角刻度、阴影尚未定型），因此**色值表暂缺**；但第三章的**机制**（必须令牌化、双主题、禁硬编码含渐变、语义色不靠颜色单独表意）**已经生效**。
 - 原型令牌全集：底色（`--bg` `--bg-soft` `--panel` `--panel-2` `--panel-3`）、线（`--line` `--line-2`）、文字（`--text` `--text-2` `--muted`）、主色（`--primary` `--primary-2` `--primary-soft` `--primary-line` `--on-primary`）、语义（`--amber` `--green` `--red` `--purple` 各自的 `-soft` / `-line`）、结构（`--hairline` `--ph-stripe` `--topbar-bg` `--lock-veil` `--scrim` `--shadow-1..3`）、尺寸（`--radius` `--radius-lg` `--fnbar-w` `--list-w` `--topbar-h`）、字体（`--mono` `--sans`）。
 - **双主题**：浅色为默认，深色是**暖黑**（不是冷灰）。**主色浅深两套相同**；语义色在深色下提亮。切换走 `data-theme` 属性。
 

@@ -13,5 +13,8 @@ dist-types/
 
 # Wrangler / Cloudflare 本地产物与机密
 .wrangler/
-.dev.vars*
+.dev.vars
+.dev.vars.*
+# 示例文件必须入库：一键部署页据此提示需要填哪些机密（架构 §15.5）
+!.dev.vars.example
 

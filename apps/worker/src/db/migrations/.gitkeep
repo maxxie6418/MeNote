@@ -1,2 +1,4 @@
-# M1 起放置 D1 迁移脚本（架构 §15.4）：按序号命名、幂等、单脚本 ≤ 45 条语句。
-# 迁移经根 deploy 脚本的 `wrangler d1 migrations apply DB --remote` 执行（见 local-dev.md §7）。
+# D1 迁移脚本（架构 §15.4）：按序号命名（0001_init.ts）、幂等、单脚本 ≤ 45 条语句。
+# 正式通道是运行时自愈（src/db/selfheal.ts）——部署时 D1 自动供给，首个请求建表，
+# 不需要 `wrangler d1 migrations apply`，也不要把迁移塞进 deploy 脚本。
+# 这里的目录与 wrangler.jsonc 的 migrations_dir 保留，仅供将来可选的手工/本地 apply。

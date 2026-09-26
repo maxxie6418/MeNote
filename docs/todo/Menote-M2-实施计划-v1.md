@@ -190,9 +190,11 @@ M1 已收口（`docs/archive/Menote-M1-实施计划-v1.md`），但有几项当�
 
 ### M2-7 设置
 
-> **状态：🟡 第一批完成（v0.2.14）**。已落地：`UserSettings` 契约与 `QUICK_MENU_FEATURES` 唯一清单（共享包）；`GET/PUT /api/settings`（整份覆盖、后写为准、坏数据退回默认值）；同步响应带 `settings`（**不参与游标**，schema optional 以兼容部署窗口）；本地设置表（Dexie v3）+ 即时生效的 `useUserSettings` + outbox 的 `put_settings` 推送；设置页分类导航扩到 M2 已实现的 6 个（通用 / 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 实例管理，未实现的不进导航）；通用页补齐启动视图与**时区**、新增快捷菜单配置卡（5 个候选，未实现的带里程碑说明）；编辑器页三档可选 + 第四档置灰说明；隐私锁与版本页只读占位。
+> **状态：✅ 完成（v0.2.15；启动视图的接线随 M2-8）**。已落地：`UserSettings` 契约与 `QUICK_MENU_FEATURES` 唯一清单（共享包）；`GET/PUT /api/settings`（整份覆盖、后写为准、坏数据退回默认值）；同步响应带 `settings`（**不参与游标**，schema optional 以兼容部署窗口）；本地设置表（Dexie v3）+ 即时生效的 `useUserSettings` + outbox 的 `put_settings` 推送；设置页分类导航扩到 M2 已实现的 6 个（未实现的不进导航）；通用页补齐启动视图与**时区**、新增快捷菜单配置卡（5 个候选，未实现的带里程碑说明）；编辑器页三档可选 + 第四档置灰说明；隐私锁与版本页只读占位；账户与安全页补「登录设备与会话」占位。
 >
-> **第二批待做**：① **账户快捷菜单本体**（`AccountQuickMenu`：账户头 → 可配置功能项 → 定底「设置」「退出登录」；菜单内主题切换**切换不收起菜单**；「立即锁定」带状态）；② **让设置真正生效**——启动视图（M2-8 首页落地后一并接）、时区用于 Memo 时间轴与待办分天（目前硬编码 `Asia/Shanghai`）、默认编辑模式作用于正文区；③ 账户与安全页按 §7.5 补「登录设备与会话」占位说明。
+> **账户快捷菜单（M18-03）**：账户头 → 可配置功能项 → 定底「设置」「退出登录」；主题一排三档且切完不收起菜单；未实现项禁用并说明里程碑。
+>
+> **让设置生效**：时区已用于 Memo 时间轴与待办日期口径；默认编辑模式已作用于打开笔记；**启动视图随 M2-8 首页一起接**（首页视图本身还没做）。
 
 **涉及文件**：`apps/web/src/features/settings/`（`SetNav`、`SetCard`、`SetRow`、`Toggle`、`RadioSet`、`Field`、按分类拆的卡片 `cardGeneral` / `cardAccount` / `cardQuickMenu` / `cardEditor` / …，由 `setPageBody(id)` 装配）、`apps/web/src/app/topbar/AccountQuickMenu.tsx`、`apps/worker/src/routes/settings.ts`（`user_settings` 读写）、`apps/web/src/data/db/`（`settings` 表）。
 

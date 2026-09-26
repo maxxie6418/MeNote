@@ -15,6 +15,7 @@
 | v1 | v0.1.2 | 2026-09-26 | 初稿：KDF 参数定稿、接口契约、会话与 CSRF、节流曲线、机密清单（取消 SESSION_SECRET）、环境数、M1 最小设置入口落点 | deepseek-v4.1-flash |
 | v1.1 | v0.1.3 | 2026-09-26 | 状态改「生效」；据实测与独立复核修正（改密请求体不再要求浏览器产出 `newVerifier`、注册需捕获唯一约束异常、prelogin 的 CSRF 口径统一、设置壳补「通用」默认分类）；应用已批准决定：登出不清除本机缓存、`site_settings` 暂不建表 | deepseek-v4.1-flash |
 | v1.2 | v0.1.5 | 2026-09-26 | M1-3 落地回写：§4.1 的 CSRF 口径修正为「`Origin` 缺失放行、在场必须匹配」并说明理由（主防线是 `X-Menote` 自定义头）；标注 dev 浏览器验证仍待 M1-10 补做；§5.3 的设置壳分类与实现一致 | deepseek-v4.1-flash |
+| v1.3 | v0.1.10 | 2026-09-26 | dev 链路实测回写：§4.1 记录 17 项断言结果（Cookie 属性、CSRF 两路、注册登录、隔离），并如实标注"真实浏览器 Cookie 存储仍未验、留到 M1-11"与 miniflare 的 `Request.cf` 告警 | deepseek-v4.1-flash |
 
 ---
 
@@ -133,7 +134,9 @@ UPDATE sessions
 - `SameSite=Lax` 是第二层；两层都要，不互相替代。
 - `POST /api/auth/prelogin` 与 `/api/auth/login` 同样受 CSRF 约束（它们是 POST），`/api/health` 不受。
 - **实现口径修正（v1.2）**：v1 写的是"Origin 必须等于本域"，实现改为 **`Origin` 缺失时放行、在场时必须匹配**。理由：跨站写请求由浏览器发起时一定带 `Origin`（表单提交与 fetch 都带），缺失只可能是非浏览器客户端，而这类客户端没有受害者 Cookie、不构成 CSRF 场景；反过来，严格"缺失即拒绝"会在本地 Vite dev 等环境下拦掉正常的同源写请求，把一个安全问题换成一个开发期故障。**主防线始终是 `X-Menote` 自定义头**（跨站无法携带、跨站 fetch 会先触发不获放行的 CORS 预检）。
-- **dev 待验（仍未验，M1-10 接前端时在浏览器里过一遍）**：Vite 插件下同源请求的 `Origin` 与本机 `URL.origin` 是否一致。当前只在 vitest 集成测试里验过 `https://menote.test` 的同源/异源两路；真实浏览器 + `pnpm dev` 下的 `Secure` Cookie 与 `Origin` 行为**尚未验证**。若届时发现不一致，按上面的口径只在 dev 分支放宽（不改生产逻辑）。
+- **dev 链路已实测（2026-09-26，`pnpm dev` + 真实 workerd + 本地 D1，用 Node fetch 打 17 项断言）**：`Origin` 与本机 `URL.origin` 一致；缺 `X-Menote` / `Origin` 不一致都返回 403 `csrf`；`http://localhost` 下**不带 `Secure`**（带 `HttpOnly` / `SameSite=Lax` / `Path=/`），因此浏览器能正常写入会话 Cookie；未登录 401、注册 201 并自动登录、`/api/auth/me` 返回 owner。
+  - **仍未验的部分（如实标注）**：真实浏览器对 `SameSite=Lax` + 非 `Secure` Cookie 的**存储与随请求发送**行为（上面的验证是 Node fetch，不做 Cookie 策略判定）；以及 `localhost` 之外的局域网 IP 访问场景。这两条留到 M1-11 的两设备真机验证一起过。
+  - 顺带记录一条本地开发告警（不影响功能）：离线环境下 miniflare 取不到 `Request.cf` 样本，会打印 `Unable to fetch the Request.cf object! Falling back to a default placeholder` 并回退默认值，接口行为正常。
 - **实现状态**：以上四条已按本节口径落地（`middleware/csrf.ts`、`middleware/session.ts`），并有用例覆盖（缺头 403、异源 403、GET 不受约束、伪造令牌 401）。
 
 ---

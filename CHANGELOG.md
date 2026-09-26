@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- 预开发 / 2c61a80 — CHANGELOG 改为日期小标题格式（AGENTS.md 规则同步）
 - 预开发 / b38fb20 — 草稿改为 docs/scratch/ 文件夹（一份讨论一份文件），架构升 v1.7 与 AGENTS.md 同步
 - 预开发 / f68de6e — CHANGELOG 补记 scratch 目录化
 - 预开发 / b24a31a — AGENTS.md 文档放哪补充 todo/ 与 scratch.md，创建对应目录与草稿文件

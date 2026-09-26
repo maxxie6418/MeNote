@@ -144,7 +144,24 @@ step('顶栏页：含账户入口，紧邻隐私锁胶囊（6 块，2026-09-26 �
   }
   if ($('#canvas [data-b="fnAccount"]')) throw new Error('旧的功能栏账户块仍在');
   if (!blockText('topAccount').includes('移回顶栏')) throw new Error('账户块未说明由功能栏底部移回');
+  if (!blockText('topAccount').includes('设置')) throw new Error('账户块未说明「设置」在菜单里');
   if (!blockText('fnbar').includes('移回顶栏')) throw new Error('功能栏未说明账户区已移回顶栏');
+});
+
+step('浮层页：账户快捷菜单作为独立浮层，内容可配置（2026-09-26 更正）', () => {
+  gotoPage('浮层');
+  const qm = $('#canvas [data-b="quickMenu"]');
+  if (!qm) throw new Error('浮层页缺账户快捷菜单块');
+  const drawer = $('#canvas [data-b="drawer"]');
+  if (!drawer) throw new Error('浮层页缺滑出详情块');
+  // 结构：快捷菜单与滑出详情同属右列「其他浮层」，且快捷菜单在前
+  if (qm.parentElement !== drawer.parentElement)
+    throw new Error('快捷菜单不在「其他浮层」右列里');
+  if (!(qm.compareDocumentPosition(drawer) & 4)) throw new Error('快捷菜单应在滑出详情之前');
+  // 文案（会触发重渲染）
+  if (!blockText('quickMenu').includes('点')) throw new Error('快捷菜单块未说明触发方式');
+  if (!blockText('quickMenu').includes('配置')) throw new Error('快捷菜单块未说明内容可配置');
+  if (!blockText('menu').includes('账户快捷菜单')) throw new Error('下拉菜单块未把账户快捷菜单算作复用场景');
 });
 
 step('功能栏页：新建笔记 / 笔记本新建入口 / 已无底部账户区', () => {

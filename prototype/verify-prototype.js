@@ -10,14 +10,15 @@
 
    覆盖：浏览三段（首页 / Memo / 待办 横向合并成一行，保留原名）/
          导航顺序与路由（首页 / Memo / 待办 / 最近编辑 / 收藏 / 笔记本 / 标签 / 加密空间）/
-         账户入口唯一性（顶栏隐私锁胶囊旁，6 块顶栏；功能栏底部已无账户区）/
+         账户入口（顶栏头像 → 快捷菜单 → 设置，6 块顶栏；功能栏底部已无账户区）/
          首页三类内容与隐私占位 / 启动视图 / 主题（Claude 橙白双主题）/
          笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
          快速录入框三模式（无加密选项）/ 录入框行序（输入区 → 附加项 → 模式行）/
          新建直连笔记 / 笔记本新建入口 /
          加密空间贴底且无分组小标题 /
          表格更多菜单 / 滑出详情侧栏 / 隐私锁锁定与解锁 / Memo 隐私门禁 /
-         设置两栏分页（左列分类导航 + 右侧内容，§7.5）/ 重置隐私密码流程 / 搜索 / 表格视图切换
+         设置两栏分页（左列分类导航 + 右侧内容，§7.5）/ 账户快捷菜单与其配置 / 重置隐私密码流程 /
+         搜索 / 表格视图切换
    ============================================================ */
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
@@ -43,10 +44,24 @@ const input = (el, v) => { el.value = v; el.dispatchEvent(new window.Event('inpu
 const navEl = fn => $('.nav-item[data-fn="' + fn + '"], .seg-item[data-fn="' + fn + '"]');
 const navAll = () => $$('.nav-item[data-fn], .seg-item[data-fn]');
 
-/* 设置是两栏分页（§7.5）：先点顶栏账户入口进设置，再点左列分类导航切到目标分类。
+/* 账户入口（2026-09-26 用户更正）：点头像弹出快捷菜单，「设置」是菜单里的一项。
+   先展开菜单，再点「设置」进去 —— 之后才能谈「当前是哪个分类」。 */
+function openAccountMenu(){
+  if (!$('.menu.open')) click($('#topAccount'));
+  const menu = $('.menu.open');
+  if (!menu) throw new Error('点头像未弹出快捷菜单（2026-09-26 更正）');
+  return menu;
+}
+function clickQuick(k){
+  const item = $$('.menu.open .menu-item').find(el => el.dataset.qm === k);
+  if (!item) throw new Error('快捷菜单里没有「' + k + '」');
+  click(item);
+}
+/* 设置是两栏分页（§7.5）：先经头像菜单进设置，再点左列分类导航切到目标分类。
    分类没切到就断言右侧内容 = 拿上一分类残留的 DOM 蒙混过关，所以这一步必须走。 */
 function openSetPage(id){
-  click($('#topAccount'));
+  openAccountMenu();
+  clickQuick('settings');
   if (!$('.pane-head h1') || !$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
   const nav = $('#setNav');
   if (!nav) throw new Error('设置缺左列分类导航（§7.5）');
@@ -322,14 +337,70 @@ step('「添加」按钮复用录入框并切到对应模式（M06-10 / M07-01�
 });
 
 /* ---------- 设置：账户入口与子页面 ---------- */
-step('账户与设置：点击顶栏入口进入设置（2026-09-26 调整）', () => {
+step('账户入口：点头像弹快捷菜单，「设置」在菜单里（2026-09-26 用户更正）', () => {
   click($('#topAccount'));
-  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
+  const menu = $('.menu.open');
+  if (!menu) throw new Error('点头像没有弹出快捷菜单');
+  if ($('.pane-head h1').textContent.includes('设置')) throw new Error('点头像直接进了设置，未走菜单');
+  const has = k => $$('.menu.open .menu-item').some(el => el.dataset.qm === k);
+  if (!has('settings')) throw new Error('快捷菜单里没有「设置」入口');
+  if (!has('logout')) throw new Error('快捷菜单里没有「退出登录」');
+  if (!$('.menu.open .menu-head')) throw new Error('快捷菜单缺账户头部');
+  // 主题切换在菜单里是一排三档，不是普通菜单项（默认开启）
+  const seg = $('.menu.open .menu-seg');
+  if (!seg) throw new Error('快捷菜单里没有默认开启的「主题切换」');
+  ['light', 'dark', 'auto'].forEach(t => {
+    if (!seg.querySelector('button[data-th="' + t + '"]')) throw new Error('主题档位缺 ' + t);
+  });
+  if (!$$('.menu.open .menu-label').some(el => el.textContent.includes('主题')))
+    throw new Error('主题切换缺分组小标题');
+  // 再点一次头像收起（不应误进设置）
+  click($('#topAccount'));
+  if ($('.menu.open')) throw new Error('再点头像没有收起菜单');
+  if ($('.pane-head h1').textContent.includes('设置')) throw new Error('收起菜单的动作进了设置');
+  // 走菜单里的「设置」
+  click($('#topAccount'));   // 重新展开
+  clickQuick('settings');
+  if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('菜单里的「设置」没有进入设置');
+  if ($('.menu.open')) throw new Error('选完菜单项后菜单未收起');
   if (!$('#topAccount').classList.contains('active')) throw new Error('账户入口未高亮');
 });
 
-step('设置：两栏分页结构 —— 左列分类导航 + 右侧当前分类内容（§7.5）', () => {
+step('快捷菜单：放什么可配置（设置 › 通用 › 快捷菜单，2026-09-26 用户更正）', () => {
+  openSetPage('general');
+  const box = $('#quickMenuSet');
+  if (!box) throw new Error('通用里缺「快捷菜单」配置卡片');
+  const toggles = $$('#quickMenuSet .toggle');
+  if (toggles.length < 4) throw new Error('可配置的菜单项太少：' + toggles.length);
+  const tg = k => $$('#quickMenuSet .toggle').find(t => t.dataset.qm === k);
+  if (!tg('theme') || !tg('lock') || !tg('search') || !tg('trash') || !tg('backup'))
+    throw new Error('可配置项不齐（应有 theme / lock / search / trash / backup）');
+  // 默认开：主题切换 与 立即锁定
+  if (!tg('theme').classList.contains('on') || !tg('lock').classList.contains('on'))
+    throw new Error('默认项应为主题切换 + 立即锁定');
+  // 勾上「搜索」→ 菜单里出现
+  click(tg('search'));
+  openAccountMenu();
+  if (!$$('.menu.open .menu-item').some(el => el.dataset.qm === 'search')) throw new Error('勾选后菜单里没出现「搜索」');
+  // 菜单里的主题档位：切了主题、菜单不收起
+  click($('.menu.open .menu-seg button[data-th="dark"]'));
+  if (doc.documentElement.getAttribute('data-theme') !== 'dark') throw new Error('菜单里的主题档位未生效');
+  if (!$('.menu.open')) throw new Error('切主题后菜单被收起了，应当留在菜单里继续切');
+  if (!$('.menu.open .menu-seg button[data-th="dark"]').classList.contains('on')) throw new Error('档位未就地高亮');
+  click($('.menu.open .menu-seg button[data-th="light"]'));
+  if (doc.documentElement.getAttribute('data-theme') !== 'light') throw new Error('未切回浅色');
+  click($('#topAccount'));   // 收起
+  // 取消勾选「搜索」→ 菜单里消失；配置是就地生效的，不需要重进设置
+  openSetPage('general');
+  click($$('#quickMenuSet .toggle').find(t => t.dataset.qm === 'search'));
+  openAccountMenu();
+  if ($$('.menu.open .menu-item').some(el => el.dataset.qm === 'search')) throw new Error('取消勾选后菜单里仍有「搜索」');
   click($('#topAccount'));
+});
+
+step('设置：两栏分页结构 —— 左列分类导航 + 右侧当前分类内容（§7.5）', () => {
+  openAccountMenu();
+  clickQuick('settings');
   const nav = $('#setNav');
   if (!nav) throw new Error('设置缺左列分类导航');
   const items = $$('#setNav .set-nav-item');
@@ -352,7 +423,8 @@ step('设置：两栏分页结构 —— 左列分类导航 + 右侧当前分类
   if (!$('#editModeSet .radio-opt[data-em="live"]').classList.contains('on')) throw new Error('默认编辑模式未就地高亮');
   // 当前分类记在 state：离开设置再回来仍停在原分类（回收站返回同理，见下一条）
   click(navEl('recent'));
-  click($('#topAccount'));
+  openAccountMenu();
+  clickQuick('settings');
   if ($('#setNav .set-nav-item.on').dataset.set !== 'editor') throw new Error('离开再回来未停在原分类');
   // 实例管理是 owner 专属，导航上要有标记
   const inst = $$('#setNav .set-nav-item').find(el => el.dataset.set === 'instance');
@@ -676,11 +748,18 @@ step('笔记本新建入口：文件夹 / 表格（表格不在录入框里）',
   if (!$('table.data')) throw new Error('未进入表格');
 });
 
-step('账户与设置入口不弹菜单，直接进设置（2026-09-26 调整）', () => {
+step('账户入口仍是全站唯一，且只走快捷菜单（2026-09-26 用户更正）', () => {
   click(navEl('recent'));
-  click($('#topAccount'));
+  // 功能栏与设置页都不应有第二个账户入口
+  if ($$('.top-account').length !== 1) throw new Error('顶栏账户入口不是一个');
+  if (navEl('settings') || navEl('trash')) throw new Error('功能栏又出现了设置 / 回收站入口');
+  openAccountMenu();
+  if (!$('.menu.open .menu-item[data-qm="settings"]')) throw new Error('快捷菜单缺「设置」');
+  // 菜单是「快捷菜单」，不是把设置项铺进来：不应出现分类导航
+  if ($('.menu.open #setNav')) throw new Error('快捷菜单里混进了完整的设置页');
+  clickQuick('settings');
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
-  if (doc.querySelector('.menu')) throw new Error('账户入口仍在弹菜单，与「合并为一个入口」不符');
+  if ($$('#setNav .set-nav-item').length !== 10) throw new Error('设置分类导航不是 10 项');
 });
 
 console.log('\n=== 结果：通过 ' + pass + ' / 失败 ' + fail + ' ===');

@@ -182,6 +182,16 @@ a{color:inherit;text-decoration:none}
 .menu-item .hint{margin-left:auto;font-size:11px;color:var(--muted)}
 .menu-sep{height:1px;background:var(--line);margin:4px 6px}
 .menu-label{padding:6px 9px 3px;font-size:10.5px;color:var(--muted);letter-spacing:.6px}
+/* 账户快捷菜单（2026-09-26 用户更正）：点头像弹出的小菜单，内容可在 设置 › 通用 › 快捷菜单 里配置 */
+.menu-head{display:flex;align-items:center;gap:9px;padding:8px 9px 7px}
+.menu-head .avatar{width:26px;height:26px;font-size:11px;cursor:default}
+.menu-head .who{font-size:12.5px;font-weight:600;color:var(--text)}
+.menu-head .sub{font-size:10.5px;color:var(--muted);margin-top:1px}
+.menu-seg{display:flex;gap:4px;padding:2px 9px 8px}
+.menu-seg button{flex:1;font:inherit;font-size:11.5px;padding:5px 0;border-radius:6px;cursor:pointer;transition:.13s;
+  border:1px solid var(--line-2);background:var(--bg);color:var(--text-2)}
+.menu-seg button:hover{background:var(--panel-3);color:var(--text)}
+.menu-seg button.on{background:var(--primary-soft);border-color:var(--primary-line);color:var(--primary-2);font-weight:600}
 
 /* ============================================================
    功能栏（7.4：新建按钮 + 快速录入框 + 导航）
@@ -762,8 +772,9 @@ table.data tbody tr:hover{background:var(--panel-2)}
       <span class="timer" id="lockTimer">4:32</span>
     </div>
 
-    <!-- 账户与设置（2026-09-26 用户调整：由功能栏底部移回顶栏，紧邻隐私锁胶囊，全站唯一入口；点击直接进设置） -->
-    <div class="top-account" id="topAccount" title="账户与设置 · owner（点击进入设置）" role="button" tabindex="0">
+    <!-- 账户与设置（2026-09-26 用户调整：由功能栏底部移回顶栏，紧邻隐私锁胶囊，全站唯一账户入口；
+         2026-09-26 第二次更正：点击弹出快捷菜单，「设置」是菜单里的一项，不再直达设置页） -->
+    <div class="top-account" id="topAccount" title="账户与设置 · owner（点击展开快捷菜单，设置在其中）" role="button" tabindex="0">
       <div class="avatar">M</div>
     </div>
   </header>
@@ -1191,6 +1202,9 @@ const state = {
   theme:'light',
   // 设置的两栏分页（§7.5）：左列分类导航的当前项，默认落在「通用」
   setPage:'general',
+  // 头像快捷菜单里放哪些功能（2026-09-26 用户更正，可在 设置 › 通用 › 快捷菜单 里配）。
+  // 只列可配置项；「设置」与「退出登录」固定在菜单底部，不在这个数组里。
+  quickMenu:['theme','lock'],
   // 设置 › 编辑器：默认编辑模式（§7.1，与正文区的 editorMode 同一字段）
   // editorMode 见上一行（split / edit / preview / live，默认双栏）
   locked:false, timeoutMin:5, remaining:4*60+32, timerId:null, privacyBrowse:true,
@@ -2103,7 +2117,7 @@ function settingsPanel(){
 
 /* 按分类装配内容。每张卡片独立成函数，便于与 §7.5 的子页面表对照。 */
 function setPageBody(id){
-  if(id === 'general')  return cardGeneral();
+  if(id === 'general')  return cardGeneral() + cardQuickMenu();
   if(id === 'account')  return cardAccount();
   if(id === 'editor')   return cardEditor();
   if(id === 'privacy')  return cardPrivacy() + cardMemoPrivacy();
@@ -2132,6 +2146,19 @@ function cardGeneral(){
   +   '<div class="radio-opt' + (state.theme === 'dark' ? ' on' : '') + '" data-th="dark"><div class="radio-dot"></div><div><div class="t">深色</div><div class="d">暖黑底 + 同一主色，夜间使用</div></div></div>'
   +   '<div class="radio-opt' + (state.theme === 'auto' ? ' on' : '') + '" data-th="auto"><div class="radio-dot"></div><div><div class="t">跟随系统</div><div class="d">按操作系统的浅色 / 深色偏好自动切换</div></div></div>'
   + '</div></div>'
+  + '</div></div>';
+}
+
+// 通用 › 快捷菜单（2026-09-26 用户更正）：点头像弹出的小菜单里放哪些功能
+function cardQuickMenu(){
+  const rows = QUICK_ITEMS.map(it =>
+      '<div class="set-row"><div><div class="lbl">' + it.name + '</div><div class="desc">' + it.desc + '</div></div>'
+    + '<div class="right"><div class="toggle' + (state.quickMenu.indexOf(it.id) >= 0 ? ' on' : '') + '" data-qm="' + it.id + '"></div></div></div>').join('');
+  return '<div class="set-card"><div class="set-head">' + icon('i-list') + '<h3>快捷菜单</h3>'
+  + '<div class="right"><span class="chip">点头像展开</span></div></div><div class="set-body" id="quickMenuSet">'
+  + '<div class="hint-line" style="margin:0 0 10px">勾选要放进头像菜单的功能。菜单里的顺序固定按下面这个顺序；'
+  +   '「设置」与「退出登录」固定在菜单底部，不在此列。</div>'
+  + rows
   + '</div></div>';
 }
 
@@ -2288,6 +2315,13 @@ function bindSettings(){
     if(el.dataset.set === state.setPage) return;
     state.setPage = el.dataset.set;
     render();
+  }));
+  // 通用 › 快捷菜单（2026-09-26 用户更正）：勾选要放进头像快捷菜单的功能
+  $$('#quickMenuSet .toggle').forEach(t => t.addEventListener('click', () => {
+    const id = t.dataset.qm, i = state.quickMenu.indexOf(id);
+    if(i >= 0) state.quickMenu.splice(i, 1); else state.quickMenu.push(id);
+    t.classList.toggle('on', i < 0);
+    toast(i < 0 ? '「' + qmName(id) + '」已加入快捷菜单' : '「' + qmName(id) + '」已从快捷菜单移除', 'ok');
   }));
   // 默认编辑模式（§7.1 / §7.5 编辑器）
   $$('#editModeSet .radio-opt').forEach(opt => opt.addEventListener('click', () => {
@@ -2627,7 +2661,7 @@ function setLocked(locked){
 function lockNowFn(target){
   if(state.locked){ if(target === 'vault') go('vault'); return; }
   setLocked(true);
-  toast('已锁定 · 正在编辑的内容已加密写入 outbox，解密图片地址已撤销', 'warn');
+  toast('已锁定 · 前端门禁已关闭，加密内容不再渲染、不进搜索结果（服务端存储方式不变）', 'warn');
   if(target === 'vault') go('vault');
 }
 
@@ -2745,9 +2779,74 @@ $('#lockCapsule').addEventListener('click', e => {
   });
 });
 
-/* 账户与设置（2026-09-26 调整：位于顶栏隐私锁胶囊旁，与设置合并为同一个入口，点击直接进设置） */
-$('#topAccount').addEventListener('click', () => {
-  go('settings');
+/* ============================================================
+   账户快捷菜单（2026-09-26 用户更正）
+   点头像弹出小菜单，设置页是菜单里的一项。菜单里放哪些功能由
+   设置 › 通用 › 快捷菜单 配置（state.quickMenu）；「设置」与「退出登录」固定在底部。
+   配置项清单临时给了 5 个（主题切换 / 立即锁定 / 搜索 / 回收站 / 立即备份），
+   后续按需要增删 —— 只改 QUICK_ITEMS 和设置卡片的渲染即可，菜单是同一份数据驱动的。
+   ============================================================ */
+const QUICK_ITEMS = [
+  { id:'theme',  ic:'i-bolt',     name:'主题切换', desc:'菜单里直接切浅色 / 深色 / 跟随系统，不需要进设置' },
+  { id:'lock',   ic:'i-lock',     name:'立即锁定', desc:'一键锁上前端门禁；已锁定时菜单项上显示状态' },
+  { id:'search', ic:'i-search',   name:'搜索',     desc:'聚焦顶栏搜索框，等于 Ctrl+K' },
+  { id:'trash',  ic:'i-trash',    name:'回收站',   desc:'直接进入回收站，省掉「设置 › 版本与回收站」两步' },
+  { id:'backup', ic:'i-cloud-up', name:'立即备份', desc:'触发一次增量备份，进度在备份目标里看（16.3）' }
+];
+const qmName = id => (QUICK_ITEMS.filter(it => it.id === id)[0] || {}).name || id;
+
+function quickItemHtml(it){
+  if(it.id === 'theme'){
+    return '<div class="menu-label">主题</div><div class="menu-seg" id="qmTheme">'
+      + [['light','浅色'],['dark','深色'],['auto','跟随系统']].map(t =>
+          '<button type="button" data-th="' + t[0] + '"' + (state.theme === t[0] ? ' class="on"' : '') + '>' + t[1] + '</button>').join('')
+      + '</div>';
+  }
+  const hint = it.id === 'lock' ? (state.locked ? '已锁定' : '解锁中') : '';
+  return '<div class="menu-item" data-qm="' + it.id + '">' + icon(it.ic) + it.name
+    + (hint ? '<span class="hint">' + hint + '</span>' : '') + '</div>';
+}
+function quickMenuHtml(){
+  const on = QUICK_ITEMS.filter(it => state.quickMenu.indexOf(it.id) >= 0);
+  return '<div class="menu-head"><div class="avatar">M</div><div>'
+  + '<div class="who">owner</div><div class="sub">本地实例 · 个人空间（5.1）</div></div></div>'
+  + '<div class="menu-sep"></div>'
+  + (on.length ? on.map(quickItemHtml).join('') + '<div class="menu-sep"></div>' : '')
+  + '<div class="menu-item" data-qm="settings">' + icon('i-settings') + '设置</div>'
+  + '<div class="menu-item" data-qm="logout">' + icon('i-x') + '退出登录</div>';
+}
+function onQuickPick(item){
+  const k = item.dataset.qm;
+  if(k === 'settings'){ go('settings'); return; }
+  if(k === 'logout'){ toast('已退出登录（原型示意，5.4）', 'warn'); return; }
+  if(k === 'lock'){ setLocked(true); toast('已立即锁定（门禁关闭，内容不渲染、不进搜索）', 'info'); return; }
+  if(k === 'search'){ const s = $('#searchInput'); if(s){ s.focus(); if(s.select) s.select(); } return; }
+  if(k === 'trash'){ state.setPage = 'version'; go('trash'); return; }
+  if(k === 'backup'){ toast('已开始增量备份（原型示意，16.3）', 'ok'); return; }
+}
+/* 菜单里的主题档位：切了主题但不收起菜单，故自行接管点击并阻止冒泡 */
+function bindQuickMenu(){
+  const seg = document.querySelector('.menu.open .menu-seg');
+  if(!seg) return;
+  seg.addEventListener('click', ev => {
+    const b = ev.target.closest('button');
+    if(!b) return;
+    ev.stopPropagation();
+    state.theme = b.dataset.th;
+    applyTheme();
+    Array.from(seg.querySelectorAll('button')).forEach(x => x.classList.toggle('on', x.dataset.th === state.theme));
+  });
+}
+
+/* 账户入口：点击弹出 / 收起快捷菜单（2026-09-26 用户更正：不再直达设置页） */
+$('#topAccount').addEventListener('click', ev => {
+  ev.stopPropagation();
+  const wasOpen = !!openMenuEl && openMenuEl.dataset.owner === 'account';
+  closeMenu();
+  if(wasOpen) return;
+  showMenu($('#topAccount'), quickMenuHtml(), onQuickPick, 'right');
+  if(openMenuEl) openMenuEl.dataset.owner = 'account';
+  bindQuickMenu();
 });
 
 /* 新建笔记（7.4 修订：一次点击直达，不再先展开类型菜单） */

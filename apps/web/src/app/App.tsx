@@ -48,10 +48,27 @@ export default function App() {
     },
   });
 
+  /**
+   * 依赖里带上 `workspace` 是安全的：启动同步引擎的 effect **只依赖登录状态**，
+   * 回调经 `refreshAllRef` 间接调用，所以这个 callback 换身份不会重建引擎。
+   */
   const refreshAll = useCallback(async () => {
     await workspace.refresh();
+    await workspace.refreshEditorState();
     await refreshPending();
   }, [refreshPending, workspace]);
+
+  /**
+   * 同步引擎必须**只随登录状态**创建/销毁。
+   *
+   * 踩过的坑（M1-11 实测：10 秒 35 次 `GET /api/sync`）：把 `refreshAll` 直接放进下面的依赖数组，
+   * 而 `refreshAll` 会 `setItems(...)` 写入新数组 → 重渲染 → 依赖身份变化 → effect 重跑 →
+   * 引擎被 stop/create/start → 立刻又跑一轮 → 再来一次。改用 ref 持有回调，依赖只留登录状态。
+   */
+  const refreshAllRef = useRef(refreshAll);
+  useEffect(() => {
+    refreshAllRef.current = refreshAll;
+  }, [refreshAll]);
 
   // 登录后启动同步引擎：应用打开即同步一次，之后由引擎按触发时机自行推进
   useEffect(() => {
@@ -60,7 +77,12 @@ export default function App() {
     const engine = createSyncEngine({
       onStatus: (status) => {
         setSyncStatus(status);
-        if (status === "idle") void refreshAll();
+        // 失败要看得见：被 void 掉的 rejected promise 会让状态永远停在旧值（M1-11 踩过）
+        if (status === "idle") {
+          void refreshAllRef.current().catch((error: unknown) => {
+            console.error("同步后刷新界面状态失败", error);
+          });
+        }
       },
     });
     engineRef.current = engine;
@@ -70,7 +92,7 @@ export default function App() {
       engine.stop();
       engineRef.current = null;
     };
-  }, [auth.snapshot.status, refreshAll, refreshPending]);
+  }, [auth.snapshot.status]);
 
   // 未登录一律回登录页；库中还没有用户时直接回注册页（拆解 M01-01）
   useEffect(() => {

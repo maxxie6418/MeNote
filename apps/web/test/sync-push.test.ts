@@ -16,6 +16,7 @@ import {
 } from "../src/data/db";
 import { FAILED_RETRY_AT, backoffDelayMs } from "../src/data/sync/backoff";
 import { pushQueue, type PushApi } from "../src/data/sync/push";
+import { createNoteEditor } from "../src/features/notes/model";
 
 function serverItem(partial: Partial<ItemMeta> & { id: string }): ItemMeta {
   return {
@@ -260,6 +261,92 @@ describe("推送：冲突处理", () => {
       String((args[1] as ItemWriteMeta).title).includes("冲突副本"),
     );
     expect(copyCall?.[2]).toBe("我的版本");
+  });
+
+  it("打字 → tick → 推送成功后队列清空、草稿清掉、状态回到已同步", async () => {
+    const id = newUlid();
+    await applySyncItems([serverItem({ id, rev: 3, content_hash: "old" })]);
+
+    const editor = createNoteEditor({ itemId: id, now: () => 1000 });
+    await editor.load();
+
+    editor.onInput("新内容");
+    await editor.tick(3500); // 写草稿 + 入队（模拟 2 秒空闲）
+
+    expect((await listOutbox()).map((row) => row.op)).toEqual(["save_body"]);
+
+    await pushQueue({ api: fakeApi(), now: () => 4000 });
+    await editor.refreshState(); // 同步引擎跑完一轮后问状态
+
+    expect(await listOutbox()).toEqual([]);
+    expect(await getDraft(id)).toBeUndefined();
+    expect(editor.getSnapshot().saveState).toBe("synced");
+  });
+
+  it("推送成功后本地 rev 与哈希跟着更新（否则下一轮会用过期基版本）", async () => {
+    const id = newUlid();
+    await applySyncItems([serverItem({ id, rev: 3, content_hash: "old" })]);
+    const editor = createNoteEditor({ itemId: id, now: () => 1000 });
+    await editor.load();
+    editor.onInput("第二版正文");
+    await editor.tick(3500);
+    await pushQueue({ api: fakeApi(), now: () => 4000 });
+
+    const item = await getLocalItem(id);
+    expect(item?.rev).toBe(4);
+    expect(item?.content_hash).toBe(await sha256Hex("第二版正文"));
+    expect(item?.pending).toBeNull();
+  });
+
+  it("推送一轮 + refreshState 之后再 tick 不应再排队（否则会每 2 秒无限重传）", async () => {
+    const id = newUlid();
+    await applySyncItems([serverItem({ id, rev: 3, content_hash: "old" })]);
+
+    const api = fakeApi();
+    const editor = createNoteEditor({ itemId: id, now: () => 1000 });
+    await editor.load();
+
+    editor.onInput("只该上传一次的内容");
+    await editor.tick(3500); // 写草稿 + 入队
+
+    await pushQueue({ api, now: () => 4000 }); // 推送成功
+    await editor.refreshState(); // 引擎跑完一轮后问状态
+
+    expect(await listOutbox()).toEqual([]);
+    expect(editor.getSnapshot().saveState).toBe("synced");
+
+    // 再来几轮 tick（模拟不断到来的 2 秒节奏）：不该再产生任何队列项
+    await editor.tick(6000);
+    await editor.tick(8000);
+    await editor.refreshState();
+
+    expect(await listOutbox()).toEqual([]);
+    expect(api.saveBody).toHaveBeenCalledTimes(1);
+    expect(editor.getSnapshot().saveState).toBe("synced");
+  });
+
+  it("只靠 tick 自愈：推送成功后不再重传（不依赖引擎回调，M1-11 无限重传的回归）", async () => {
+    const id = newUlid();
+    await applySyncItems([serverItem({ id, rev: 3, content_hash: "old" })]);
+    const api = fakeApi();
+    const editor = createNoteEditor({ itemId: id, now: () => 1000 });
+    await editor.load();
+
+    editor.onInput("只该上传一次的内容");
+    await editor.tick(3500);
+    await pushQueue({ api, now: () => 4000 });
+
+    // 关键：**不调用** refreshState，只让 tick 自己跑（真实浏览器里引擎回调可能静默失败）
+    await editor.tick(6000);
+    expect(editor.getSnapshot().saveState).toBe("synced");
+    expect(await listOutbox()).toEqual([]);
+
+    await editor.tick(8000);
+    await editor.tick(10000);
+
+    expect(api.saveBody).toHaveBeenCalledTimes(1); // 没有重传
+    expect(await listOutbox()).toEqual([]);
+    expect(editor.getSnapshot().saveState).toBe("synced");
   });
 
   it("meta_conflict 不生成副本：服务端版本胜出、条目出队", async () => {

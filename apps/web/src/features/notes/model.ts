@@ -6,7 +6,7 @@
  *
  * 时间通过 `now()` 注入，测试里可以直接推进时钟，不依赖真实等待。
  */
-import { utf8ByteLength } from "@menote/shared";
+import { sha256Hex, utf8ByteLength } from "@menote/shared";
 import {
   DRAFT_TICK_MS,
   decideAutosave,
@@ -16,6 +16,7 @@ import {
 } from "../../app/editor/save-policy";
 import {
   enqueueBodySave,
+  getDraft,
   getEditableBody,
   getLocalItem,
   saveDraft,
@@ -55,6 +56,14 @@ export interface NoteEditorController {
   notifyUploaded(): void;
   notifyFailed(): void;
   notifyConflict(): void;
+  /**
+   * 从本地库的真实状态重算保存态。
+   *
+   * 为什么必须这样：编辑器内部的 dirty 标记不知道"同步引擎已经把这条推上去了"，
+   * 只靠 `notifyUploaded()` 又要求调用方精确知道推的是哪一条。以本地库为准（`pending` 与 `drafts`）
+   * 才不会出现"顶栏说已同步、状态栏说待上传"这种自相矛盾。
+   */
+  refreshState(): Promise<void>;
   getSnapshot(): NoteEditorSnapshot;
 }
 
@@ -121,6 +130,17 @@ export function createNoteEditor(options: NoteEditorOptions): NoteEditorControll
 
   async function tick(atMs?: number): Promise<void> {
     const at = atMs ?? now();
+
+    /**
+     * **先对齐状态，再决定要不要写草稿/入队。**
+     *
+     * 顺序很关键（M1-11 实测：顺序反了会每 2 秒重传同一份内容，rev 从 405 涨到 483）：
+     * 若先写草稿再对齐，草稿是刚写下去的，对齐永远看到"本地有未上传痕迹" → 状态停在待上传 →
+     * 下一轮 tick 又入队一次。先对齐时，如果当前内容和已上传的一致，`dirty` 会被清掉，
+     * 后面的决策自然什么都不做。
+     */
+    await reconcileState();
+
     const decision = decideAutosave({
       bytes,
       dirty,
@@ -164,6 +184,44 @@ export function createNoteEditor(options: NoteEditorOptions): NoteEditorControll
     timer = null;
   }
 
+  /**
+   * 从本地库的真实状态对齐保存态（tick 每轮都调，引擎跑完也会调一次）。
+   *
+   * 规则与理由：
+   * - 本地还有未上传痕迹（`items.pending` 或草稿）→ 待上传 / 已达硬上限；
+   * - 本地干净但内存里还有改动 → 看这份改动是否已经上传过：
+   *   - 与服务端记录的 `content_hash` 一致 → 已同步（否则会永远停在"待上传"并反复重传同一份内容）；
+   *   - 不一致 → 内容还没上去，先落草稿，**绝不能丢**（否则打字内容永远不会被上传）。
+   */
+  async function reconcileState(): Promise<void> {
+    const item = await getLocalItem(options.itemId);
+    const draft = await getDraft(options.itemId);
+    const unsynced = item?.pending != null || draft != null;
+
+    if (unsynced) {
+      const next: SaveState = sizeLevel(bytes) === "hard" ? "blocked" : "pending";
+      if (saveState !== next) setState(next);
+      else emit();
+      return;
+    }
+
+    if (dirty) {
+      const currentHash = await sha256Hex(text);
+      if (item?.content_hash === currentHash) {
+        dirty = false;
+        setState("synced");
+        return;
+      }
+      await saveDraft(options.itemId, text, now());
+      const next: SaveState = sizeLevel(bytes) === "hard" ? "blocked" : "pending";
+      if (saveState !== next) setState(next);
+      else emit();
+      return;
+    }
+
+    setState("synced");
+  }
+
   return {
     load,
     onInput,
@@ -180,6 +238,9 @@ export function createNoteEditor(options: NoteEditorOptions): NoteEditorControll
     },
     notifyConflict(): void {
       setState("conflict");
+    },
+    async refreshState(): Promise<void> {
+      await reconcileState();
     },
     getSnapshot: snapshot,
   };

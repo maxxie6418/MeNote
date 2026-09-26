@@ -140,8 +140,22 @@ describe("编辑器自动保存控制器", () => {
     expect(notifySync).toHaveBeenCalledTimes(1);
   });
 
-  it("失败与冲突会反映到状态栏状态上", async () => {
+  it("refreshState 不会把还没落盘的内容误判成已同步（M1-11 实测踩到的坑）", async () => {
     const id = newUlid();
+    await applySyncItems([serverItem(id, 3)]);
+    const editor = createNoteEditor({ itemId: id, now: () => 1000 });
+    await editor.load();
+    expect(editor.getSnapshot().saveState).toBe("synced");
+
+    editor.onInput("刚敲的内容");
+    // 模拟"同步引擎刚跑完一轮来问状态"——此时草稿（2 秒节奏）还没写
+    await editor.refreshState();
+
+    expect(editor.getSnapshot().saveState).toBe("pending"); // 绝不能是 synced
+    expect((await getDraft(id))?.body).toBe("刚敲的内容"); // 内存内容已落盘，不会丢
+  });
+
+  it("失败与冲突会反映到状态栏状态上", async () => {    const id = newUlid();
     await createLocalNote(id, "标题", "旧", 1000);
     const editor = createNoteEditor({ itemId: id, now: () => 1000 });
     await editor.load();

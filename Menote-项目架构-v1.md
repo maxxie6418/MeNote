@@ -15,6 +15,7 @@
 | v1 | 2026-09-25 | 初稿 |
 | v1.1 | 2026-09-26 | ①隐私模型修订【已定·用户确认】：服务端明文存储 + 前端门禁 + 备份导出加密，删除非对称密钥对、数据密钥层级、正文密文信封、批量转换任务与恢复码（第七章重写）；②登录与隐私密码 KDF 统一为 PBKDF2-SHA-256，前端零 wasm；③评审报告（deliverables/gstack/architecture-review-menote-v1-2026-09-26.md）阻塞项 #1、#2 随之失效 |
 | v1.2 | 2026-09-26 | 部署方式定稿【已定·用户确认】：从 GitHub 一键部署到 Cloudflare，资源在部署时自动创建并关联，无需提前手动创建（新增 15.5）；§15.2 发布主路径改为 Workers Builds，GitHub Actions 只保留测试职责；§15.3 生产环境落点同步更新 |
+| v1.3 | 2026-09-26 | 代码组织定稿【已定·用户确认】：单仓多包确认；新增 2.3.1 入口只装配规则（Workers 无 server.mjs，入口文件内容白名单与行数预算）、2.3.2 功能→代码落点对照表（纵向切片）、2.3.3 防膨胀护栏（依赖方向 lint + 文件行数预算进 CI）；§3.1 分层图中遗留的 ConvertService 更正为批量标记服务 |
 
 ### 标注约定
 
@@ -133,9 +134,9 @@ flowchart LR
 | 测试 | Vitest；Worker 与 D1 用 `@cloudflare/vitest-pool-workers`；端到端用 Playwright | 需求 21.2：从开发之初就有测试与 CI | 【依需求】 |
 | CI | GitHub Actions：类型检查、单元测试、Worker 集成测试、构建、包体积检查 | 同上 | 【依需求】 |
 
-### 2.3 仓库目录结构【待确认：代码是否放在同一个 MeNote 仓库】
+### 2.3 仓库目录结构【已确认·用户确认 2026-09-26：单仓多包】
 
-推荐在现有仓库中采用 pnpm workspace 单仓多包结构，需求文档保留在根目录不动：
+在现有仓库中采用 pnpm workspace 单仓多包结构，需求文档保留在根目录不动：
 
 ```
 MeNote/
@@ -146,18 +147,24 @@ MeNote/
 ├── prototype/                      # 现有原型，保留
 ├── apps/
 │   ├── web/                        # PWA 客户端
-│   │   ├── src/app/                # 路由、布局、功能栏
-│   │   ├── src/features/           # notes / tables / memos / tasks / search / settings / share-viewer ...
-│   │   ├── src/data/               # Dexie 模式、仓储、outbox、同步引擎
-│   │   ├── src/crypto/             # 隐私门禁与备份导出加密（PBKDF2、信封）
-│   │   ├── src/workers/            # search.worker / media.worker
-│   │   └── src/sw/                 # Service Worker
+│   │   ├── index.html              # 主应用入口
+│   │   ├── share.html              # 分享查看器入口（同域独立页面，见 §10）
+│   │   └── src/
+│   │       ├── main.tsx            # 装配：路由表 + Provider + SW 注册，不含业务（见 2.3.1）
+│   │       ├── app/                # 路由、布局、功能栏
+│   │       ├── features/           # 每个功能一个目录（见 2.3.2 落点表）
+│   │       ├── data/               # Dexie 模式、仓储、outbox、同步引擎
+│   │       ├── crypto/             # 隐私门禁与备份导出加密（PBKDF2、信封）
+│   │       ├── workers/            # search.worker.ts / media.worker.ts（各自独立入口，见 2.3.1）
+│   │       └── sw/                 # Service Worker
 │   └── worker/                     # Cloudflare Worker
-│       ├── src/routes/             # api / public / mcp
-│       ├── src/services/           # 领域服务：items、folders、versions、attachments、shares、tokens、backup ...
-│       ├── src/db/                 # SQL 语句、batch 组装、迁移与自愈
-│       ├── src/jobs/               # Cron 任务：snapshot、backup、maintenance
-│       └── src/adapters/           # webdav / s3 / git 备份适配器
+│       └── src/
+│           ├── index.ts            # 装配：Hono 实例、挂载子路由、scheduled 分发（见 2.3.1）
+│           ├── routes/             # api / public / mcp：校验参数后立刻转服务，不写业务
+│           ├── services/           # 领域服务：items、folders、versions、attachments、shares、tokens、backup ...
+│           ├── db/                 # SQL 常量、batch 组装、迁移与自愈
+│           ├── jobs/               # Cron 任务：snapshot、backup、maintenance、gc
+│           └── adapters/           # r2 / webdav / s3 / git 备份适配器
 ├── packages/
 │   ├── shared/                     # 前后端共享：类型、Valibot schema、错误码、常量（上限、阈值）
 │   ├── mdcore/                     # front matter、标签与任务字段派生、表格编解码、快照格式、附件引用改写
@@ -167,6 +174,64 @@ MeNote/
 ```
 
 依赖方向：`apps/*` 可以依赖 `packages/*`；`packages/*` 之间只允许 `shared` 被其他包依赖；`packages/*` 不依赖任何浏览器或 Worker 专有 API，保证两端都能运行、都能单测。
+
+#### 2.3.1 入口文件只做装配（不出现 server.mjs）
+
+Workers 项目没有也不需要 `server.mjs` 之类的常驻服务文件——**整个后端只有一个入口 `apps/worker/src/index.ts`**，它是装配壳：创建 Hono 实例、按前缀挂载子路由、注册 `scheduled` 处理器导出默认对象，到此为止。业务代码不存在于入口里的位置。所有入口文件适用同一条白名单规则：
+
+| 入口 | 允许的内容 | 行数预算 |
+|---|---|---|
+| `apps/worker/src/index.ts` | 创建 Hono、`route()` 挂载子路由、`export default { fetch, scheduled }`、全局错误兜底 | ≤ 100 |
+| `apps/web/src/main.tsx` | 创建路由表、挂 Provider（主题/查询/同步）、注册 Service Worker | ≤ 100 |
+| `apps/web/share.html` 对应的分享查看器入口 | 挂载 share-viewer 特性根组件 | ≤ 50 |
+| `src/workers/*.worker.ts` | `self.onmessage` 分发到处理器模块 | ≤ 50 |
+
+入口超预算或出现 `if (path === ...)`、SQL、状态计算，即视为结构违规（CI 检查，见 2.3.3）。
+
+#### 2.3.2 功能 → 代码落点对照表（纵向切片）
+
+新增任何代码前先查此表：**先定功能，再定层**。同一功能的前端与后端各自纵向切片（路由→服务→仓储），互不横向渗透。
+
+Worker 侧（`apps/worker/src/`）：
+
+| 功能 | 路由 routes/ | 服务 services/ | 其他落点 |
+|---|---|---|---|
+| 注册 / 登录 / 会话 | `auth.ts` | `tokens.ts`、`sessions.ts` | middleware/session.ts |
+| 条目与文件夹（增删改查、移动、回收站、批量标记） | `items.ts`、`folders.ts` | `items.ts`、`folders.ts`、`trash.ts` | db/tables.ts（SQL 常量） |
+| 增量同步（拉取 / 推送 / 墓碑） | `sync.ts` | `sync.ts` | — |
+| 版本历史 | `versions.ts` | `versions.ts` | — |
+| 附件上传 / 下载 / GC | `attachments.ts` | `attachments.ts` | adapters/r2.ts、jobs/gc.ts |
+| 分享（创建 / 公开访问 / 撤销） | `shares.ts`、`public.ts` | `shares.ts` | — |
+| MCP | `mcp.ts` | `mcp.ts` | middleware/ 下令牌与限速 |
+| 设置与隐私标记 | `settings.ts` | `settings.ts` | — |
+| Cron：快照 / 外部备份 / 维护 | —（无路由） | `jobs.ts` 调度 | jobs/snapshot.ts、jobs/backup.ts、jobs/maintenance.ts；adapters/webdav.ts、s3.ts、git.ts |
+| 迁移与自愈 | — | — | db/migrations/、db/selfheal.ts |
+
+Web 侧（`apps/web/src/`，每个 feature 目录内 `ui/`（组件）+ `model.ts`（状态与动作）两件套，禁止 feature 互相 import）：
+
+| 功能 | 落点 |
+|---|---|
+| 布局 / 功能栏 / 导航 / 主题 | `app/` |
+| 笔记编辑（CodeMirror 封装为公共编辑器组件放 `app/editor/`） | `features/notes/` |
+| 表格 / 图册 | `features/tables/` |
+| Memo（时间轴 / 瀑布流） | `features/memos/` |
+| 待办（列表 / 看板） | `features/tasks/` |
+| 首页概括 | `features/home/` |
+| 搜索界面 | `features/search/`；索引在 `workers/search.worker.ts` |
+| 附件 / 媒体处理 | `features/attachments/`；哈希与缩略图在 `workers/media.worker.ts` |
+| 隐私门禁（解锁框、锁定清理、多设备 verifier） | `features/privacy/` + `crypto/keystore.ts` |
+| 备份导出（信封打包、外部解密工具说明） | `features/backup/` + `crypto/envelope.ts`（编解码调 packages/crypto-format） |
+| 同步引擎 / outbox | `data/sync/`（不属于任何 feature） |
+| 本地库 Dexie / 本地仓储 | `data/db/` |
+| 设置（含 MCP 配置、备份目标配置） | `features/settings/` |
+| 分享查看器 | `features/share-viewer/`（独立入口加载） |
+
+#### 2.3.3 防膨胀护栏
+
+1. **依赖方向**（ESLint `no-restricted-imports` 或 dependency-cruiser 强制）：`routes → services → db`，禁止反向与跨级（路由不得拼 SQL，服务不得 import Hono，仓储不得 import 服务）；前端 feature 之间零互相依赖，跨 feature 复用只走 `app/`（公共组件）或 `data/`（数据层）；`packages/*` 不 import 任何 `apps/*`。
+2. **文件行数预算**：入口按 2.3.1 白名单；路由 / 服务 / 仓储单文件 ≤ 300 行——超限按子资源拆（如 `services/items-query.ts` 与 `items-write.ts`），不按"工具函数堆一屋"拆。CI 里以 lint 规则告警（`max-lines`），超 500 行直接失败。
+3. **新功能落位流程**：先查 2.3.2 对照表落位；表中没有的新功能，先补表（本文为唯一依据）再写代码——避免"临时先塞 index.ts"的口子。
+4. **共享包是逃逸口**：两端都要用的逻辑进 `packages/`，而不是复制或放在某一端"大家来引"。
 
 ---
 
@@ -185,7 +250,7 @@ flowchart TB
     subgraph L2["应用服务层"]
         S1["ItemService：新建、保存、移动、回收站"]
         S2["LockService：解锁档位、锁定清理、隐私浏览门禁"]
-        S3["ConvertService：批量加密与解密任务"]
+        S3["BatchMarkService：批量标记操作（元数据，锁定时可执行）"]
         S4["ShareService、ExportService、VersionService"]
     end
     subgraph L3["领域层（packages/mdcore）"]

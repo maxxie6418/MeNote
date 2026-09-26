@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- 预开发 / 0bc6d80 — 新增 wiki/components.md 组件规划（组件清单 + 落点 / 职责 / props / 复用 / 原型对应，附功能点映射矩阵与预留组件）
 - 预开发 / aba789e — 新增 wiki/guides/docs-roadmap.md 文档规划指南（通用模板 + 本项目落地对照）
 - 预开发 / 5f2f7e4 — deliverables/ 评审产物不入库，加入 .gitignore（修正误加）
 - 预开发 / ca3674e — 按文档约定迁移主线文档至 wiki/ 并归档功能拆解 v1，新增 README（架构 v1.8）

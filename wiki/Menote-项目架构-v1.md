@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1.9（草案修订，待用户审核） |
-| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.9 修订） |
+| 文档版本 | v1.10（草案修订，待用户审核） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.10 修订） |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
@@ -22,6 +22,7 @@
 | v1.7 | 2026-09-26 | 草稿改为目录【已定·用户确认】：docs/scratch.md 改为 docs/scratch/ 文件夹——临时讨论与方案草稿一份讨论一份文件（`<主题>-<日期>.md`），定稿搬走、过时件清理；AGENTS.md 同步 |
 | v1.8 | 2026-09-26 | 文件位置迁移执行完毕【已定·用户确认】：三份主线文档移入 `wiki/`，功能拆解 v1 移入 `docs/archive/`，根目录新增 `README.md`；本文路径变为 `wiki/Menote-项目架构-v1.md` |
 | v1.9 | 2026-09-26 | M1 开工前同步【已定·用户确认 2026-09-26】：①§15.4/§15.5 迁移机制统一为**运行时自愈**，删除部署脚本里的 `wrangler d1 migrations apply` 写法（该命令在全新账户上会因查不到库而失败、且对 Workers Builds 通道无效）；②§5.1 建表改指向新隐私模型权威 DDL（`docs/modules/Menote-数据模型与迁移设计-v1.md` §3，需求 18.2 原文勿直接照抄）；③§6.1/§6.3 清理 v1.0 遗留（拉取实体清单里的“数据密钥”、outbox 的 `key` 实体）；④§15.5 机密清单删 `SESSION_SECRET`（会话令牌随机 256 位、库里只存 SHA-256，不需要服务端密钥）；⑤§2.3.2 补落点行（`/api/health`、`services/auth.ts`、`/api/admin/*` 归 `routes/settings.ts`）并在目录树补 `middleware/`；⑥表头文档版本由 v1.1 更正为 v1.9 |
+| v1.10 | 2026-09-26 | M1 收口回写【已定·用户确认 2026-09-26】：①§15.5 **删除 `wrangler.jsonc` 的 `"secrets": { "required": [...] }` 写法**——实测它是 deploy 硬门禁（机密未设即部署失败，而首次部署时 Worker 不存在、无法先设机密，等于堵死一键部署）；改为「Dashboard / `wrangler secret put` 设机密 + 运行时 `middleware/config-guard.ts` fail-closed（缺机密返回 503 并说明缺哪项）」；②§6.x `prelogin` 行补全确定盐口径（`HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:" + 用户名小写)[0..16]`，注册与改密沿用同一个盐，否则注册/改密后立即登不进去；附带收益是不泄露用户名是否存在），并补公开接口 `GET /api/auth/registration-state`（不受机密缺失影响）；③§2.3 目录树 `middleware/` 注释补 `config-guard` |
 
 ### 标注约定
 
@@ -178,7 +179,7 @@ MeNote/
 │   └── worker/                     # Cloudflare Worker
 │       └── src/
 │           ├── index.ts            # 装配：Hono 实例、挂载子路由、scheduled 分发（见 2.3.1）
-│           ├── middleware/         # session / csrf / 表结构守卫（§4.1、§15.4）
+│           ├── middleware/         # session / csrf / 表结构守卫（§4.1、§15.4）/ 必备机密存在性（config-guard，§15.5）
 │           ├── routes/             # api / public / mcp：校验参数后立刻转服务，不写业务
 │           ├── services/           # 领域服务：items、folders、versions、attachments、shares、tokens、backup ...
 │           ├── db/                 # SQL 常量、batch 组装、迁移与自愈
@@ -736,8 +737,9 @@ sequenceDiagram
 
 | 接口 | 说明 |
 |---|---|
-| `POST /api/auth/prelogin` | 返回盐与 KDF 参数；不存在的用户名返回 `HMAC(AUTH_PEPPER, 用户名)` 生成的假盐 |
+| `POST /api/auth/prelogin` | 返回盐与 KDF 参数；**对不存在的用户也返回同一个算法算出的确定盐**：`HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:" + 用户名小写)[0..16]`。注册与改密时服务端**沿用这同一个盐**（客户端只能拿 prelogin 的盐派生密钥，另取随机盐会导致注册/改密后立即登不进去）；附带收益是注册前后盐不变，攻击者无法靠"盐变了"判断用户名是否存在 |
 | `POST /api/auth/login` | 提交浏览器派生的登录密钥；服务端 `HMAC-SHA256(AUTH_PEPPER, 登录密钥)` 常量时间比对；失败按“用户名 + IP”计数 |
+| `GET /api/auth/registration-state` | **公开、无需登录**：返回 `{ open, has_users }`；登录页据此决定是否显示注册入口，`has_users = false` 时前端直接进注册页。不做任何 HMAC，因此**不受**机密缺失的 503 影响 |
 | `POST /api/auth/register` | 单条 `INSERT ... SELECT ... WHERE` 语句同时判定“库中无用户”或“注册开关开启且未到期”，并在库中无用户时写入 `role = 'owner'`，避免两个并发的首次注册都成为 owner |
 | `POST /api/auth/logout`、`GET /api/auth/me` | 会话管理 |
 | `POST /api/auth/password` | 修改登录密码：旧密钥校验后写入新盐、新 KDF 参数与新校验值 |
@@ -833,7 +835,7 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 
 仓库为满足一键部署需要遵守的约定：
 
-- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建；机密以 `"secrets": { "required": ["AUTH_PEPPER", "BACKUP_CRED_KEY"] }` 声明（`AUTH_PEPPER` 见 §13.2；`BACKUP_CRED_KEY` M5 起需要。**没有 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，不需要服务端密钥），另配 `.dev.vars.example` 说明每项的格式与生成方式，部署页据此逐项提示。
+- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建。**机密不要写进 `wrangler.jsonc`**：`"secrets": { "required": [...] }` 看似"部署页逐项提示"，实际是 **deploy 的硬门禁**——机密未设置时 `wrangler deploy` 直接失败，而首次部署时 Worker 尚不存在、无法先设机密，会把一键部署与 Workers Builds 永久堵死（M1 实测踩到）。正确做法：随仓库提供 `.dev.vars.example` 说明每一项的格式与生成方式；线上机密在 Dashboard（Worker → Settings → Variables and Secrets，类型选 Secret）或 `wrangler secret put <NAME>` 添加；缺机密的保护放在**运行时**——`apps/worker/src/middleware/config-guard.ts` 对真正需要机密的端点返回 503 并说明缺哪一项，且绝不用空密钥算 HMAC。机密清单：`AUTH_PEPPER`（见 §13.2）、`BACKUP_CRED_KEY`（M5 起）。**没有 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，不需要服务端密钥
 - **`package.json` 的 `deploy` 脚本**：只做 `wrangler deploy`。**不要把 `wrangler d1 migrations apply` 放进部署链路**（原因见 §15.4 第三条）；迁移由运行时自愈在首个请求完成。
 - **不硬编码域名**：`*.workers.dev` 子域因账户而异。§13.2 的 Origin 校验、分享链接、MCP 端点地址均从请求的 `URL.origin` 推导；自定义域名作为可选后置步骤（dashboard 添加），代码不依赖它。
 - **仓库可见性**：仓库须为 public，其他人才可能通过按钮部署；本人部署自己的仓库（含私有）可直接走 dashboard「Import a repository」，自动供给行为相同。

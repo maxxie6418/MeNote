@@ -35,7 +35,7 @@ pnpm dev
 ## 三、仓库结构（速览）
 
 ```text
-apps/web          前端 PWA（Vite 8 + React 19 + CodeMirror 规划中）
+apps/web          前端 PWA（Vite 8 + React 19 + CodeMirror 6；编辑器与 Markdown 渲染动态分包）
 apps/worker       Cloudflare Worker（Hono；唯一入口 src/index.ts 只做装配）
 packages/shared   前后端共享：常量、类型、错误码、纯函数
 wrangler.jsonc    唯一 Worker 配置（仓库根）：main、assets、D1 绑定
@@ -90,6 +90,17 @@ wrangler.jsonc    唯一 Worker 配置（仓库根）：main、assets、D1 绑�
 - **迁移挂钩（已定）**：迁移走**运行时自愈**（架构 §15.4）——`apps/worker/src/db/selfheal.ts` 在首个请求读 `app_meta.schema_version`、抢锁、按序建表、校验、写版本。**不需要**手工步骤，也**不要**把 `wrangler d1 migrations apply` 加进 `deploy` 脚本（该命令在全新账户上会因查不到库而失败，于是 `wrangler deploy` 永远执行不到；且 Workers Builds 用的是 `npx wrangler deploy`，改本脚本对它无效）。首次部署流程因此是：Workers Builds 跑 `npx wrangler deploy` → D1 自动供给并绑定 → 首个请求建表。
 - **机密声明**：第一个服务端机密是 **`AUTH_PEPPER`**（架构 §13.2；生成 `openssl rand -base64 32`），随仓库提供 `.dev.vars.example` 说明格式与生成方式（`.gitignore` 需放行该示例文件）。
   - **不要在 `wrangler.jsonc` 里写 `"secrets": { "required": [...] }`**：该字段不是"部署页提示"，而是 **deploy 的硬门禁**——机密没设时 `wrangler deploy` 直接失败，而首次部署时 Worker 还不存在、无法先设机密，会把一键部署与 Workers Builds 永久堵死（M1 实测踩到过，见 CHANGELOG v0.1.12）。
-  - 缺机密的保护改在运行时：`apps/worker/src/middleware/config-guard.ts` 对 `/api/auth/*` 与 `/api/admin/*` 返回 503 并说明缺哪一项，且**不会**用空密钥去算 HMAC。首次部署成功后，在 Dashboard 的 Worker 设置里添加 `AUTH_PEPPER` 即可。
+  - 缺机密的保护改在运行时：`apps/worker/src/middleware/config-guard.ts` 只拦**真正要用机密的四个端点**（`/api/auth/prelogin`、`login`、`register`、`password`），返回 503 并说明缺哪一项，且**不会**用空密钥去算 HMAC。刻意不拦 `GET /api/auth/registration-state`、`me`、`logout` 与 `/api/admin/*`——否则首次部署忘配机密时，前端连"库中没有用户"都读不到，会停在登录页且没有注册入口（M1 云端实测踩到）。首次部署成功后，在 Dashboard 的 Worker 设置里添加 `AUTH_PEPPER` 即可（保存后立即生效，无需重新构建）。
   - **不存在 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，无需服务端密钥。
 - **前端 feature 互不依赖的 ESLint 规则**：M2 引入 `features/` 时补 no-restricted-imports（跨 feature 复用只走 `app/` 或 `data/`）。
+
+## 九、本地数据与安全上下文（M1 实操踩出来的）
+
+- **重置本地数据**：`pnpm dev`（Vite 插件 + miniflare）把本地 D1 落在 **`apps/web/.wrangler/state`**，不是仓库根的 `.wrangler/state`（根目录那份是 `pnpm deploy` 的构建指针，与本地数据无关）。要回到"全新实例"（例如验证首位注册即 owner），删掉 `apps/web/.wrangler/state` 后重启 `pnpm dev` 即可：首个请求会重新自愈建表。
+- **必须用 https 或 localhost 打开**：浏览器只在**安全上下文**提供 WebCrypto。用普通 http 打开（含局域网 IP 访问 dev 服务）时 `crypto.subtle` 不存在，注册/登录/保存都会失败——代码会给出"请改用 https 打开"的提示并显示常驻横幅，但这属于环境问题，不是应用 bug。
+  - 线上建议在 Cloudflare 打开 **SSL/TLS → Edge Certificates → Always Use HTTPS**，避免用户用 http 进来后一头雾水。
+  - 本地用 `http://localhost:5173` 是安全的（localhost 属安全上下文），无需额外配置。
+- **诊断三连**（线上出问题先看这三条，都不需要登录）：
+  1. `GET /api/health` → `{"ok":true,...}`：Worker 活着（且说明自愈建表已跑过）。
+  2. `GET /api/auth/registration-state` → `{"open":…,"has_users":…}`：`has_users:false` 表示空库、可直接注册首位 owner。
+  3. `POST /api/auth/prelogin` → 200 带 `auth_salt` 表示机密已生效；503 且文案含 `AUTH_PEPPER` 表示机密没配到正在服务的那个 Worker 上。

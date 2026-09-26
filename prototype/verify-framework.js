@@ -173,6 +173,8 @@ step('导航按 v2 Q1 重排 + 浏览三段合并（2026-09-26 调整）', () =>
   });
   if (!segText.includes('横向一行')) throw new Error('浏览三段未说明压成一行：' + segText);
   if (!segText.includes('视图跳转')) throw new Error('浏览三段未说明合并依据：' + segText);
+  if (!segText.includes('下划线页签')) throw new Error('浏览三段未说明造型与模式选择的区分：' + segText);
+  if (!segText.includes('计数徽标')) throw new Error('浏览三段未说明不带数字：' + segText);
   const nav = blockText('navMain');
   ['最近编辑', '收藏'].forEach(x => {
     if (!nav.includes(x)) throw new Error('主导航描述缺「' + x + '」：' + nav);

@@ -249,16 +249,19 @@ a{color:inherit;text-decoration:none}
 .nav-item .count{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* 浏览三段（2026-09-26 用户调整）：首页 / Memo / 待办 三项压成横向一行，省纵向空间。
-   与收录框的 .mode-tabs 形似但用途不同（那只切录入模式），故不共用一套类。 */
-.nav-seg{display:flex;gap:3px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px;margin-bottom:7px}
-.seg-item{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:4px;
-  height:26px;border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;
-  transition:.14s;white-space:nowrap}
+   造型刻意做成「下划线页签」，与上方收录框的模式选择（.mode-tabs）拉开距离 ——
+   后者是「盒子里的分段控件」（外框 + 灰底 + 灰实底选中），两者在功能栏里上下相邻，
+   若都做成盒式会被误读成同一类控件，「选中」的含义也会混淆。
+   三段不显示计数徽标（用户 2026-09-26 要求）。 */
+.nav-seg{display:flex;gap:2px;margin:6px 0 8px;padding:0 2px;border-bottom:1px solid var(--line)}
+.seg-item{flex:1;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;
+  gap:4px;height:29px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none;
+  white-space:nowrap;transition:.14s}
 .seg-item:hover{color:var(--text-2)}
-.seg-item.active{background:var(--panel-3);color:var(--text);font-weight:600}
-.seg-item .ic{width:12px;height:12px;flex:none}
-.seg-item .count{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
-.seg-item.active .count{color:var(--primary-2)}
+.seg-item.active{color:var(--primary-2);font-weight:600}
+.seg-item.active::after{content:'';position:absolute;left:7px;right:7px;bottom:-1px;height:2px;
+  border-radius:2px 2px 0 0;background:var(--primary)}
+.seg-item .ic{width:13px;height:13px;flex:none}
 
 .group{margin-top:15px}
 .group-title{display:flex;align-items:center;gap:5px;padding:0 9px 6px;font-size:10.5px;font-weight:600;letter-spacing:.9px;color:var(--muted);text-transform:uppercase}
@@ -784,8 +787,8 @@ table.data tbody tr:hover{background:var(--panel-2)}
              保留原名，点不同位置进不同页面。三项都只是视图跳转、无附加功能，故合并以省纵向空间。 -->
         <div class="nav-seg" id="navSeg">
           <a class="seg-item active" data-fn="home" id="navHome"><svg class="ic"><use href="#i-home"/></svg>首页</a>
-          <a class="seg-item" data-fn="memo"><svg class="ic"><use href="#i-clock"/></svg>Memo<span class="count">49</span></a>
-          <a class="seg-item" data-fn="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办<span class="count" id="navTaskCount">6</span></a>
+          <a class="seg-item" data-fn="memo"><svg class="ic"><use href="#i-clock"/></svg>Memo</a>
+          <a class="seg-item" data-fn="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办</a>
         </div>
 
         <!-- 导航（v2 Q1 已确认）：最近编辑 · 收藏 · 笔记本 · 标签 · 隐私空间（隐私空间贴底，见 .fn-vault） -->
@@ -1273,7 +1276,6 @@ function go(fn, opts){
 function render(){
   const list = $('#paneList'), doc = $('#paneDoc');
   const fn = state.fn;
-  syncNavCounts();
   syncStartView();
 
   // 清空两个面板，避免上一视图的 DOM 残留
@@ -2268,7 +2270,6 @@ function publishComposer(){
     if(state.memoView === 'waterfall') state.memoView = 'timeline';
     render();
   }
-  syncNavCounts();
 
   setTimeout(() => {
     memo.status = 'synced';
@@ -2276,12 +2277,6 @@ function publishComposer(){
     if(state.fn === 'memo' || state.fn === 'task') render();
     toast('已同步', 'ok');
   }, 1400);
-}
-
-/* 导航上的待办计数（未完成数） */
-function syncNavCounts(){
-  const el = $('#navTaskCount');
-  if(el) el.textContent = TASKS.filter(t => t.status !== 'done').length;
 }
 
 /* 启动视图控制「首页」项显隐（v2 M02-04：未选首页时功能栏不显示首页项） */

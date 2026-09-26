@@ -86,8 +86,14 @@ step('浏览三段：首页 / Memo / 待办 压成横向一行，保留原名（
   const items = Array.from(seg.children).map(el => el.dataset.fn);
   if (items.join('/') !== 'home/memo/task') throw new Error('三段为 ' + items.join('/'));
   // 保留原名字
-  const labels = Array.from(seg.children).map(el => el.textContent.replace(/[0-9]+/g, '').trim());
+  const labels = Array.from(seg.children).map(el => el.textContent.trim());
   if (labels.join('/') !== '首页/Memo/待办') throw new Error('段名为 ' + labels.join('/'));
+  // 三段不显示数字（2026-09-26 用户要求）
+  Array.from(seg.children).forEach(el => {
+    if (/[0-9]/.test(el.textContent)) throw new Error(el.dataset.fn + ' 段仍显示数字：' + el.textContent);
+    if (el.querySelector('.count')) throw new Error(el.dataset.fn + ' 段仍有计数徽标');
+  });
+  if ($('#navTaskCount')) throw new Error('待办计数徽标 #navTaskCount 仍在');
   // 旧的三行导航项已清除
   if ($$('#navSeg .nav-item').length) throw new Error('三段里仍残留旧的三行导航项');
   if ($('#fnNav [data-fn="home"], #fnNav [data-fn="memo"], #fnNav [data-fn="task"]'))
@@ -100,6 +106,16 @@ step('浏览三段：首页 / Memo / 待办 压成横向一行，保留原名（
   const itemRule = css.match(/\.seg-item\{[^}]*\}/);
   if (!itemRule) throw new Error('未找到 .seg-item 规则');
   if (!/flex:\s*1/.test(itemRule[0])) throw new Error('.seg-item 未等分宽度：' + itemRule[0]);
+  // 造型必须与收录框的模式选择（盒式分段控件）明显区分
+  if (!css.match(/\.mode-tabs\{[^}]*\}/)) throw new Error('未找到 .mode-tabs 规则，无法比对');
+  if (/background/.test(segRule[0])) throw new Error('.nav-seg 不该有盒式底色（那是 .mode-tabs 的形态）：' + segRule[0]);
+  if (!/border-bottom/.test(segRule[0])) throw new Error('.nav-seg 应为下划线页签（缺 border-bottom）：' + segRule[0]);
+  const activeRule = css.match(/\.seg-item\.active\{[^}]*\}/);
+  if (!activeRule) throw new Error('未找到 .seg-item.active 规则');
+  if (/background/.test(activeRule[0])) throw new Error('选中态不该是实底盒（那是 .mode-tabs 的形态）：' + activeRule[0]);
+  const barRule = css.match(/\.seg-item\.active::after\{[^}]*\}/);
+  if (!barRule) throw new Error('缺下划线指示条 .seg-item.active::after');
+  if (!/background/.test(barRule[0])) throw new Error('下划线指示条没有上色：' + barRule[0]);
   // 点击每段仍能各自跳转
   ['home', 'memo', 'task'].forEach(fn => {
     click(navEl(fn));

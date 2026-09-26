@@ -20,4 +20,7 @@ declare class TextDecoder {
 declare const crypto: {
   getRandomValues<T extends ArrayBufferView>(array: T): T;
   randomUUID(): string;
+  readonly subtle: {
+    digest(algorithm: string, data: Uint8Array | ArrayBuffer): Promise<ArrayBuffer>;
+  };
 };

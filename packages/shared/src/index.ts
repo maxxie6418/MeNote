@@ -61,6 +61,7 @@ export interface HealthResponse {
 export * from "./auth";
 export * from "./base64url";
 export * from "./folders";
+export * from "./hash";
 export * from "./items";
 export * from "./limits";
 export * from "./sync";

@@ -1,0 +1,87 @@
+/**
+ * 本地库 Schema（架构 §3.2：Dexie / IndexedDB）。
+ *
+ * **字段名与服务端保持一致（snake_case）**：架构要求本地 `items` 与服务端 `items` 同构，
+ * 不做驼峰映射——映射层是 bug 温床，而同步引擎恰好要逐字段比对。
+ *
+ * 本地库只是缓存：遇到无法迁移的情况可以清空后从服务端重建（清空前把 outbox 未上传项导出）。
+ */
+import Dexie, { type EntityTable } from "dexie";
+import type { FolderMeta, ItemMeta } from "@menote/shared";
+
+/** 本地待上传标记：null 表示已同步 */
+export type PendingKind = "create" | "save_body" | "patch_meta";
+
+export interface LocalItem extends ItemMeta {
+  pending: PendingKind | null;
+}
+
+export interface LocalFolder extends FolderMeta {
+  pending: PendingKind | null;
+}
+
+/** 已缓存正文 */
+export interface BodyRow {
+  item_id: string;
+  body: string;
+  rev: number;
+  content_hash: string;
+  cached_at: number;
+}
+
+/** 未上传的编辑稿：**每 2 秒写一次**，与上传节奏无关（拆解 M04-04） */
+export interface DraftRow {
+  item_id: string;
+  body: string;
+  updated_at: number;
+}
+
+export type OutboxEntity = "item" | "folder" | "setting" | "attachment" | "version";
+export type OutboxOp = "create" | "save_body" | "patch_meta" | "create_folder" | "patch_folder";
+
+/** 待上传操作；正文不复制，指向 `drafts`（架构 §6.3） */
+export interface OutboxRow {
+  seq?: number;
+  entity: OutboxEntity;
+  entity_id: string;
+  op: OutboxOp;
+  /** 正文保存的基版本（合并时保留**最早**的一份） */
+  base_rev: number;
+  /** 元数据补丁的基版本 */
+  base_meta_rev: number;
+  retries: number;
+  next_retry_at: number;
+  last_error: string | null;
+  queued_at: number;
+}
+
+/** 单行状态：同步游标、上次同步时间、设备标识 */
+export interface SyncStateRow {
+  key: string;
+  cursor: number;
+  last_sync_at: number | null;
+  device_id: string;
+}
+
+export const SYNC_STATE_KEY = "state";
+
+export class MenoteDatabase extends Dexie {
+  items!: EntityTable<LocalItem, "id">;
+  bodies!: EntityTable<BodyRow, "item_id">;
+  drafts!: EntityTable<DraftRow, "item_id">;
+  folders!: EntityTable<LocalFolder, "id">;
+  outbox!: EntityTable<OutboxRow, "seq">;
+  syncState!: EntityTable<SyncStateRow, "key">;
+
+  constructor(name = "menote") {
+    super(name);
+    this.version(1).stores({
+      items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+      bodies: "item_id",
+      drafts: "item_id",
+      folders: "id, parent_id, sync_seq",
+      outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+      syncState: "key",
+    });
+  }
+}

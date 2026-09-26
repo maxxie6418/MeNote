@@ -1,0 +1,8 @@
+/**
+ * 本地数据层入口（架构 §2.3.2：`data/db/` 放 Dexie 模式与本地仓储）。
+ *
+ * 界面层只从这里读写数据，不直接碰 Dexie（架构 §3.1：界面层不直接访问 Dexie 或网络）。
+ */
+export * from "./database";
+export * from "./repository";
+export * from "./schema";

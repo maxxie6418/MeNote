@@ -214,6 +214,10 @@ M1 已收口（`docs/archive/Menote-M1-实施计划-v1.md`），但有几项当�
 
 ### M2-8 首页
 
+> **状态：✅ 完成（v0.2.16）**。落地：`features/home/model.ts`（纯计算：条目统计、今日待办预览、最近动态、快速导航标签）+ `HomePanel` / `StatCards` / `TodayTasks` / `RecentActivity` / `ShortcutGrid` / `QuickNav`；数据全部由本地元数据算、**不发额外请求**；**统计始终计入加密空间内与单篇加密条目**，**来自 Memo 的内容预览**在 `memoLocked` 时以「已锁定」占位（M2 恒 false，留 prop 给 M3）；各卡片有空态。**启动视图**已接：`onLoaded` 回调决定进首页还是对应笔记视图；未选首页时功能栏不显示首页项、三段由其余两项等分。
+>
+> **顺带做的结构收敛**：`App.tsx` 触到 500 行预算，抽出 `workarea/HomeView.tsx`、`workarea/SearchView.tsx` 与 `features/search/useSearch.ts`。
+
 **涉及文件**：`apps/web/src/features/home/`（`HomePanel`、`StatCards`、`TodayTasks`、`RecentActivity`、`ShortcutGrid`、`QuickNav`）。
 
 **验收点**：数据全部由本地元数据计算、**不发额外请求**；统计**始终计入**加密空间内条目与单篇加密条目（不因锁定/解锁改变）；来自 Memo 的部分在门禁锁定时以"已锁定"占位（Q7）；各卡片有空态。

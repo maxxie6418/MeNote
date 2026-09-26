@@ -9,7 +9,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const read = (relative: string): string =>
-  readFileSync(new URL(relative, import.meta.url), "utf8");
+  // 必须归一化换行：仓库里存 LF，但 Windows 检出后工作区可能是 CRLF
+  // （git checkout 一碰就变）。不归一化的话 `split("\n")` 每行尾部会带 `\r`，
+  // 日期小标题的正则就匹配不上 —— 本地红、Linux CI 绿，属于最讨厌的假失败。
+  readFileSync(new URL(relative, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 const pkg = JSON.parse(read("../../../package.json")) as { version: string };
 const changelog = read("../../../CHANGELOG.md");

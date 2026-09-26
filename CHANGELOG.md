@@ -2,6 +2,7 @@
 
 > 每次改动在最上方追加一条，格式：`- YYYY-MM-DD / 版本 / commit — 摘要`。应用版本号启用前以「预开发」占位。
 
+- 2026-09-26 / 预开发 / b38fb20 — 草稿改为 docs/scratch/ 文件夹（一份讨论一份文件），架构升 v1.7 与 AGENTS.md 同步
 - 2026-09-26 / 预开发 / b24a31a — AGENTS.md 文档放哪补充 todo/ 与 scratch.md，创建对应目录与草稿文件
 - 2026-09-26 / 预开发 / cdeb147 — 架构 v1.6：docs/ 新增 todo/ 专项计划目录与 scratch.md 草稿区
 - 2026-09-26 / 预开发 / 9ad1462 — AGENTS.md 填充项目信息并修正模板残留（server.mjs 改为 Worker 入口规则），CHANGELOG 建立

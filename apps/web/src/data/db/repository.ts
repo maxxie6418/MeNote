@@ -13,6 +13,7 @@ import {
   utf8ByteLength,
   type FolderMeta,
   type ItemMeta,
+  type ItemType,
 } from "@menote/shared";
 import { db } from "./database";
 import {
@@ -149,25 +150,30 @@ export async function putCachedBody(
   await db.bodies.put({ item_id: itemId, body, rev, content_hash: contentHash, cached_at: now });
 }
 
-/** 本地新建笔记：写入 items + bodies + drafts，并入队一条 `create` */
-export async function createLocalNote(
-  id: string,
-  title: string,
-  body: string,
-  now: number,
-): Promise<LocalItem> {
-  const contentHash = await sha256Hex(body);
+/** 本地新建条目：写入 items + bodies + drafts，并入队一条 `create` */
+export interface NewLocalItemInput {
+  id: string;
+  type: ItemType;
+  title: string | null;
+  folder_id: string | null;
+  tags?: string[];
+  memo_at?: number | null;
+  body: string;
+}
+
+export async function createLocalItem(input: NewLocalItemInput, now: number): Promise<LocalItem> {
+  const contentHash = await sha256Hex(input.body);
   const item: LocalItem = {
-    id,
-    type: "note",
-    folder_id: null,
-    title,
+    id: input.id,
+    type: input.type,
+    folder_id: input.folder_id,
+    title: input.title,
     enc_self: 0,
     in_enc_space: 0,
-    size_bytes: utf8ByteLength(body),
+    size_bytes: utf8ByteLength(input.body),
     content_hash: contentHash,
-    tags: [],
-    memo_at: null,
+    tags: input.tags ?? [],
+    memo_at: input.memo_at ?? null,
     is_task: 0,
     task_status: null,
     task_due: null,
@@ -189,11 +195,17 @@ export async function createLocalNote(
 
   await db.transaction("rw", db.items, db.bodies, db.drafts, db.outbox, async () => {
     await db.items.put(item);
-    await db.bodies.put({ item_id: id, body, rev: 0, content_hash: contentHash, cached_at: now });
-    await db.drafts.put({ item_id: id, body, updated_at: now });
+    await db.bodies.put({
+      item_id: input.id,
+      body: input.body,
+      rev: 0,
+      content_hash: contentHash,
+      cached_at: now,
+    });
+    await db.drafts.put({ item_id: input.id, body: input.body, updated_at: now });
     await enqueue({
       entity: "item",
-      entity_id: id,
+      entity_id: input.id,
       op: "create",
       base_rev: 0,
       base_meta_rev: 0,
@@ -202,6 +214,37 @@ export async function createLocalNote(
   });
 
   return item;
+}
+
+/** 本地新建笔记（M1 的"新建笔记"入口） */
+export async function createLocalNote(
+  id: string,
+  title: string,
+  body: string,
+  now: number,
+): Promise<LocalItem> {
+  return createLocalItem({ id, type: "note", title, folder_id: null, body }, now);
+}
+
+/**
+ * `full_resync` 时清掉"已同步"的本地内容（架构 §6.1 的客户端分支）。
+ *
+ * **保留 `pending != null` 的条目及其正文/草稿**：这些是还没上传的改动，清掉就等于丢数据。
+ * 设计稿说的"导出为本地备份文件"是 M5 的导出模块；M1 先用"不删未上传项"达到同样的目的。
+ */
+export async function clearSyncedLocalContent(): Promise<void> {
+  await db.transaction("rw", db.items, db.folders, db.bodies, async () => {
+    const items = await db.items.toArray();
+    const keepIds = new Set(items.filter((row) => row.pending !== null).map((row) => row.id));
+    await db.items.filter((row) => row.pending === null).delete();
+
+    const bodies = await db.bodies.toArray();
+    await db.bodies.bulkDelete(
+      bodies.map((row) => row.item_id).filter((id) => !keepIds.has(id)),
+    );
+
+    await db.folders.filter((row) => row.pending === null).delete();
+  });
 }
 
 // ——————————————————————————— outbox ———————————————————————————
@@ -308,12 +351,23 @@ export async function markOutboxFailure(
   });
 }
 
-/** 上传成功后落地：清 pending、更新 rev/哈希（正文由调用方写入 bodies） */
-export async function markItemSynced(
+/** 上传成功后落地：清 pending、更新 rev/哈希（正文由调用方写入 bodies） */export async function markItemSynced(
   itemId: string,
   patch: Partial<Pick<LocalItem, "rev" | "meta_rev" | "content_hash" | "size_bytes" | "sync_seq">>,
 ): Promise<void> {
   await db.items.update(itemId, { ...patch, pending: null });
+}
+
+/** 文件夹上传成功后落地 */
+export async function markFolderSynced(
+  folderId: string,
+  patch: Partial<Pick<LocalFolder, "meta_rev" | "sync_seq">>,
+): Promise<void> {
+  await db.folders.update(folderId, { ...patch, pending: null });
+}
+
+export async function getLocalFolder(id: string): Promise<LocalFolder | undefined> {
+  return db.folders.get(id);
 }
 
 /** 本地保留草稿直到用户删减到上限以内（拆解 M04-05）；上传成功后清掉 */

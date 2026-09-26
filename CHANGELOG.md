@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- v0.2.0 / 0425225 — **wiki 收口同步（用户确认后修改）**：项目架构 §15.5 删除 `secrets.required` 写法（deploy 硬门禁）改为运行时 `config-guard` 检查、§6.x 补全 prelogin 确定盐口径与公开注册状态接口、§2.3 目录树补 `config-guard`；local-dev 指南更正 `config-guard` 端点范围、新增 §九「本地数据与安全上下文」（重置本地数据在 `apps/web/.wrangler/state`、必须 https 或 localhost、线上诊断三连）；架构文档版本 v1.9 → v1.10
 - **v0.2.0 — M1 收口（核心闭环完成）**：注册登录 → 建笔记 → 编辑保存 → 第二台设备同步看到，全线闭环并在真实浏览器与云端验证。
   - **功能**：认证（浏览器 PBKDF2 600k 派生、服务端只做一次 HMAC 比对、会话 Cookie、CSRF、实例级注册开关与 owner/member）、笔记最小集（新建/标题/正文/自动保存/大小档位与硬上限）、同步最小版（D1 游标增量、outbox 条件批写、退避重试、失败列表语义、冲突副本 + 提示）、最小设置入口（通用/账户与安全/实例管理）。
   - **质量**：`lint`/`typecheck`/`test`/`build`/`check:size` 全绿；测试 **163 个**（shared 29 + web 77 + worker 57）；首屏 JS gzip **113.1 KB ≤ 200 KB**（编辑器与 Markdown 渲染各自独立分包）。

@@ -22,9 +22,19 @@ const app = new Hono<AppEnv>();
 app.use("/api/*", securityHeaders);
 app.use("/api/*", schemaGuard);
 app.use("/api/*", csrfGuard);
-// 需要 AUTH_PEPPER 的接口：缺失时 fail-closed（不用空密钥算 HMAC）
-app.use("/api/auth/*", configGuard);
-app.use("/api/admin/*", configGuard);
+/**
+ * 只有**真正要用 AUTH_PEPPER** 的端点在缺少机密时 fail-closed（绝不用空密钥算 HMAC）：
+ * prelogin 要用它派生假盐，login/register/password 要用它算校验值。
+ *
+ * 刻意**不拦**这些：`/api/auth/registration-state`（只读两个布尔量，不做 HMAC）、
+ * `/api/auth/me`、`/api/auth/logout`（会话令牌是 SHA-256，不用机密）、`/api/admin/*`（要有 owner 会话才进得来）。
+ * 否则首次部署忘配机密时，前端连"库中没有用户"都读不到，会停在登录页且没有注册入口——
+ * 用户只能看到一句 503，连该做什么都不清楚。
+ */
+app.use("/api/auth/prelogin", configGuard);
+app.use("/api/auth/login", configGuard);
+app.use("/api/auth/register", configGuard);
+app.use("/api/auth/password", configGuard);
 
 app.route("/api", health);
 app.route("/api", auth);

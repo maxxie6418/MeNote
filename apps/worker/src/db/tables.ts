@@ -90,7 +90,14 @@ export const SQL_INSERT_ITEM = `INSERT INTO items (id, user_id, type, folder_id,
 SELECT ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, NULL, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, ?, ?, NULL
  WHERE NOT EXISTS (SELECT 1 FROM items WHERE id = ?)`;
 
-/** 新建路径的计数器推进：以"本次创建的那一行"为条件（读的是 +1，推进后与行上写的值一致） */
+/**
+ * 新建路径的计数器推进：以"本次创建的那一行"为条件（读的是 +1，推进后与行上写的值一致）。
+ *
+ * 安全说明：外层 `UPDATE users` 已由第一个 `id = ?` 限定为**调用者自己**，所以 `EXISTS` 子查询里
+ * 不必再带 `user_id`。极端情况下（另一个用户恰好占用了同一个 id 且 rev/created_at 吻合）最多让
+ * 调用者自己的 `sync_seq` 空推一次——游标取自实际返回行，不受影响。**不要为了"看起来更严"去加
+ * `user_id`**：那会让 `EXISTS` 在正常路径上也恒假，计数器不再推进。
+ */
 export const SQL_BUMP_SYNC_SEQ_ON_ITEM_CREATE = `UPDATE users SET sync_seq = sync_seq + 1
  WHERE id = ? AND EXISTS (SELECT 1 FROM items WHERE id = ? AND rev = 1 AND created_at = ?)`;
 

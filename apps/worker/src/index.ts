@@ -6,24 +6,34 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { DomainError } from "./errors";
 import { csrfGuard } from "./middleware/csrf";
 import { schemaGuard } from "./middleware/schema";
+import { applySecurityHeaders, securityHeaders } from "./middleware/security-headers";
 import auth from "./routes/auth";
+import folders from "./routes/folders";
 import health from "./routes/health";
+import items from "./routes/items";
 import settings from "./routes/settings";
 import type { AppEnv, EnvBindings } from "./types";
 
 const app = new Hono<AppEnv>();
 
-// 中间件顺序即处理顺序：表结构就绪（§15.4）→ CSRF（§13.2）
+// 中间件顺序即处理顺序：安全头 → 表结构就绪（§15.4）→ CSRF（§13.2）
+app.use("/api/*", securityHeaders);
 app.use("/api/*", schemaGuard);
 app.use("/api/*", csrfGuard);
 
 app.route("/api", health);
 app.route("/api", auth);
+app.route("/api", items);
+app.route("/api", folders);
 app.route("/api", settings);
 
-app.notFound((c) => c.json(apiErrorBody("not_found", "资源不存在"), 404));
+app.notFound((c) => {
+  applySecurityHeaders(c);
+  return c.json(apiErrorBody("not_found", "资源不存在"), 404);
+});
 
 app.onError((err, c) => {
+  applySecurityHeaders(c);
   if (err instanceof DomainError) {
     return c.json(
       apiErrorBody(err.code, err.message, err.detail),

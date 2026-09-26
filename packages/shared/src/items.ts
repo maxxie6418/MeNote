@@ -105,3 +105,39 @@ export function encodeItemWriteMeta(meta: ItemWriteMeta): string {
 export function decodeItemWriteMeta(header: string): ItemWriteMeta {
   return v.parse(ItemWriteMetaSchema, JSON.parse(base64UrlDecodeUtf8(header)) as unknown);
 }
+
+/** `PUT /api/items/:id` 放元数据的请求头名（架构 §6.1） */
+export const ITEM_META_HEADER = "X-Menote-Meta";
+/** `PUT /api/items/:id/body` 的基版本头（架构 §6.1） */
+export const ITEM_BASE_REV_HEADER = "If-Match";
+/** `PUT /api/items/:id/body` 的内容哈希头（架构 §6.1） */
+export const ITEM_HASH_HEADER = "X-Menote-Hash";
+
+/** `PATCH /api/items/:id/meta`：逐字段可选，独立判定 `meta_rev` 冲突 */
+export const ItemMetaPatchSchema = v.object({
+  base_meta_rev: IntSchema,
+  title: v.optional(v.nullable(v.string())),
+  folder_id: v.optional(v.nullable(v.string())),
+  tags: v.optional(v.array(v.string())),
+  pinned: v.optional(FlagSchema),
+  starred: v.optional(FlagSchema),
+});
+export type ItemMetaPatch = v.InferOutput<typeof ItemMetaPatchSchema>;
+
+/** 新建与全文保存的应答：正文大小由服务端实测，供客户端核对 */
+export const ItemBodyWriteResponseSchema = v.object({
+  id: v.string(),
+  rev: IntSchema,
+  /** 服务端实测 UTF-8 字节数 */
+  bytes: v.pipe(IntSchema, v.minValue(0)),
+  /** 服务端实测码点数 */
+  chars: v.pipe(IntSchema, v.minValue(0)),
+});
+export type ItemBodyWriteResponse = v.InferOutput<typeof ItemBodyWriteResponseSchema>;
+
+/** 元数据补丁的应答 */
+export const ItemMetaWriteResponseSchema = v.object({
+  id: v.string(),
+  meta_rev: IntSchema,
+});
+export type ItemMetaWriteResponse = v.InferOutput<typeof ItemMetaWriteResponseSchema>;

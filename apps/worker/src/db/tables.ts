@@ -70,3 +70,96 @@ VALUES (?, ?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET window_start = excluded.window_start, failures = excluded.failures, locked_until = excluded.locked_until`;
 
 export const SQL_DELETE_THROTTLE = "DELETE FROM auth_throttle WHERE key = ?";
+
+// —— items：条件 batch 写模式（需求 §18.3 + 设计稿《同步引擎设计》§3.4）——
+//
+// 三条语句必须在同一个 batch 内（单事务、按序执行）：
+//   ① 主写入以 rev 为条件，sync_seq 取"将要写入的值"（子查询，不推进计数器）
+//   ② 正文写入挂在"主写入已生效"之上（rev + content_hash 双守卫），用 upsert 兼容正文行缺失
+//   ③ 计数器只在主写入确实生效时才推进
+// 判定冲突读 results[0].meta.changes；冲突时整批不产生任何改动。
+
+/** 预检读：存在性 + 当前版本与哈希（batch 之前的 1 次读） */
+export const SQL_SELECT_ITEM_REV = "SELECT rev, content_hash FROM items WHERE id = ? AND user_id = ?";
+
+/** 预检读：仅哈希（新建时判断是否重放） */
+export const SQL_SELECT_ITEM_HASH = "SELECT content_hash FROM items WHERE id = ? AND user_id = ?";
+
+/** 新建：`NOT EXISTS` 只判 id（id 是全局主键；带 user_id 会在他人占用时撞主键异常） */
+export const SQL_INSERT_ITEM = `INSERT INTO items (id, user_id, type, folder_id, title, enc_self, in_enc_space, size_bytes, content_hash, tags, memo_at, is_task, task_status, task_due, task_priority, pinned, starred, rev, meta_rev, sealed_rev, sync_seq, created_at, updated_at, last_edit_at, last_device, deleted_at)
+SELECT ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, NULL, (SELECT sync_seq FROM users WHERE id = ?), ?, ?, ?, ?, NULL
+ WHERE NOT EXISTS (SELECT 1 FROM items WHERE id = ?)`;
+
+/** 新建路径的计数器推进：以"本次创建的那一行"为条件 */
+export const SQL_BUMP_SYNC_SEQ_ON_ITEM_CREATE = `UPDATE users SET sync_seq = sync_seq + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM items WHERE id = ? AND rev = 1 AND created_at = ?)`;
+
+/** 正文保存的主写入（rev 条件） */
+export const SQL_UPDATE_ITEM_BODY = `UPDATE items
+   SET rev = rev + 1, size_bytes = ?, content_hash = ?, updated_at = ?, last_edit_at = ?, last_device = ?,
+       sync_seq = (SELECT sync_seq + 1 FROM users WHERE id = ?)
+ WHERE id = ? AND user_id = ? AND rev = ?`;
+
+/** 正文 upsert：守卫为 rev + content_hash（只判 rev 会被并发落败者覆盖） */
+export const SQL_UPSERT_ITEM_BODY = `INSERT INTO item_bodies (item_id, body)
+SELECT ?, ?
+ WHERE EXISTS (SELECT 1 FROM items WHERE id = ? AND user_id = ? AND rev = ? AND content_hash = ?)
+ON CONFLICT(item_id) DO UPDATE SET body = excluded.body`;
+
+/** 正文保存的计数器推进（守卫与上面一致） */
+export const SQL_BUMP_SYNC_SEQ_ON_ITEM_BODY = `UPDATE users SET sync_seq = sync_seq + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM items WHERE id = ? AND rev = ? AND content_hash = ?)`;
+
+export const SQL_SELECT_ITEM_BODY = `SELECT i.content_hash AS content_hash, b.body AS body
+  FROM items i JOIN item_bodies b ON b.item_id = i.id
+ WHERE i.id = ? AND i.user_id = ?`;
+
+export const SQL_SELECT_ITEM_META_REV = "SELECT meta_rev FROM items WHERE id = ? AND user_id = ?";
+
+/** 元数据补丁前的预检：需要知道类型（Memo 才允许无标题）与当前 meta_rev */
+export const SQL_SELECT_ITEM_META_BASE =
+  "SELECT type, meta_rev FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
+
+/** 元数据补丁允许更新的列（白名单；列名一律来自常量，绝不来自请求） */
+export type ItemMetaField = "title" | "folder_id" | "tags" | "pinned" | "starred";
+
+/** 组装元数据补丁语句：`SET` 子句由白名单列拼出（服务层不写 SQL 字面量） */
+export function buildUpdateItemMeta(fields: readonly ItemMetaField[]): string {
+  const sets = fields.map((field) => `${field} = ?`).join(", ");
+  return `UPDATE items SET ${sets}, meta_rev = meta_rev + 1, updated_at = ?,
+       sync_seq = (SELECT sync_seq + 1 FROM users WHERE id = ?)
+ WHERE id = ? AND user_id = ? AND meta_rev = ?`;
+}
+
+/** 元数据补丁的计数器推进：用 `updated_at = 本次时间` 收紧守卫（元数据没有哈希可比） */
+export const SQL_BUMP_SYNC_SEQ_ON_ITEM_META = `UPDATE users SET sync_seq = sync_seq + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM items WHERE id = ? AND meta_rev = ? AND updated_at = ?)`;
+
+// —— folders ——
+
+export const SQL_SELECT_FOLDER_BY_ID =
+  "SELECT id, parent_id, depth, meta_rev FROM folders WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
+
+export const SQL_COUNT_FOLDER_CHILDREN =
+  "SELECT COUNT(*) AS count FROM folders WHERE user_id = ? AND parent_id = ? AND deleted_at IS NULL";
+
+/** 新建文件夹：ID 由客户端生成，depth 由服务层按父节点算好传入 */
+export const SQL_INSERT_FOLDER = `INSERT INTO folders (id, user_id, parent_id, is_enc_space, in_enc_space, name, depth, position, meta_rev, sync_seq, created_at, updated_at, deleted_at)
+SELECT ?, ?, ?, 0, 0, ?, ?, 0, 1, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, NULL
+ WHERE NOT EXISTS (SELECT 1 FROM folders WHERE id = ?)`;
+
+export const SQL_BUMP_SYNC_SEQ_ON_FOLDER_CREATE = `UPDATE users SET sync_seq = sync_seq + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND meta_rev = 1 AND created_at = ?)`;
+
+/** 文件夹补丁允许更新的列（白名单） */
+export type FolderField = "name" | "parent_id" | "depth";
+
+export function buildUpdateFolder(fields: readonly FolderField[]): string {
+  const sets = fields.map((field) => `${field} = ?`).join(", ");
+  return `UPDATE folders SET ${sets}, meta_rev = meta_rev + 1, updated_at = ?,
+       sync_seq = (SELECT sync_seq + 1 FROM users WHERE id = ?)
+ WHERE id = ? AND user_id = ? AND meta_rev = ? AND deleted_at IS NULL`;
+}
+
+export const SQL_BUMP_SYNC_SEQ_ON_FOLDER_META = `UPDATE users SET sync_seq = sync_seq + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND meta_rev = ? AND updated_at = ?)`;

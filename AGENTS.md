@@ -8,16 +8,16 @@
 - 名称：`MeNote`
 - 一句话：面向个人与家人的轻量多端笔记应用（浏览器 PWA + Cloudflare 自托管），支持 Markdown 笔记、表格、Memo、待办、版本历史与隐私锁。
 - 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared`（`mdcore` / `crypto-format` 待 M2/M5 建），见架构文档 §2.3）
-- 当前版本：v0.1.3（M1 开发期）
+- 当前版本：v0.2.0（**M1 已收口**，M2 待开工）
 - 技术栈：
-  - 前端：`React PWA（Vite + CodeMirror 6；M1 接入编辑器）`
-  - 后端：`Cloudflare Workers（Hono，已接入 `/api/health`）`
+  - 前端：`React PWA（Vite + CodeMirror 6，编辑器已接入）`
+  - 后端：`Cloudflare Workers（Hono）`
   - 数据：`Cloudflare D1 + R2 + Static Assets；外部备份 WebDAV / S3 / Git`
-  - 部署：`GitHub 一键部署到 Cloudflare（Workers Builds，见架构文档 §15.5）`
+  - 部署：`GitHub 一键部署到 Cloudflare（Workers Builds，见架构文档 §15.5）。首个请求触发运行时自愈建表；机密在 Dashboard 里加（AUTH_PEPPER），不要用 wrangler.jsonc 的 secrets.required`
 - 源码位置：`apps/web`（PWA 客户端）、`apps/worker`（Cloudflare Worker，唯一入口 `src/index.ts` 只装配）、`packages/shared`（两端共享类型与纯函数）
 - 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 结构章已定稿、**视觉章（§3）待定**，实现界面时按 `DESIGN.md` §3.1 从原型取值并标注临时值
-- 怎么跑：`pnpm install` → `pnpm dev`（前端 + Worker + 本地 D1 一体）；常用命令与部署流程见 `wiki/guides/local-dev.md`
-- 现在做到哪：M0 已收口（v0.1.0，线上可访问 + `/api/health` 通）；**M1 执行中**——运行时自愈迁移与首批 8 张表已落地，进度见 `docs/todo/Menote-M1-实施计划-v1.md`
+- 怎么跑：`pnpm install` → `pnpm dev`（前端 + Worker + 本地 D1 一体）；常用命令与部署流程见 `wiki/guides/local-dev.md`；本地数据在 `apps/web/.wrangler/state`（删掉即可重置）
+- 现在做到哪：**M1 已收口（v0.2.0）**——认证、笔记最小集、同步最小版与最小设置入口均已闭环并在真实浏览器与云端验证；M1 遗留项与下一步见 `docs/todo/Menote-M2-实施计划-v1.md`（开工前需 DESIGN.md 视觉章定稿与 Q 项拍板）
 
 ## 工作原则
 

@@ -7,6 +7,7 @@
  */
 import { SYNC_FOREGROUND_INTERVAL_MS } from "@menote/shared";
 import { outboxCount } from "../db";
+import { createSyncChannel, type SyncChannel } from "./broadcast";
 import { withSyncLock } from "./leader";
 import { pullOnce, type PullApi, type PullResult } from "./pull";
 import { pushQueue, type PushApi, type PushBatchResult } from "./push";
@@ -20,6 +21,10 @@ export interface SyncEngineOptions {
   random?: () => number;
   deviceLabel?: string | null;
   onStatus?: (status: SyncStatus) => void;
+  /** 别的标签页同步完了：本页据此刷新（M2-9 跨标签页通知） */
+  onRemoteChange?: (event: "item-updated" | "cursor-advanced") => void;
+  /** 便于测试注入广播通道替身 */
+  channel?: SyncChannel;
 }
 
 export interface SyncRunResult {
@@ -44,10 +49,12 @@ const WRITE_TRIGGER_DELAY_MS = 300;
 
 export function createSyncEngine(options: SyncEngineOptions = {}): SyncEngine {
   const now = options.now ?? Date.now;
+  const channel = options.channel ?? createSyncChannel();
   let running = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let interval: ReturnType<typeof setInterval> | null = null;
   let started = false;
+  let unsubscribe: (() => void) | null = null;
 
   async function runOnce(): Promise<SyncRunResult> {
     if (running) return { ran: false, reason: "busy" };
@@ -74,6 +81,12 @@ export function createSyncEngine(options: SyncEngineOptions = {}): SyncEngine {
         // 另一个标签页正在同步：不必报错，等下一次触发
         options.onStatus?.("idle");
         return { ran: false, reason: "not-leader" };
+      }
+
+      // 广播给别的标签页：它们据此刷新（本页不需要广播给自己）
+      const pushedAny = outcome.pushed.succeeded > 0 || outcome.pushed.conflicted > 0;
+      if (pushedAny || outcome.pulled.applied > 0) {
+        channel.post({ kind: "cursor-advanced", cursor: outcome.pulled.cursor });
       }
 
       options.onStatus?.("idle");
@@ -118,6 +131,12 @@ export function createSyncEngine(options: SyncEngineOptions = {}): SyncEngine {
       started = true;
       schedule(0); // 应用打开
 
+      // 别的标签页写入/同步完 → 本页刷新（M2-9）。**不做成"再来一次同步"**：
+      // 它们已经把数据落到本地库了，这里只需要重新读库，省掉一轮网络往返。
+      unsubscribe = channel.subscribe((event) => {
+        options.onRemoteChange?.(event.kind);
+      });
+
       if (typeof window === "undefined") return; // 非浏览器环境（测试）不挂监听
       window.addEventListener("online", onOnline);
       document.addEventListener("visibilitychange", onVisibilityChange);
@@ -126,6 +145,8 @@ export function createSyncEngine(options: SyncEngineOptions = {}): SyncEngine {
 
     stop(): void {
       started = false;
+      unsubscribe?.();
+      unsubscribe = null;
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;

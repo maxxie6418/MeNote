@@ -70,6 +70,8 @@ export default function App() {
   })();
 
   const engineRef = useRef<SyncEngine | null>(null);
+  /** 跨标签页刷新是否正在跑（合并连发事件，避免刷新风暴） */
+  const remoteRefreshRunning = useRef(false);
 
   const refreshPending = useCallback(async () => {
     setPendingCount(await outboxCount());
@@ -187,6 +189,22 @@ export default function App() {
             console.error("同步后刷新界面状态失败", error);
           });
         }
+      },
+      /**
+       * 别的标签页写入/同步完（M2-9）：本页**只重读本地库**，不再跑一轮同步——数据已经在本地
+       * 库里了，省掉一次网络往返。用 in-flight 标记合并连发事件，避免多标签页同时活动时刷新风暴。
+       */
+      onRemoteChange: () => {
+        if (remoteRefreshRunning.current) return;
+        remoteRefreshRunning.current = true;
+        void refreshAllRef
+          .current()
+          .catch((error: unknown) => {
+            console.error("跨标签页刷新失败", error);
+          })
+          .finally(() => {
+            remoteRefreshRunning.current = false;
+          });
       },
     });
     engineRef.current = engine;

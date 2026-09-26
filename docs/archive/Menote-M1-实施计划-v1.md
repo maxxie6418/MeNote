@@ -1,236 +1,139 @@
-# Menote M1 实施计划（核心闭环）
+# Menote M1 瀹炴柦璁″垝锛堟牳蹇冮棴鐜級
 
-| 项 | 值 |
+| 椤?| 鍊?|
 |---|---|
-| 文档版本 | v1.1 |
-| 文档状态 | **完成（已归档）**——M1 于 2026-09-26 收口（应用版本 v0.2.0）。未做项已集中记入 `docs/todo/Menote-M2-实施计划-v1.md` §1.3「M1 遗留清单」 |
-| 目的和适用范围 | M1「核心闭环」的可执行拆步：注册登录 → 建笔记 → 编辑保存 → 第二台设备同步看到。每步给出涉及文件、验收点与验证命令 |
-| 权威级别 | 模块规则（执行依据）。与 `wiki/` 冲突时以 wiki 为准并停下确认 |
-| 最后更新日期 | 2026-09-26 |
+| 鏂囨。鐗堟湰 | v1.1 |
+| 鏂囨。鐘舵€?| **瀹屾垚锛堝凡褰掓。锛?*鈥斺€擬1 浜?2026-09-26 鏀跺彛锛堝簲鐢ㄧ増鏈?v0.2.0锛夈€傛湭鍋氶」宸查泦涓鍏?`docs/todo/Menote-M2-瀹炴柦璁″垝-v1.md` 搂1.3銆孧1 閬楃暀娓呭崟銆?|
+| 鐩殑鍜岄€傜敤鑼冨洿 | M1銆屾牳蹇冮棴鐜€嶇殑鍙墽琛屾媶姝ワ細娉ㄥ唽鐧诲綍 鈫?寤虹瑪璁?鈫?缂栬緫淇濆瓨 鈫?绗簩鍙拌澶囧悓姝ョ湅鍒般€傛瘡姝ョ粰鍑烘秹鍙婃枃浠躲€侀獙鏀剁偣涓庨獙璇佸懡浠?|
+| 鏉冨▉绾у埆 | 妯″潡瑙勫垯锛堟墽琛屼緷鎹級銆備笌 `wiki/` 鍐茬獊鏃朵互 wiki 涓哄噯骞跺仠涓嬬‘璁?|
+| 鏈€鍚庢洿鏂版棩鏈?| 2026-09-26 |
 
-修改记录：
-
-| 文档版本 | 应用版本 | 日期 | 修改摘要 | 修改模型 |
+淇敼璁板綍锛?
+| 鏂囨。鐗堟湰 | 搴旂敤鐗堟湰 | 鏃ユ湡 | 淇敼鎽樿 | 淇敼妯″瀷 |
 |---|---|---|---|---|
-| v1 | v0.1.2 | 2026-09-26 | 初稿：M1 十三个步骤、涉及文件、验收点、验证命令与收口口径 | deepseek-v4.1-flash |
-| v1.1 | v0.2.0 | 2026-09-26 | 标记完成并归档：M1 十二步全部执行（M1-12 的可选项按判定移入 M2，见 M2 计划 §1.3「M1 遗留清单」）；补记实测结论（dev 链路 17 项断言、浏览器全链路走查、断网补传、云端三项核对） | deepseek-v4.1-flash |
+| v1 | v0.1.2 | 2026-09-26 | 鍒濈锛歁1 鍗佷笁涓楠ゃ€佹秹鍙婃枃浠躲€侀獙鏀剁偣銆侀獙璇佸懡浠や笌鏀跺彛鍙ｅ緞 | deepseek-v4.1-flash |
+| v1.1 | v0.2.0 | 2026-09-26 | 鏍囪瀹屾垚骞跺綊妗ｏ細M1 鍗佷簩姝ュ叏閮ㄦ墽琛岋紙M1-12 鐨勫彲閫夐」鎸夊垽瀹氱Щ鍏?M2锛岃 M2 璁″垝 搂1.3銆孧1 閬楃暀娓呭崟銆嶏級锛涜ˉ璁板疄娴嬬粨璁猴紙dev 閾捐矾 17 椤规柇瑷€銆佹祻瑙堝櫒鍏ㄩ摼璺蛋鏌ャ€佹柇缃戣ˉ浼犮€佷簯绔笁椤规牳瀵癸級 | deepseek-v4.1-flash |
 
-**上游依据**：`docs/todo/Menote-开发计划-v1.md`（v1.2）§三 M1；`docs/modules/Menote-数据模型与迁移设计-v1.md`；`docs/modules/Menote-同步引擎设计-v1.md`；`docs/modules/Menote-认证与会话设计-v1.md`。
-
-**范围边界**：M1 不做表格、附件与图片、版本历史、回收站界面、隐私锁、分享、备份、搜索界面、Memo 与待办、首页。M1 的界面是**可用的最简闭环**，但骨架（顶栏 6 块 + 左右两栏 + 列表/正文双栏）按 DESIGN.md 一次成型，M2 只填内容。
-
+**涓婃父渚濇嵁**锛歚docs/todo/Menote-寮€鍙戣鍒?v1.md`锛坴1.2锛壜т笁 M1锛沗docs/modules/Menote-鏁版嵁妯″瀷涓庤縼绉昏璁?v1.md`锛沗docs/modules/Menote-鍚屾寮曟搸璁捐-v1.md`锛沗docs/modules/Menote-璁よ瘉涓庝細璇濊璁?v1.md`銆?
+**鑼冨洿杈圭晫**锛歁1 涓嶅仛琛ㄦ牸銆侀檮浠朵笌鍥剧墖銆佺増鏈巻鍙层€佸洖鏀剁珯鐣岄潰銆侀殣绉侀攣銆佸垎浜€佸浠姐€佹悳绱㈢晫闈€丮emo 涓庡緟鍔炪€侀椤点€侻1 鐨勭晫闈㈡槸**鍙敤鐨勬渶绠€闂幆**锛屼絾楠ㄦ灦锛堥《鏍?6 鍧?+ 宸﹀彸涓ゆ爮 + 鍒楄〃/姝ｆ枃鍙屾爮锛夋寜 DESIGN.md 涓€娆℃垚鍨嬶紝M2 鍙～鍐呭銆?
 ---
 
-## 一、步骤总览
+## 涓€銆佹楠ゆ€昏
 
-| 步 | 主题 | 依赖 | 可并行 |
+| 姝?| 涓婚 | 渚濊禆 | 鍙苟琛?|
 |---|---|---|---|
-| M1-0 | 三份设计稿评审通过 | — | — |
-| M1-1 | 迁移自愈执行器 + 第一条迁移（8 张表） | M1-0 | 与 M1-2 并行 |
-| M1-2 | `packages/shared` 类型与 Valibot schema | M1-0 | 与 M1-1 并行 |
-| M1-3 | 认证服务与路由（M01-01~05） | M1-1、M1-2 | — |
-| M1-4 | 会话中间件 + CSRF + 响应头 | M1-3 | — |
-| M1-5 | items / folders 服务与路由 | M1-4 | 与 M1-6 并行 |
-| M1-6 | sync 路由最小版 | M1-4、M1-5 | — |
-| M1-7 | 前端数据层（Dexie + 仓储） | M1-2 | 与 M1-3~6 并行 |
-| M1-8 | 同步引擎（outbox / 推拉 / 选主 / 冲突副本） | M1-6、M1-7 | — |
-| M1-9 | 编辑器（CodeMirror 6 + 自动保存） | M1-8 | — |
-| M1-10 | 界面骨架 + 登录注册 + 列表 + 最小设置 | M1-3、M1-9 | — |
-| M1-11 | 线上部署与两设备验证 | M1-10 | — |
-| M1-12 | 收尾（补丁保存 / batch / trash-restore / BroadcastChannel） | M1-11 | 可移入 M2 |
+| M1-0 | 涓変唤璁捐绋胯瘎瀹￠€氳繃 | 鈥?| 鈥?|
+| M1-1 | 杩佺Щ鑷剤鎵ц鍣?+ 绗竴鏉¤縼绉伙紙8 寮犺〃锛?| M1-0 | 涓?M1-2 骞惰 |
+| M1-2 | `packages/shared` 绫诲瀷涓?Valibot schema | M1-0 | 涓?M1-1 骞惰 |
+| M1-3 | 璁よ瘉鏈嶅姟涓庤矾鐢憋紙M01-01~05锛?| M1-1銆丮1-2 | 鈥?|
+| M1-4 | 浼氳瘽涓棿浠?+ CSRF + 鍝嶅簲澶?| M1-3 | 鈥?|
+| M1-5 | items / folders 鏈嶅姟涓庤矾鐢?| M1-4 | 涓?M1-6 骞惰 |
+| M1-6 | sync 璺敱鏈€灏忕増 | M1-4銆丮1-5 | 鈥?|
+| M1-7 | 鍓嶇鏁版嵁灞傦紙Dexie + 浠撳偍锛?| M1-2 | 涓?M1-3~6 骞惰 |
+| M1-8 | 鍚屾寮曟搸锛坥utbox / 鎺ㄦ媺 / 閫変富 / 鍐茬獊鍓湰锛?| M1-6銆丮1-7 | 鈥?|
+| M1-9 | 缂栬緫鍣紙CodeMirror 6 + 鑷姩淇濆瓨锛?| M1-8 | 鈥?|
+| M1-10 | 鐣岄潰楠ㄦ灦 + 鐧诲綍娉ㄥ唽 + 鍒楄〃 + 鏈€灏忚缃?| M1-3銆丮1-9 | 鈥?|
+| M1-11 | 绾夸笂閮ㄧ讲涓庝袱璁惧楠岃瘉 | M1-10 | 鈥?|
+| M1-12 | 鏀跺熬锛堣ˉ涓佷繚瀛?/ batch / trash-restore / BroadcastChannel锛?| M1-11 | 鍙Щ鍏?M2 |
 
 ---
 
-## 二、逐步拆解
+## 浜屻€侀€愭鎷嗚В
 
-### M1-0 前置评审
+### M1-0 鍓嶇疆璇勫
 
-- 评审 `docs/modules/` 三份设计稿；**用户点头后才动代码**。
-- 评审通过后把设计结论回写 `wiki/`（需用户同意，清单见三份设计稿的末章）。
-- **验收点**：三份稿状态由"评审中"改为"生效"；`wiki/` 同步项获得批准。
-
-### M1-1 迁移自愈执行器 + 第一条迁移
-
-**涉及文件**
-- `apps/worker/src/db/migrations/0001_init.ts`（**18 条语句**：8 张 `CREATE TABLE` + 10 条 `CREATE INDEX`，内容照抄《数据模型与迁移设计》§3.2）
-- `apps/worker/src/db/selfheal.ts`（执行器：版本检查 → 抢锁 → 执行 → 校验 → 写版本）
-- `apps/worker/src/db/index.ts`（导出 `ensureSchema`）
-- `apps/worker/src/index.ts`（在最外层调用一次 `ensureSchema`，入口仍 ≤100 行）
+- 璇勫 `docs/modules/` 涓変唤璁捐绋匡紱**鐢ㄦ埛鐐瑰ご鍚庢墠鍔ㄤ唬鐮?*銆?- 璇勫閫氳繃鍚庢妸璁捐缁撹鍥炲啓 `wiki/`锛堥渶鐢ㄦ埛鍚屾剰锛屾竻鍗曡涓変唤璁捐绋跨殑鏈珷锛夈€?- **楠屾敹鐐?*锛氫笁浠界鐘舵€佺敱"璇勫涓?鏀逛负"鐢熸晥"锛沗wiki/` 鍚屾椤硅幏寰楁壒鍑嗐€?
+### M1-1 杩佺Щ鑷剤鎵ц鍣?+ 绗竴鏉¤縼绉?
+**娑夊強鏂囦欢**
+- `apps/worker/src/db/migrations/0001_init.ts`锛?*18 鏉¤鍙?*锛? 寮?`CREATE TABLE` + 10 鏉?`CREATE INDEX`锛屽唴瀹圭収鎶勩€婃暟鎹ā鍨嬩笌杩佺Щ璁捐銆嬄?.2锛?- `apps/worker/src/db/selfheal.ts`锛堟墽琛屽櫒锛氱増鏈鏌?鈫?鎶㈤攣 鈫?鎵ц 鈫?鏍￠獙 鈫?鍐欑増鏈級
+- `apps/worker/src/db/index.ts`锛堝鍑?`ensureSchema`锛?- `apps/worker/src/index.ts`锛堝湪鏈€澶栧眰璋冪敤涓€娆?`ensureSchema`锛屽叆鍙ｄ粛 鈮?00 琛岋級
 - `apps/worker/test/schema.test.ts`
-- `apps/worker/src/db/migrations/.gitkeep`（说明改为"可选手工通道"）
+- `apps/worker/src/db/migrations/.gitkeep`锛堣鏄庢敼涓?鍙€夋墜宸ラ€氶亾"锛?
+**楠屾敹鐐?*
+- 绌哄簱棣栦釜璇锋眰鍚庯紝8 寮犺〃涓庡叏閮ㄧ储寮曢綈澶囷紙`sqlite_master` 鏂█锛夈€?- `ensureSchema` 杩炴墦涓ゆ骞傜瓑锛涘苟鍙戜袱璇锋眰鍙墽琛屼竴杞紱涓€斿け璐ヨ繑鍥?503 涓?`schema_version` 涓嶅墠绉汇€?- `items` 鐨?CHECK 鐢熸晥锛堢┖鏍囬绗旇琚嫆銆佹棤鏍囬 Memo 閫氳繃銆丮emo 甯?`folder_id` 琚嫆銆乣size_bytes` 瓒呴檺琚嫆锛夈€?- 鍏ュ彛鏂囦欢浠?鈮?00 琛岋紙ESLint `max-lines` 閫氳繃锛夈€?- **娉?*锛欴DL 涓庣害鏉熻涓哄凡鍦?SQLite锛坄node:sqlite`锛変笂棰勬紨閫氳繃锛堛€婃暟鎹ā鍨嬩笌杩佺Щ璁捐銆嬄?.2 鏈敞锛夛紝杩欓噷瑕佺殑鏄湪鐪熷疄 workerd + D1 涓婂楠屼竴閬嶃€?
+**楠岃瘉**锛歚pnpm test`銆乣pnpm lint`銆?
+### M1-2 鍏变韩绫诲瀷涓?schema
 
-**验收点**
-- 空库首个请求后，8 张表与全部索引齐备（`sqlite_master` 断言）。
-- `ensureSchema` 连打两次幂等；并发两请求只执行一轮；中途失败返回 503 且 `schema_version` 不前移。
-- `items` 的 CHECK 生效（空标题笔记被拒、无标题 Memo 通过、Memo 带 `folder_id` 被拒、`size_bytes` 超限被拒）。
-- 入口文件仍 ≤100 行（ESLint `max-lines` 通过）。
-- **注**：DDL 与约束行为已在 SQLite（`node:sqlite`）上预演通过（《数据模型与迁移设计》§3.2 末注），这里要的是在真实 workerd + D1 上复验一遍。
-
-**验证**：`pnpm test`、`pnpm lint`。
-
-### M1-2 共享类型与 schema
-
-**涉及文件**
-- `packages/shared/src/`：`SyncResponse`、`ItemMeta`、`FolderMeta`、`X-Menote-Meta` 的 Valibot schema、认证请求/响应类型、上限/阈值常量（沿用架构 §2.3"常量（上限、阈值）"的既有口径，**不新增 `API_VERSION` 这类 wiki 里没有的命名**）
-- `packages/shared/package.json`（新增 `valibot` 依赖 —— **引入生产依赖，开工前需用户点头**）
-- `packages/shared/test/`（schema 往返与非法输入用例）
-- `apps/web/package.json` / `apps/worker/package.json` 不需改（workspace 依赖已在）
-
-**验收点**：两端 `import` 同一份类型；非法 `X-Menote-Meta` 被 schema 拒绝；`pnpm typecheck` 通过。
-
-### M1-3 认证服务与路由（M01-01~05）
-
-**涉及文件**
-- `apps/worker/src/routes/auth.ts`、`apps/worker/src/services/auth.ts`、`apps/worker/src/services/sessions.ts`、`apps/worker/src/services/tokens.ts`
-- `apps/worker/src/routes/settings.ts`（`/api/admin/registration`，仅 owner）
-- `apps/worker/test/auth.test.ts`、`apps/worker/test/isolation.test.ts`
-- `.dev.vars.example`（`AUTH_PEPPER`）——**先改根 `.gitignore` 才能提交**（现状 `.dev.vars*` 把它一并屏蔽，见《认证与会话设计》§6）
-- `wrangler.jsonc`（加 `secrets.required`）
-
-**验收点**（照《认证与会话设计》§3）
-- prelogin 对存在/不存在的用户名返回**同形状**响应；连续两次相同不存在用户名返回同一假盐。
-- **注册重复用户名要捕获唯一约束异常并映射为 422 `invalid`**（实测 `UNIQUE COLLATE NOCASE` 抛异常而非"0 行"）。
-- 改密请求体为 `{ loginKey, newLoginKey, newKdf? }`，新盐由服务端生成、verifier 由服务端算（浏览器拿不到 `AUTH_PEPPER`）。
-- 首位注册者 `role='owner'`；并发两个首次注册只有一个成为 owner；注册开关关闭时非首位注册返回 403。
-- 登录错误统一 401 文案；第 5 次失败起 429 且带剩余秒数。
-- 改密后当前设备会话仍有效、其他设备会话失效。
-- 两用户隔离：A 的 token 读 B 的资源返回 404。
-
-**验证**：`pnpm test`。
-
-### M1-4 会话中间件 + CSRF + 响应头
-
-**涉及文件**
-- `apps/worker/src/middleware/session.ts`（新建目录；架构目录树缺失，需同步补 `wiki/`）
-- `apps/worker/src/middleware/csrf.ts`、`apps/worker/src/middleware/security-headers.ts`
-- `apps/worker/src/index.ts`（挂中间件）
+**娑夊強鏂囦欢**
+- `packages/shared/src/`锛歚SyncResponse`銆乣ItemMeta`銆乣FolderMeta`銆乣X-Menote-Meta` 鐨?Valibot schema銆佽璇佽姹?鍝嶅簲绫诲瀷銆佷笂闄?闃堝€煎父閲忥紙娌跨敤鏋舵瀯 搂2.3"甯搁噺锛堜笂闄愩€侀槇鍊硷級"鐨勬棦鏈夊彛寰勶紝**涓嶆柊澧?`API_VERSION` 杩欑被 wiki 閲屾病鏈夌殑鍛藉悕**锛?- `packages/shared/package.json`锛堟柊澧?`valibot` 渚濊禆 鈥斺€?**寮曞叆鐢熶骇渚濊禆锛屽紑宸ュ墠闇€鐢ㄦ埛鐐瑰ご**锛?- `packages/shared/test/`锛坰chema 寰€杩斾笌闈炴硶杈撳叆鐢ㄤ緥锛?- `apps/web/package.json` / `apps/worker/package.json` 涓嶉渶鏀癸紙workspace 渚濊禆宸插湪锛?
+**楠屾敹鐐?*锛氫袱绔?`import` 鍚屼竴浠界被鍨嬶紱闈炴硶 `X-Menote-Meta` 琚?schema 鎷掔粷锛沗pnpm typecheck` 閫氳繃銆?
+### M1-3 璁よ瘉鏈嶅姟涓庤矾鐢憋紙M01-01~05锛?
+**娑夊強鏂囦欢**
+- `apps/worker/src/routes/auth.ts`銆乣apps/worker/src/services/auth.ts`銆乣apps/worker/src/services/sessions.ts`銆乣apps/worker/src/services/tokens.ts`
+- `apps/worker/src/routes/settings.ts`锛坄/api/admin/registration`锛屼粎 owner锛?- `apps/worker/test/auth.test.ts`銆乣apps/worker/test/isolation.test.ts`
+- `.dev.vars.example`锛坄AUTH_PEPPER`锛夆€斺€?*鍏堟敼鏍?`.gitignore` 鎵嶈兘鎻愪氦**锛堢幇鐘?`.dev.vars*` 鎶婂畠涓€骞跺睆钄斤紝瑙併€婅璇佷笌浼氳瘽璁捐銆嬄?锛?- `wrangler.jsonc`锛堝姞 `secrets.required`锛?
+**楠屾敹鐐?*锛堢収銆婅璇佷笌浼氳瘽璁捐銆嬄?锛?- prelogin 瀵瑰瓨鍦?涓嶅瓨鍦ㄧ殑鐢ㄦ埛鍚嶈繑鍥?*鍚屽舰鐘?*鍝嶅簲锛涜繛缁袱娆＄浉鍚屼笉瀛樺湪鐢ㄦ埛鍚嶈繑鍥炲悓涓€鍋囩洂銆?- **娉ㄥ唽閲嶅鐢ㄦ埛鍚嶈鎹曡幏鍞竴绾︽潫寮傚父骞舵槧灏勪负 422 `invalid`**锛堝疄娴?`UNIQUE COLLATE NOCASE` 鎶涘紓甯歌€岄潪"0 琛?锛夈€?- 鏀瑰瘑璇锋眰浣撲负 `{ loginKey, newLoginKey, newKdf? }`锛屾柊鐩愮敱鏈嶅姟绔敓鎴愩€乿erifier 鐢辨湇鍔＄绠楋紙娴忚鍣ㄦ嬁涓嶅埌 `AUTH_PEPPER`锛夈€?- 棣栦綅娉ㄥ唽鑰?`role='owner'`锛涘苟鍙戜袱涓娆℃敞鍐屽彧鏈変竴涓垚涓?owner锛涙敞鍐屽紑鍏冲叧闂椂闈為浣嶆敞鍐岃繑鍥?403銆?- 鐧诲綍閿欒缁熶竴 401 鏂囨锛涚 5 娆″け璐ヨ捣 429 涓斿甫鍓╀綑绉掓暟銆?- 鏀瑰瘑鍚庡綋鍓嶈澶囦細璇濅粛鏈夋晥銆佸叾浠栬澶囦細璇濆け鏁堛€?- 涓ょ敤鎴烽殧绂伙細A 鐨?token 璇?B 鐨勮祫婧愯繑鍥?404銆?
+**楠岃瘉**锛歚pnpm test`銆?
+### M1-4 浼氳瘽涓棿浠?+ CSRF + 鍝嶅簲澶?
+**娑夊強鏂囦欢**
+- `apps/worker/src/middleware/session.ts`锛堟柊寤虹洰褰曪紱鏋舵瀯鐩綍鏍戠己澶憋紝闇€鍚屾琛?`wiki/`锛?- `apps/worker/src/middleware/csrf.ts`銆乣apps/worker/src/middleware/security-headers.ts`
+- `apps/worker/src/index.ts`锛堟寕涓棿浠讹級
 - `apps/worker/test/csrf.test.ts`
 
-**验收点**
-- 无 Cookie / 过期会话 → 401 `unauthenticated`，过期行被删除。
-- 非 GET 缺 `X-Menote: 1` 或 Origin 不匹配 → 403 `csrf`。
-- `/api/health` 不受 CSRF 约束。
-- **dev 实测**：Vite 插件下 Origin 与 `URL.origin` 一致；`Secure` Cookie 在 `http://localhost` 被接受（Chrome / Firefox 各验一次）。不一致时只加 dev 分支，不改生产逻辑。
-- 会话 `last_seen_at` / `expires_at` 24 小时内只写一次（可用请求计数断言）。
+**楠屾敹鐐?*
+- 鏃?Cookie / 杩囨湡浼氳瘽 鈫?401 `unauthenticated`锛岃繃鏈熻琚垹闄ゃ€?- 闈?GET 缂?`X-Menote: 1` 鎴?Origin 涓嶅尮閰?鈫?403 `csrf`銆?- `/api/health` 涓嶅彈 CSRF 绾︽潫銆?- **dev 瀹炴祴**锛歏ite 鎻掍欢涓?Origin 涓?`URL.origin` 涓€鑷达紱`Secure` Cookie 鍦?`http://localhost` 琚帴鍙楋紙Chrome / Firefox 鍚勯獙涓€娆★級銆備笉涓€鑷存椂鍙姞 dev 鍒嗘敮锛屼笉鏀圭敓浜ч€昏緫銆?- 浼氳瘽 `last_seen_at` / `expires_at` 24 灏忔椂鍐呭彧鍐欎竴娆★紙鍙敤璇锋眰璁℃暟鏂█锛夈€?
+### M1-5 items / folders 鏈嶅姟涓庤矾鐢?
+**娑夊強鏂囦欢**
+- `apps/worker/src/routes/items.ts`銆乣apps/worker/src/routes/folders.ts`
+- `apps/worker/src/services/items.ts`銆乣apps/worker/src/services/folders.ts`
+- `apps/worker/src/db/tables.ts`锛圫QL 甯搁噺锛?- `apps/worker/test/items.test.ts`
 
-### M1-5 items / folders 服务与路由
+**楠屾敹鐐?*锛堝崗璁銆婂悓姝ュ紩鎿庤璁°€嬄?锛?- `PUT /api/items/:id`锛氬鎴风鐢熸垚 ULID锛涢噸澶嶆彁浜ゅ箓绛夛紙1 琛屻€乣rev` 涓嶅銆佺浜屾 200锛夈€?- `GET /api/items/:id/body`锛歚ETag=content_hash`锛宍If-None-Match` 鍛戒腑 304銆?- `PUT /api/items/:id/body`锛?*鍏堝仛棰勬璇?*锛坄rev != base_rev` 涓斿搱甯岀浉鍚?鈫?鐩存帴 200 涓嶅啓搴擄紱鍝堝笇涓嶅悓 鈫?鐩存帴 409 涓嶅啓搴擄級锛屽啀璧?3 璇彞 batch锛涘垽瀹氳 `results[0].meta.changes`锛涙鏂囩敤甯?`rev + content_hash` 鍙屽畧鍗殑 `INSERT ... ON CONFLICT(item_id) DO UPDATE`锛?*涓嶈兘鐢ㄨ８ `INSERT` 鎴栬８ `UPDATE`**锛夛紱**骞跺彂鍚?`base_rev` 鐨勮鐩栫珵鎬佺敤渚嬪繀娴?*鈥斺€斿け璐ヨ€呬笉寰楄鐩栬儨鑰呭凡鎻愪氦鐨勬鏂囷紙瑙併€婂悓姝ュ紩鎿庤璁°€嬄?.4銆伮? 鐢ㄤ緥 11/13/14锛夈€?- `PATCH /api/items/:id/meta` 鐙珛鍒ゅ畾 `meta_rev`銆?- 鏂板缓鏂囦欢澶?+ 鏉＄洰褰掑睘锛沗folder_id` 闈炴硶锛堜笉瀛樺湪 / 灞炰簬浠栦汉锛夆啋 422銆?
+### M1-6 sync 璺敱鏈€灏忕増
 
-**涉及文件**
-- `apps/worker/src/routes/items.ts`、`apps/worker/src/routes/folders.ts`
-- `apps/worker/src/services/items.ts`、`apps/worker/src/services/folders.ts`
-- `apps/worker/src/db/tables.ts`（SQL 常量）
-- `apps/worker/test/items.test.ts`
-
-**验收点**（协议见《同步引擎设计》§3）
-- `PUT /api/items/:id`：客户端生成 ULID；重复提交幂等（1 行、`rev` 不增、第二次 200）。
-- `GET /api/items/:id/body`：`ETag=content_hash`，`If-None-Match` 命中 304。
-- `PUT /api/items/:id/body`：**先做预检读**（`rev != base_rev` 且哈希相同 → 直接 200 不写库；哈希不同 → 直接 409 不写库），再走 3 语句 batch；判定读 `results[0].meta.changes`；正文用带 `rev + content_hash` 双守卫的 `INSERT ... ON CONFLICT(item_id) DO UPDATE`（**不能用裸 `INSERT` 或裸 `UPDATE`**）；**并发同 `base_rev` 的覆盖竞态用例必测**——失败者不得覆盖胜者已提交的正文（见《同步引擎设计》§3.4、§6 用例 11/13/14）。
-- `PATCH /api/items/:id/meta` 独立判定 `meta_rev`。
-- 新建文件夹 + 条目归属；`folder_id` 非法（不存在 / 属于他人）→ 422。
-
-### M1-6 sync 路由最小版
-
-**涉及文件**
-- `apps/worker/src/routes/sync.ts`、`apps/worker/src/services/sync.ts`
+**娑夊強鏂囦欢**
+- `apps/worker/src/routes/sync.ts`銆乣apps/worker/src/services/sync.ts`
 - `apps/worker/test/sync.test.ts`
 
-**验收点**（《同步引擎设计》§3.2、§3.3、§6）
-- `GET /api/sync?cursor=N` 只回元数据；items/folders 各 ≤200 行；`next_cursor` / `has_more` 正确。
-- **同一 `sync_seq` 组不被切开**；且 `next_cursor = min(items 末端, folders 末端)`（两类独立查询的截断点不同，取大值会永久漏拉）。
-- 游标不漏拉：写入 N 条后分页拉取，客户端集合与服务端逐一相等。
-- `sync_seq`：主写入用子查询取"将要写入的值"，计数器由条件语句推进；**不用 `RETURNING`、不拆成两次请求**。
-- 软删行随增量下发（含 `deleted_at`）。
-- 多用户隔离。
+**楠屾敹鐐?*锛堛€婂悓姝ュ紩鎿庤璁°€嬄?.2銆伮?.3銆伮?锛?- `GET /api/sync?cursor=N` 鍙洖鍏冩暟鎹紱items/folders 鍚?鈮?00 琛岋紱`next_cursor` / `has_more` 姝ｇ‘銆?- **鍚屼竴 `sync_seq` 缁勪笉琚垏寮€**锛涗笖 `next_cursor = min(items 鏈, folders 鏈)`锛堜袱绫荤嫭绔嬫煡璇㈢殑鎴柇鐐逛笉鍚岋紝鍙栧ぇ鍊间細姘镐箙婕忔媺锛夈€?- 娓告爣涓嶆紡鎷夛細鍐欏叆 N 鏉″悗鍒嗛〉鎷夊彇锛屽鎴风闆嗗悎涓庢湇鍔＄閫愪竴鐩哥瓑銆?- `sync_seq`锛氫富鍐欏叆鐢ㄥ瓙鏌ヨ鍙?灏嗚鍐欏叆鐨勫€?锛岃鏁板櫒鐢辨潯浠惰鍙ユ帹杩涳紱**涓嶇敤 `RETURNING`銆佷笉鎷嗘垚涓ゆ璇锋眰**銆?- 杞垹琛岄殢澧為噺涓嬪彂锛堝惈 `deleted_at`锛夈€?- 澶氱敤鎴烽殧绂汇€?
+### M1-7 鍓嶇鏁版嵁灞?
+**娑夊強鏂囦欢**
+- `apps/web/src/data/db/`锛圖exie schema銆佷粨鍌ㄥ嚱鏁帮細`items` / `bodies` / `drafts` / `folders` / `outbox` / `syncState`锛?- `apps/web/src/data/api/`锛坒etch 灏佽锛歚X-Menote: 1`銆?5s 瓒呮椂銆侀敊璇爜 鈫?棰嗗煙閿欒鏄犲皠锛?- `apps/web/test/`锛圴itest + `fake-indexeddb`锛?- `apps/web/package.json`锛坄dexie`銆乣fake-indexeddb`锛?
+**楠屾敹鐐?*锛氫粨鍌?CRUD 涓?`liveQuery` 璁㈤槄鍙敤锛沷utbox 鍚堝苟瑙勫垯锛堟渶鏂版鏂?+ 鏈€鏃?`baseRev`锛夋湁鍗曟祴锛汥exie 鐗堟湰鍗囩骇鍙竻搴撻噸寤恒€?
+### M1-8 鍚屾寮曟搸
 
-### M1-7 前端数据层
+**娑夊強鏂囦欢**
+- `apps/web/src/data/sync/engine.ts`銆乣push.ts`銆乣pull.ts`銆乣conflict.ts`銆乣leader.ts`锛圵eb Locks锛?- `apps/web/test/sync-*.test.ts`
 
-**涉及文件**
-- `apps/web/src/data/db/`（Dexie schema、仓储函数：`items` / `bodies` / `drafts` / `folders` / `outbox` / `syncState`）
-- `apps/web/src/data/api/`（fetch 封装：`X-Menote: 1`、15s 超时、错误码 → 领域错误映射）
-- `apps/web/test/`（Vitest + `fake-indexeddb`）
-- `apps/web/package.json`（`dexie`、`fake-indexeddb`）
+**楠屾敹鐐?*锛堛€婂悓姝ュ紩鎿庤璁°€嬄?銆伮?锛?- 绂荤嚎缂栬緫 鈫?鍏?outbox锛沗online` 鍚庤嚜鍔ㄨˉ浼犮€?- 409 + `content_hash` 鐩稿悓 鈫?瑙嗕负鎴愬姛銆乷utbox 娓呯┖锛堝搷搴斾涪澶卞満鏅級銆?- 409 + 鍐呭涓嶅悓 鈫?鐢熸垚鍐茬獊鍓湰鏉＄洰锛堟柊 ULID銆佹爣棰樺惈"鍐茬獊鍓湰"锛夛紝鍘熸潯鐩繚鐣欐湇鍔＄鐗堟湰銆?- 閫€閬垮簭鍒?1/2/4/8鈥︹墹60s锛坒ake timers 鏂█锛夛紱瓒呮椂 15s銆?- 涓ゆ爣绛鹃〉鍙湁涓€涓湪鎺ㄦ媺锛圵eb Locks锛夈€?- `full_resync: true` 鍒嗘敮锛氭竻绌烘湰鍦伴噸寤猴紝鏈笂浼犳敼鍔ㄥ厛瀵煎嚭銆?
+### M1-9 缂栬緫鍣?
+**娑夊強鏂囦欢**
+- `apps/web/src/app/editor/Editor.tsx`锛圕odeMirror 6 灏佽锛夈€乣markdown.ts`锛坢arkdown-it + DOMPurify锛?- `apps/web/src/features/notes/model.ts`銆乣ui/`锛坄DocHead` / `DocModeSwitch` / `DocStatusBar`锛?- 鍔ㄦ€?`import()` 缂栬緫鍣ㄥ垎鍖咃紙棣栧睆 鈮?00 KB gzip锛宍pnpm check:size` 浼氬崱锛?
+**楠屾敹鐐?*锛?*涓夌缂栬緫妯″紡鍙敤**锛堝弻鏍忓疄鏃堕瑙堜负榛樿銆佷粎缂栬緫 / 浠呴瑙堬紱鍗虫椂娓叉煋妯″紡鐨勭粏鍒欍€愬悗缁畾銆戯紝M1 涓嶅仛锛夛紱鍋滄杈撳叆 2s 淇濆瓨銆佹寔缁緭鍏?30s 涓€娆°€?256KB 鏀惧 5s/60s锛涙湰鍦拌崏绋挎亽 2s 钀界洏锛涚姸鎬佹爮鏄剧ず澶у皬涓庝笁鎬侊紙宸插悓姝?寰呬笂浼?涓婁紶澶辫触锛夛紱杈?1,900,000 瀛楄妭闃绘淇濆瓨骞舵彁绀猴紱棰勮涓嶆敼鍐?DOM锛圖OMPurify锛夛紱GFM 鍙敤銆?
+> M04-03 鐨?榛樿缂栬緫妯″紡"璁剧疆椤硅惤鍦?M2-7 鐨勩€岀紪杈戝櫒銆嶅垎绫伙紙M1 璁剧疆澹充笉鍚鍒嗙被锛夛紱妯″紡鍦ㄧ紪杈戝櫒椤堕儴鍙复鏃跺垏鎹€?
+### M1-10 鐣岄潰楠ㄦ灦 + 鐧诲綍娉ㄥ唽 + 鍒楄〃 + 鏈€灏忚缃?
+**娑夊強鏂囦欢**
+- `apps/web/src/app/`锛歚AppShell`銆乣app/topbar/`锛? 鍧楋細`BrandLogo` / `Breadcrumb` / `SearchBox`锛圡1 鍙仛鍗犱綅涓嶅彲鐢級/ `SyncPill` / `PrivacyCapsule`锛圡1 涓嶆樉绀猴級/ `AccountEntry`锛夈€乣app/fnbar/`锛坄NewNoteButton` + 鏈€绠€瀵艰埅锛?- `apps/web/src/features/auth/`锛坄LoginPage` / `RegisterPage` / `AuthGate`锛?- `apps/web/src/features/notes/ui/`锛坄ListPane` / `ItemRow` / `DocPane`锛?- `apps/web/src/features/settings/`锛堝乏鍒?184px 鍒嗙被瀵艰埅 + 銆岄€氱敤銆?銆岃处鎴蜂笌瀹夊叏銆?銆屽疄渚嬬鐞嗐€嶏紱榛樿钀?*閫氱敤**锛屽彧鏀句富棰樹笁妗ｏ級
+- `apps/web/src/main.tsx`锛堣矾鐢辫〃 + Provider锛屸墹100 琛岋級
+- `apps/web/src/app/theme.css`锛堜护鐗屽眰锛涢鑹?瀛楀彿/鍦嗚/闂磋窛**浠庡師鍨嬪彇鍊煎苟鏍囨敞"涓存椂鍊硷紝寰?DESIGN 搂3 瀹氬瀷鍚庢浛鎹?**锛?
+**楠屾敹鐐?*
+- 椤舵爮鎭掍负 6 鍧椾笖椤哄簭涓嶅彲鍙橈紱`body` 涓嶆粴鍔紝姣忓眰涓€涓粴鍔ㄥ鍣紙DESIGN.md 搂2.7锛夈€?- 绌虹姸鎬佺粰鍑?涓轰粈涔堢┖ + 涓嬩竴姝ュ仛浠€涔?锛沗InfoHint` 涓嶆壙杞借鍛?閿欒/璁℃暟锛堢姝㈤」 #8锛夈€?- 鎵€鏈夊彲鐐瑰厓绱犻敭鐩樺彲杈?+ `focus-visible`锛涘浘鏍囨寜閽甫 `aria-label`锛圖ESIGN.md 搂6.2锛夈€?- 鏈櫥褰曡闂换鎰忚矾鐢?鈫?鐧诲綍椤碉紱娉ㄥ唽寮€鍏冲叧闂椂鐧诲綍椤典笉鏄剧ず娉ㄥ唽鍏ュ彛銆?- 鏂板缓绗旇 鈫?钀芥牴鐩綍銆佹爣棰樸€屾湭鍛藉悕绗旇銆嶃€佹鏂囦笉棰勫～锛圦24 寤鸿妗堬級銆?- 绉诲姩绔吋瀹瑰簳绾匡細寮规€у竷灞€銆侀潪浠呮偓鍋滃彲鎿嶄綔銆乣viewport` 鍏佽缂╂斁锛堢姝㈤」 #16/#17锛夈€?
+### M1-11 閮ㄧ讲涓庝袱璁惧楠岃瘉
 
-**验收点**：仓储 CRUD 与 `liveQuery` 订阅可用；outbox 合并规则（最新正文 + 最早 `baseRev`）有单测；Dexie 版本升级可清库重建。
-
-### M1-8 同步引擎
-
-**涉及文件**
-- `apps/web/src/data/sync/engine.ts`、`push.ts`、`pull.ts`、`conflict.ts`、`leader.ts`（Web Locks）
-- `apps/web/test/sync-*.test.ts`
-
-**验收点**（《同步引擎设计》§4、§6）
-- 离线编辑 → 入 outbox；`online` 后自动补传。
-- 409 + `content_hash` 相同 → 视为成功、outbox 清空（响应丢失场景）。
-- 409 + 内容不同 → 生成冲突副本条目（新 ULID、标题含"冲突副本"），原条目保留服务端版本。
-- 退避序列 1/2/4/8…≤60s（fake timers 断言）；超时 15s。
-- 两标签页只有一个在推拉（Web Locks）。
-- `full_resync: true` 分支：清空本地重建，未上传改动先导出。
-
-### M1-9 编辑器
-
-**涉及文件**
-- `apps/web/src/app/editor/Editor.tsx`（CodeMirror 6 封装）、`markdown.ts`（markdown-it + DOMPurify）
-- `apps/web/src/features/notes/model.ts`、`ui/`（`DocHead` / `DocModeSwitch` / `DocStatusBar`）
-- 动态 `import()` 编辑器分包（首屏 ≤200 KB gzip，`pnpm check:size` 会卡）
-
-**验收点**：**三种编辑模式可用**（双栏实时预览为默认、仅编辑 / 仅预览；即时渲染模式的细则【后续定】，M1 不做）；停止输入 2s 保存、持续输入 30s 一次、>256KB 放宽 5s/60s；本地草稿恒 2s 落盘；状态栏显示大小与三态（已同步/待上传/上传失败）；达 1,900,000 字节阻止保存并提示；预览不改写 DOM（DOMPurify）；GFM 可用。
-
-> M04-03 的"默认编辑模式"设置项落在 M2-7 的「编辑器」分类（M1 设置壳不含该分类）；模式在编辑器顶部可临时切换。
-
-### M1-10 界面骨架 + 登录注册 + 列表 + 最小设置
-
-**涉及文件**
-- `apps/web/src/app/`：`AppShell`、`app/topbar/`（6 块：`BrandLogo` / `Breadcrumb` / `SearchBox`（M1 只做占位不可用）/ `SyncPill` / `PrivacyCapsule`（M1 不显示）/ `AccountEntry`）、`app/fnbar/`（`NewNoteButton` + 最简导航）
-- `apps/web/src/features/auth/`（`LoginPage` / `RegisterPage` / `AuthGate`）
-- `apps/web/src/features/notes/ui/`（`ListPane` / `ItemRow` / `DocPane`）
-- `apps/web/src/features/settings/`（左列 184px 分类导航 + 「通用」+「账户与安全」+「实例管理」；默认落**通用**，只放主题三档）
-- `apps/web/src/main.tsx`（路由表 + Provider，≤100 行）
-- `apps/web/src/app/theme.css`（令牌层；颜色/字号/圆角/间距**从原型取值并标注"临时值，待 DESIGN §3 定型后替换"**）
-
-**验收点**
-- 顶栏恒为 6 块且顺序不可变；`body` 不滚动，每层一个滚动容器（DESIGN.md §2.7）。
-- 空状态给出"为什么空 + 下一步做什么"；`InfoHint` 不承载警告/错误/计数（禁止项 #8）。
-- 所有可点元素键盘可达 + `focus-visible`；图标按钮带 `aria-label`（DESIGN.md §6.2）。
-- 未登录访问任意路由 → 登录页；注册开关关闭时登录页不显示注册入口。
-- 新建笔记 → 落根目录、标题「未命名笔记」、正文不预填（Q24 建议案）。
-- 移动端兼容底线：弹性布局、非仅悬停可操作、`viewport` 允许缩放（禁止项 #16/#17）。
-
-### M1-11 部署与两设备验证
-
-- `pnpm build && npx wrangler deploy`（首次部署自动供给 D1；首个请求触发自愈建表）。
-- **不要提交** wrangler 回写的 `database_id`。
-- 真机验证：桌面浏览器 + 手机（或两个浏览器 profile）注册登录 → 建笔记 → 两台互见 → 断网编辑 → 联网补传。
-- **验收点**：线上 `/api/health` 正常；两设备数据一致；断网恢复后无丢失；无 `console.error` 未处理异常。
-
-### M1-12 收尾（可移入 M2）
-
-- `PATCH /api/items/:id/body` 增量补丁（≥64KB 且改动 <25% 且 ≤20 操作）。
-- `POST /api/batch`；`POST /api/items/:id/trash` + `/restore`。
-- BroadcastChannel 广播与"已在其他标签页修改"提示。
-- 上传失败列表界面。
-- `/api/health?deep=1` 返回 `schema_version`（可选）。
-
+- `pnpm build && npx wrangler deploy`锛堥娆￠儴缃茶嚜鍔ㄤ緵缁?D1锛涢涓姹傝Е鍙戣嚜鎰堝缓琛級銆?- **涓嶈鎻愪氦** wrangler 鍥炲啓鐨?`database_id`銆?- 鐪熸満楠岃瘉锛氭闈㈡祻瑙堝櫒 + 鎵嬫満锛堟垨涓や釜娴忚鍣?profile锛夋敞鍐岀櫥褰?鈫?寤虹瑪璁?鈫?涓ゅ彴浜掕 鈫?鏂綉缂栬緫 鈫?鑱旂綉琛ヤ紶銆?- **楠屾敹鐐?*锛氱嚎涓?`/api/health` 姝ｅ父锛涗袱璁惧鏁版嵁涓€鑷达紱鏂綉鎭㈠鍚庢棤涓㈠け锛涙棤 `console.error` 鏈鐞嗗紓甯搞€?
+### M1-12 鏀跺熬锛堝彲绉诲叆 M2锛?
+- `PATCH /api/items/:id/body` 澧為噺琛ヤ竵锛堚墺64KB 涓旀敼鍔?<25% 涓?鈮?0 鎿嶄綔锛夈€?- `POST /api/batch`锛沗POST /api/items/:id/trash` + `/restore`銆?- BroadcastChannel 骞挎挱涓?宸插湪鍏朵粬鏍囩椤典慨鏀?鎻愮ず銆?- 涓婁紶澶辫触鍒楄〃鐣岄潰銆?- `/api/health?deep=1` 杩斿洖 `schema_version`锛堝彲閫夛級銆?
 ---
 
-## 三、M1 收口口径
+## 涓夈€丮1 鏀跺彛鍙ｅ緞
 
-| 项 | 要求 |
+| 椤?| 瑕佹眰 |
 |---|---|
-| 功能 | 拆解 M01-01~05、M04-01/04/05（+ M04-03 的三种基础模式）、M13-01/02/03/**04（M1 只走"服务端版本保留 + 本地内容另存冲突副本 + 提示"分支；"对比两者 / 保留某一份"的完整界面属 M2）** 的验收口径逐条走通 |
-| 质量 | `pnpm lint` / `pnpm typecheck` / `pnpm test` 全绿；`pnpm check:size` 通过 |
-| 线上 | 生产可访问，两设备真实一致 |
-| 文档 | 三份设计稿状态改为"生效"；`wiki/` 同步项执行完毕；`CHANGELOG.md` 记条目 |
-| 版本 | 开发期改动只动修订号（0.1.3、0.1.4…），**收口时一次性 `version` → `0.2.0`** |
+| 鍔熻兘 | 鎷嗚В M01-01~05銆丮04-01/04/05锛? M04-03 鐨勪笁绉嶅熀纭€妯″紡锛夈€丮13-01/02/03/**04锛圡1 鍙蛋"鏈嶅姟绔増鏈繚鐣?+ 鏈湴鍐呭鍙﹀瓨鍐茬獊鍓湰 + 鎻愮ず"鍒嗘敮锛?瀵规瘮涓よ€?/ 淇濈暀鏌愪竴浠?鐨勫畬鏁寸晫闈㈠睘 M2锛?* 鐨勯獙鏀跺彛寰勯€愭潯璧伴€?|
+| 璐ㄩ噺 | `pnpm lint` / `pnpm typecheck` / `pnpm test` 鍏ㄧ豢锛沗pnpm check:size` 閫氳繃 |
+| 绾夸笂 | 鐢熶骇鍙闂紝涓よ澶囩湡瀹炰竴鑷?|
+| 鏂囨。 | 涓変唤璁捐绋跨姸鎬佹敼涓?鐢熸晥"锛沗wiki/` 鍚屾椤规墽琛屽畬姣曪紱`CHANGELOG.md` 璁版潯鐩?|
+| 鐗堟湰 | 寮€鍙戞湡鏀瑰姩鍙姩淇鍙凤紙0.1.3銆?.1.4鈥︼級锛?*鏀跺彛鏃朵竴娆℃€?`version` 鈫?`0.2.0`** |
 
 ---
 
-## 四、风险与对策
+## 鍥涖€侀闄╀笌瀵圭瓥
 
-| # | 风险 | 对策 |
+| # | 椋庨櫓 | 瀵圭瓥 |
 |---|---|---|
-| 1 | 同步条件 batch 写脏（冲突时正文仍被覆盖） | M1-5 的集成测试必须先写、先红后绿；冲突用例断言 `item_bodies` 未变 |
-| 2 | WebCrypto PBKDF2 600k 在低端机超时 | M1-3 用真机实测一次；超 2s 则降到 310k 并写回设计稿 §2.1 |
-| 3 | dev 下 `Secure` Cookie / Origin 校验把本地所有写操作拦死 | M1-4 第一天单独验这两条，失败再加 dev 分支 |
-| 4 | 首屏体积因 CodeMirror 超 200 KB | 编辑器与 markdown 渲染动态 `import()` 分包；`check:size` 只统计 `index.html` 直接引用的脚本 |
-| 5 | 骨架在 M1 做成"临时壳"，M2 推倒重搭 | M1 就用 `AppShell`/`Topbar`/`ListPane`/`DocPane` 原语（DESIGN.md 禁止项 #5） |
-| 6 | 设计稿评审拖期导致 M1 空转 | M1-1（迁移+DDL）与 M1-2（类型）不依赖同步细节，可先并行 |
+| 1 | 鍚屾鏉′欢 batch 鍐欒剰锛堝啿绐佹椂姝ｆ枃浠嶈瑕嗙洊锛?| M1-5 鐨勯泦鎴愭祴璇曞繀椤诲厛鍐欍€佸厛绾㈠悗缁匡紱鍐茬獊鐢ㄤ緥鏂█ `item_bodies` 鏈彉 |
+| 2 | WebCrypto PBKDF2 600k 鍦ㄤ綆绔満瓒呮椂 | M1-3 鐢ㄧ湡鏈哄疄娴嬩竴娆★紱瓒?2s 鍒欓檷鍒?310k 骞跺啓鍥炶璁＄ 搂2.1 |
+| 3 | dev 涓?`Secure` Cookie / Origin 鏍￠獙鎶婃湰鍦版墍鏈夊啓鎿嶄綔鎷︽ | M1-4 绗竴澶╁崟鐙獙杩欎袱鏉★紝澶辫触鍐嶅姞 dev 鍒嗘敮 |
+| 4 | 棣栧睆浣撶Н鍥?CodeMirror 瓒?200 KB | 缂栬緫鍣ㄤ笌 markdown 娓叉煋鍔ㄦ€?`import()` 鍒嗗寘锛沗check:size` 鍙粺璁?`index.html` 鐩存帴寮曠敤鐨勮剼鏈?|
+| 5 | 楠ㄦ灦鍦?M1 鍋氭垚"涓存椂澹?锛孧2 鎺ㄥ€掗噸鎼?| M1 灏辩敤 `AppShell`/`Topbar`/`ListPane`/`DocPane` 鍘熻锛圖ESIGN.md 绂佹椤?#5锛?|
+| 6 | 璁捐绋胯瘎瀹℃嫋鏈熷鑷?M1 绌鸿浆 | M1-1锛堣縼绉?DDL锛変笌 M1-2锛堢被鍨嬶級涓嶄緷璧栧悓姝ョ粏鑺傦紝鍙厛骞惰 |

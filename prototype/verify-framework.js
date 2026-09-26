@@ -12,9 +12,9 @@
 
    覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
          区块名与说明文字齐全 / 顶栏 6 块且账户入口紧邻隐私锁胶囊 /
-         浏览三段（首页 / Memo / 待办 合并成一行）/ 隐私空间贴底且无小标题 / 待办独立视图 /
+         浏览三段（首页 / Memo / 待办 合并成一行）/ 加密空间贴底且无小标题 / 待办独立视图 /
          Memo 去清单 / 录入框三模式与去加密 / 录入框行序（附加项在模式行之上）/
-         最近编辑·收藏·标签与隐私空间的双栏（侧滑详情保留但不触发）/
+         最近编辑·收藏·标签与加密空间的双栏（侧滑详情保留但不触发）/
          主题（Claude 橙白双主题）/
          点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
          Esc 退出 / 键盘左右切页 / 切页清选中 / 块说明与网格两个开关
@@ -183,19 +183,19 @@ step('导航按 v2 Q1 重排 + 浏览三段合并（2026-09-26 调整）', () =>
   if (!nav.includes('浏览三段')) throw new Error('主导航未说明首页/Memo/待办已抽走：' + nav);
 });
 
-step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
+step('加密空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
   gotoPage('功能栏');
   const vn = $('#canvas [data-b="navVault"]');
-  if (!vn) throw new Error('缺隐私空间区块');
+  if (!vn) throw new Error('缺加密空间区块');
   // 贴底：是所在容器最后一个元素
-  if (vn.parentElement.lastElementChild !== vn) throw new Error('隐私空间不是功能栏最底部的一段');
+  if (vn.parentElement.lastElementChild !== vn) throw new Error('加密空间不是功能栏最底部的一段');
   // 不再嵌在可滚动的导航容器内
   const navBox = $('#canvas [data-b="navTags"]').parentElement;
-  if (navBox.contains(vn)) throw new Error('隐私空间仍嵌在导航容器里');
+  if (navBox.contains(vn)) throw new Error('加密空间仍嵌在导航容器里');
   // 字典说明已更新
   const n = blockText('navVault');
-  if (!n.includes('贴底')) throw new Error('隐私空间未标注「贴底」：' + n);
-  if (!n.includes('小标题')) throw new Error('隐私空间未标注去掉小标题：' + n);
+  if (!n.includes('贴底')) throw new Error('加密空间未标注「贴底」：' + n);
+  if (!n.includes('小标题')) throw new Error('加密空间未标注去掉小标题：' + n);
 });
 step('Memo 页：只剩时间轴 / 瀑布流，清单已移出（v2 Q1 / M06-10）', () => {
   gotoPage('Memo');
@@ -338,18 +338,18 @@ step('最近编辑 / 收藏 / 标签页：主操作区改为「列表 + 正文�
   if (!n.includes('不再由条目列表点击触发')) throw new Error('侧滑详情未标注不再由列表触发：' + n);
 });
 
-step('隐私空间页：锁定态整块 + 解锁后「列表 + 正文」双栏（2026-09-26 调整）', () => {
-  gotoPage('隐私空间');
+step('加密空间页：锁定态整块 + 解锁后「列表 + 正文」双栏（2026-09-26 调整）', () => {
+  gotoPage('加密空间');
   if (!$('#canvas [data-b="vaultLocked"]')) throw new Error('缺锁定态占位');
   const tree = $('#canvas [data-b="vaultTree"]');
   const docH = $('#canvas [data-b="docHead"]');
   if (!tree || !docH) throw new Error('解锁后缺列表栏或正文栏');
-  if (tree.parentElement === docH.parentElement) throw new Error('隐私空间仍是单栏，未拆成双栏');
-  if (!$('#canvas [data-b="editorPane"]')) throw new Error('隐私空间正文栏缺编辑区');
+  if (tree.parentElement === docH.parentElement) throw new Error('加密空间仍是单栏，未拆成双栏');
+  if (!$('#canvas [data-b="editorPane"]')) throw new Error('加密空间正文栏缺编辑区');
   if (!$('#canvas [data-b="vaultNode"]')) throw new Error('缺侧边栏空间节点');
   // 文字检查（blockText 会重渲染，放最后）
   if (!blockText('vaultHead').includes('列表栏顶部')) throw new Error('空间状态头未标注位于列表栏顶部');
-  if (!blockText('vaultTree').includes('密文')) throw new Error('空间内条目未说明以密文呈现');
+  if (!blockText('vaultTree').includes('明文')) throw new Error('空间内条目未说明为明文存储、由门禁隐藏');
 });
 
 step('点击线框块 → 说明面板切到块详情', () => {

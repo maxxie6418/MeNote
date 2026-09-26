@@ -9,13 +9,13 @@
      NODE_PATH=<node_modules 路径> node verify-prototype.js
 
    覆盖：浏览三段（首页 / Memo / 待办 横向合并成一行，保留原名）/
-         导航顺序与路由（首页 / Memo / 待办 / 最近编辑 / 收藏 / 笔记本 / 标签 / 隐私空间）/
+         导航顺序与路由（首页 / Memo / 待办 / 最近编辑 / 收藏 / 笔记本 / 标签 / 加密空间）/
          账户入口唯一性（顶栏隐私锁胶囊旁，6 块顶栏；功能栏底部已无账户区）/
          首页三类内容与隐私占位 / 启动视图 / 主题（Claude 橙白双主题）/
          笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
          快速录入框三模式（无加密选项）/ 录入框行序（输入区 → 附加项 → 模式行）/
          新建直连笔记 / 笔记本新建入口 /
-         隐私空间贴底且无分组小标题 /
+         加密空间贴底且无分组小标题 /
          表格更多菜单 / 滑出详情侧栏 / 隐私锁锁定与解锁 / Memo 隐私门禁 /
          恢复码流程 / 搜索 / 表格视图切换
    ============================================================ */
@@ -74,7 +74,7 @@ step('初始渲染：首页三类内容（v2 M02-03）', () => {
   });
 });
 
-step('导航顺序：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔记本 · 隐私空间（v2 Q1）', () => {
+step('导航顺序：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔记本 · 加密空间（v2 Q1）', () => {
   const order = navAll().map(el => el.dataset.fn).join('/');
   if (order !== 'home/memo/task/recent/starred/notebook/vault')
     throw new Error('导航顺序为 ' + order);
@@ -126,21 +126,21 @@ step('浏览三段：首页 / Memo / 待办 压成横向一行，保留原名（
   click(navEl('home'));
 });
 
-step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
+step('加密空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
   // 不再有「隐私」小标题（标签分组的标题要保留）
   const titles = $$('.group-title').map(el => el.textContent.trim());
   if (titles.some(t => t.includes('隐私'))) throw new Error('仍有「隐私」小标题：' + titles.join(' / '));
   if (!titles.some(t => t.includes('标签'))) throw new Error('标签分组标题被误删：' + titles.join(' / '));
 
   const vn = $('#vaultNode');
-  if (!vn) throw new Error('缺隐私空间节点');
+  if (!vn) throw new Error('缺加密空间节点');
   // 移出可滚动导航区
-  if (vn.closest('.fn-scroll')) throw new Error('隐私空间仍在可滚动导航区内');
+  if (vn.closest('.fn-scroll')) throw new Error('加密空间仍在可滚动导航区内');
   // 贴底：放在专门的不收缩容器里，且该容器是功能栏最后一段
   const holder = vn.parentElement;
-  if (!holder.classList.contains('fn-vault')) throw new Error('隐私空间未放在贴底容器 .fn-vault 里');
+  if (!holder.classList.contains('fn-vault')) throw new Error('加密空间未放在贴底容器 .fn-vault 里');
   const kids = Array.from($('.fnbar').children);
-  if (kids[kids.length - 1] !== holder) throw new Error('隐私空间不是功能栏最底部的一段');
+  if (kids[kids.length - 1] !== holder) throw new Error('加密空间不是功能栏最底部的一段');
 
   const css = $$('style').map(s => s.textContent).join('\n');
   const rule = css.match(/\.fn-vault\{[^}]*\}/);
@@ -148,9 +148,9 @@ step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-
   if (!/flex:\s*none/.test(rule[0])) throw new Error('.fn-vault 未锁定为不收缩：' + rule[0]);
   if (!/border-top/.test(rule[0])) throw new Error('.fn-vault 缺分隔线：' + rule[0]);
 
-  // 导航末位仍是隐私空间
+  // 导航末位仍是加密空间
   const order = navAll().map(el => el.dataset.fn).join('/');
-  if (!order.endsWith('/vault')) throw new Error('隐私空间不在导航末位：' + order);
+  if (!order.endsWith('/vault')) throw new Error('加密空间不在导航末位：' + order);
 });
 
 step('功能栏导航不含独立的回收站 / 设置项（7.4 修订，设置由顶栏账户入口进入）', () => {
@@ -181,23 +181,34 @@ step('账户入口：全站只有一个头像，位于顶栏隐私锁胶囊旁�
 });
 
 /* ---------- 首页数据与隐私（v2 M02-03 / Q7） ---------- */
-step('首页统计 = 最近编辑条目数（记录视图不含 Memo，v2 Q8）', () => {
+step('首页统计含加密空间条目；记录视图仍不含（M02-03 / Q8 / 2026-09-26）', () => {
+  click(navEl('home'));
   const nums = $$('.home-stat .n').map(n => n.textContent.trim());
   const total = parseInt(nums[0], 10) + parseInt(nums[1], 10);
   click(navEl('recent'));
   const rows = $$('#paneList .item-row').length;
-  if (rows !== total) throw new Error('最近编辑条目数 ' + rows + ' ≠ 首页统计 ' + total);
+  // 加密空间内的 2 条（日记 · 2026 秋 / 账户凭证备忘）计入首页统计，但不进记录类视图
+  if (rows !== total - 2) {
+    throw new Error('最近编辑条目数 ' + rows + ' ≠ 首页统计 ' + total + ' − 加密空间 2 条');
+  }
   if ($('#paneList .memo-item')) throw new Error('记录视图出现 Memo');
   click(navEl('starred'));
   if ($('#paneList .memo-item')) throw new Error('收藏视图出现 Memo');
 });
 
-step('首页隐私规则：锁定时 Memo 统计与动态占位（M02-03 / Q7）', () => {
+step('首页：Memo 占位，但条目统计始终计入（M02-03 / Q7 / 2026-09-26 用户确认）', () => {
+  click(navEl('home'));
+  const snap = () => $$('.home-stat').slice(0, 2).map(e => e.textContent.replace(/\s+/g, '').trim());
+  const before = snap().join('|');
+  if (!$('.hint-line') || !$$('.hint-line').some(e => e.textContent.indexOf('始终计入') >= 0)) {
+    throw new Error('首页未标注「统计始终计入」口径');
+  }
   lock();
   click(navEl('home'));
   const memoStat = $$('.home-stat')[2];
   if (!memoStat.textContent.includes('已锁定')) throw new Error('锁定时 Memo 统计未占位');
   if (!$('.home-locked')) throw new Error('锁定时未提示 Memo 内容已锁定');
+  if (snap().join('|') !== before) throw new Error('锁定后条目统计口径变了：' + before + ' → ' + snap().join('|'));
   click(navEl('memo'));
   unlockVia('#memoUnlockBtn');
   click(navEl('home'));
@@ -480,16 +491,16 @@ step('锁定态：加密日记转为锁定占位', () => {
   if (!$('#docUnlockBtn')) throw new Error('未显示解锁入口');
 });
 
-step('锁定态点「隐私空间」→ 弹解锁框', () => {
+step('锁定态点「加密空间」→ 弹解锁框', () => {
   click(navEl('vault'));
   if (!$('#unlockOverlay').classList.contains('open')) throw new Error('解锁框未打开');
 });
 
-step('解锁 → 隐私空间为「列表 + 正文」双栏（与笔记本同构，2026-09-26 调整）', () => {
+step('解锁 → 加密空间为「列表 + 正文」双栏（与笔记本同构，2026-09-26 调整）', () => {
   input($('#pwInput'), 'demo');
   click($('#unlockConfirm'));
   // 双栏：左列条目、右列正文都在
-  if ($('#paneList').classList.contains('hidden')) throw new Error('隐私空间仍是单栏（左列被隐藏）');
+  if ($('#paneList').classList.contains('hidden')) throw new Error('加密空间仍是单栏（左列被隐藏）');
   if (!$('#paneList').innerHTML.trim()) throw new Error('左列未渲染空间内条目');
   if (!$('#paneDoc').innerHTML.trim()) throw new Error('右列未渲染');
   // 空间内条目在列表里，非空间内容不得混入
@@ -503,18 +514,18 @@ step('解锁 → 隐私空间为「列表 + 正文」双栏（与笔记本同构
   if (!$('#edSource').value.includes('存储池')) throw new Error('右列打开的是别的正文');
 });
 
-step('隐私空间内容不泄漏到其它视图', () => {
+step('加密空间内容不泄漏到其它视图', () => {
   ['recent', 'starred', 'notebook', 'home'].forEach(fn => {
     click(navEl(fn));
     const ids = $$('#paneList .item-row').map(r => r.dataset.id);
-    if (ids.includes('v1') || ids.includes('v2')) throw new Error('隐私空间内容泄漏到 ' + fn);
+    if (ids.includes('v1') || ids.includes('v2')) throw new Error('加密空间内容泄漏到 ' + fn);
   });
   click(navEl('vault'));
 });
 
-step('锁定态：隐私空间不显示任何条目，列表区整块隐藏', () => {
+step('锁定态：加密空间不显示任何条目，列表区整块隐藏', () => {
   const b = $('#vaultLockBtn');
-  if (!b) throw new Error('隐私空间缺「立即锁定」按钮');
+  if (!b) throw new Error('加密空间缺「立即锁定」按钮');
   click(b);
   if ($$('#paneList .item-row').length) throw new Error('锁定时空间仍显示条目');
   if (!$('#paneList').classList.contains('hidden')) throw new Error('锁定时列表区未隐藏');
@@ -538,14 +549,30 @@ step('从待办门禁解锁恢复内容', () => {
   if (!$$('.memo-item').length) throw new Error('一次解锁应同时解开 Memo（v2 Q5）');
 });
 
-step('忘记密码 → 恢复码流程', () => {
+step('忘记隐私密码 → 重置流程（2026-09-26 模型修订：不再有恢复码）', () => {
   lock();
   click(navEl('memo'));
   click($('#memoUnlockBtn'));
   click($('#forgotLink'));
-  if (!$('#recoverOverlay').classList.contains('open')) throw new Error('恢复码弹窗未开');
-  click($('#recoverSubmit'));
-  if (!$('#lockCapsule').textContent.includes('已解锁')) throw new Error('未解锁');
+  if (!$('#resetPwOverlay').classList.contains('open')) throw new Error('重置隐私密码弹窗未开');
+  if ($('#recoverOverlay')) throw new Error('旧的恢复码弹窗仍在');
+  const txt = $('#resetPwOverlay').textContent;
+  if (!txt.includes('备份')) throw new Error('重置弹窗未说明旧备份的后果');
+  click($('#resetPwSubmit'));
+  if ($('#lockCapsule').textContent.indexOf('已解锁') < 0) throw new Error('未解锁');
+});
+
+step('旧加密模型的文案已清干净（DEK / 主钥 / 密文）', () => {
+  const src = doc.body.innerHTML;
+  ['DEK', '数据密钥', '主钥', '密钥库', '为密文', '同名密文'].forEach(w => {
+    if (src.indexOf(w) >= 0) throw new Error('原型仍残留旧模型文案「' + w + '」');
+  });
+  // 设置 › 隐私锁 卡片：原来的恢复码行已换成重置入口
+  click($('#topAccount'));
+  const card = $$('.set-card').find(c => c.textContent.indexOf('隐私锁') >= 0);
+  if (!card) throw new Error('缺隐私锁设置卡片');
+  if (card.textContent.indexOf('2026-09-20') >= 0) throw new Error('隐私锁卡片仍留恢复码生成时间');
+  if (card.textContent.indexOf('重置') < 0) throw new Error('隐私锁卡片缺重置隐私密码入口');
 });
 
 step('回收站：从设置进入并恢复一条（7.4 修订）', () => {

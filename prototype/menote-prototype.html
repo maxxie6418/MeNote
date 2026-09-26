@@ -281,7 +281,7 @@ a{color:inherit;text-decoration:none}
 .vault-node.unlocked .lock-ic{color:var(--amber)}
 .vault-node .tagline{margin-left:auto;font-size:10.5px;color:var(--muted)}
 
-/* 隐私空间（2026-09-26 用户调整：去掉「隐私」小标题；按钮贴底固定在功能栏底部，不随导航滚动） */
+/* 加密空间（2026-09-26 用户调整：去掉「隐私」小标题；按钮贴底固定在功能栏底部，不随导航滚动） */
 .fn-vault{flex:none;padding:8px 12px 10px;border-top:1px solid var(--line)}
 
 .tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 9px}
@@ -791,7 +791,7 @@ table.data tbody tr:hover{background:var(--panel-2)}
           <a class="seg-item" data-fn="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办</a>
         </div>
 
-        <!-- 导航（v2 Q1 已确认）：最近编辑 · 收藏 · 笔记本 · 标签 · 隐私空间（隐私空间贴底，见 .fn-vault） -->
+        <!-- 导航（v2 Q1 已确认）：最近编辑 · 收藏 · 笔记本 · 标签 · 加密空间（加密空间贴底，见 .fn-vault） -->
         <nav class="nav" id="fnNav">
           <a class="nav-item" data-fn="recent"><svg class="ic"><use href="#i-refresh"/></svg>最近编辑</a>
           <a class="nav-item" data-fn="starred"><svg class="ic"><use href="#i-star"/></svg>收藏</a>
@@ -854,10 +854,10 @@ table.data tbody tr:hover{background:var(--panel-2)}
 
       </div>
 
-      <!-- 隐私空间（2026-09-26 用户调整：去掉「隐私」小标题；按钮贴底固定在功能栏底部，不随导航滚动） -->
+      <!-- 加密空间（2026-09-26 用户调整：去掉「隐私」小标题；按钮贴底固定在功能栏底部，不随导航滚动） -->
       <div class="fn-vault">
         <a class="nav-item vault-node locked" id="vaultNode" data-fn="vault">
-          <svg class="ic lock-ic"><use href="#i-lock"/></svg><span>隐私空间</span>
+          <svg class="ic lock-ic"><use href="#i-lock"/></svg><span>加密空间</span>
           <span class="tagline">已锁定</span>
         </a>
       </div>
@@ -902,30 +902,36 @@ table.data tbody tr:hover{background:var(--panel-2)}
   </div>
 </div>
 
-<!-- ==================== 恢复码弹窗 ==================== -->
-<div class="overlay" id="recoverOverlay">
+<!-- ==================== 重置隐私密码弹窗 ==================== -->
+<!-- 2026-09-26 模型修订：恢复码已废弃。内容是明文存储的，忘记隐私密码不会丢内容；
+     唯一的后果是「已导出的备份」用旧密码加密，重置后读不了。 -->
+<div class="overlay" id="resetPwOverlay">
   <div class="modal">
     <div class="modal-head">
       <div class="mi blue"><svg class="ic"><use href="#i-key"/></svg></div>
       <div>
-        <h3>用恢复码重置</h3>
-        <p>恢复方式只有恢复码，管理员无法查询或重置</p>
+        <h3>重置隐私密码</h3>
+        <p>忘记密码直接重置，管理员也无法代你重置</p>
       </div>
     </div>
     <div class="modal-body">
       <div class="field">
-        <label>恢复码</label>
-        <input type="text" placeholder="XXXX-XXXX-XXXX-XXXX…" autocomplete="off">
-        <div class="hint">解开主钥后可设置新隐私密码，原有加密内容不受影响</div>
+        <label>新隐私密码</label>
+        <input type="password" id="resetPwInput" placeholder="设置一个新的隐私密码" autocomplete="off">
+        <div class="hint">重置后立即生效，加密空间与单篇加密内容都不受影响</div>
+      </div>
+      <div class="field">
+        <label>确认新密码</label>
+        <input type="password" id="resetPwInput2" placeholder="再输入一次" autocomplete="off">
       </div>
       <div class="warn-box" style="margin-bottom:14px">
         <svg class="ic"><use href="#i-alert"/></svg>
-        <span>隐私密码和恢复码都丢失时，加密内容将永久无法恢复，服务端与管理员都无能为力。</span>
+        <span>你的内容以明文存储在本机与服务端，重置密码不会删除任何东西。但此前导出的备份是用旧密码加密的，重置后将无法解密——需要那些备份时请先留好旧密码。</span>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn" id="recoverBack">返回</button>
-      <button class="btn primary" id="recoverSubmit">下一步</button>
+      <button class="btn" id="resetPwBack">返回</button>
+      <button class="btn primary" id="resetPwSubmit">重置并解锁</button>
     </div>
   </div>
 </div>
@@ -970,21 +976,21 @@ const NOTES = [
     created:'2026-09-14 22:30', share:null,
     snippet:'表格条目 · 5 行 · 4 列 · 列类型：文字 / 状态 / 时间 / 纯数字' },
 
-  /* 隐私空间内的条目（2026-09-26 新增）：vault:true 表示隶属加密空间。
-     它们只在隐私空间解锁后可见 —— 其它视图（最近编辑 / 收藏 / 标签 / 首页）一律排除，
+  /* 加密空间内的条目（2026-09-26 新增）：vault:true 表示隶属加密空间。
+     它们只在加密空间解锁后可见 —— 其它视图（最近编辑 / 收藏 / 标签 / 首页）一律排除，
      因为空间是密封容器，与「单篇加密」（n3）不是一回事。 */
   { id:'v1', kind:'note', title:'日记 · 2026 秋', folder:'（加密空间）/ 日记', vault:true,
     tags:['日记'], star:false, pin:false, enc:true, date:'今天 23:12', words:268, versions:7,
     created:'2026-09-02 22:05', share:null,
     snippet:'存储池的迁移顺序理了一遍：先做快照、再切盘，中途断电最坏也只是回到快照点，不会损坏池……' },
-  { id:'v2', kind:'note', title:'账户与恢复码备忘', folder:'（加密空间）/ 备份', vault:true,
+  { id:'v2', kind:'note', title:'账户凭证备忘', folder:'（加密空间）/ 备份', vault:true,
     tags:['备份'], star:false, pin:false, enc:true, date:'9月24日', words:142, versions:3,
     created:'2026-09-24 20:40', share:null,
-    snippet:'恢复码分两处存放，任何一处单独泄露都不足以恢复账户；设备丢失即轮换登录密码与恢复码……' }
+    snippet:'口令类信息分两处存放，任何一处单独丢失都不至于把自己锁在外面；设备丢失即轮换该设备的访问口令……' }
 ];
 
 const MEMOS = [
-  { time:'21:36', day:'今天', text:'想到一个点子：把隐私空间的锁定状态做成顶栏胶囊，而不是藏在设置里，这样在任何页面都能一眼看到当前是否解锁。',
+  { time:'21:36', day:'今天', text:'想到一个点子：把加密空间的锁定状态做成顶栏胶囊，而不是藏在设置里，这样在任何页面都能一眼看到当前是否解锁。',
     tags:['灵感'], task:null, status:'synced', imgs:0 },
   { time:'20:52', day:'今天', text:'读完《三体》第一部。黑暗森林的设定其实是一个信息论问题——暴露坐标 = 暴露存在，而博弈不存在合作解。',
     tags:['读书'], task:null, status:'synced', imgs:2 },
@@ -1026,10 +1032,8 @@ const TRASH = [
 ];
 
 const VAULT_TREE = [
-  { icon:'folder', name:'[加密] 8f3a…', meta:'名称亦为密文' },
-  { icon:'folder', name:'[加密] c21d…', meta:'' },
-  { icon:'note',   name:'日记 · 2026 秋', meta:'已解锁 · 2.1 KB', enc:true },
-  { icon:'note',   name:'账户与恢复码备忘', meta:'已解锁 · 1.4 KB', enc:true }
+  { icon:'folder', name:'日记', meta:'12 篇' },
+  { icon:'folder', name:'备份', meta:'3 篇' }
 ];
 
 const NOTE_BODY_ENC = `---
@@ -1125,7 +1129,7 @@ tags: [项目]
 - [ ] 线上验证确认
 `;
 
-/* 隐私空间内的正文（解锁后可读） */
+/* 加密空间内的正文（解锁后可读） */
 const NOTE_BODY_V1 = `---
 tags: [日记]
 ---
@@ -1145,17 +1149,17 @@ const NOTE_BODY_V2 = `---
 tags: [备份]
 ---
 
-# 账户与恢复码备忘
+# 账户凭证备忘
 
-恢复码分两处存放，任何一处单独泄露都不足以恢复账户：
+口令类信息分两处存放，任何一处单独丢失都不至于把自己锁在外面：
 
-1. 纸质件放在书房文件柜（与密码本分开）
-2. 加密密钥库另存一份，口令不与主密码相同
+1. 纸质件放在书房文件柜（与日常密码本分开）
+2. 家庭 NAS 上另存一份，访问口令不与登录密码相同
 
 ## 轮换约定
 
-- 设备丢失即轮换登录密码与恢复码
-- 恢复码用过一次就作废重生成
+- 设备丢失即轮换该设备的访问口令
+- 每年固定一次全量核对，核完在目录上打勾
 `;
 
 /* ============================================================
@@ -1293,7 +1297,7 @@ function mdToHtml(src){
 /* ============================================================
    5. 路由：功能栏 → 主操作区
    ============================================================ */
-const FN_TITLE = { home:'首页', recent:'最近编辑', memo:'Memo', task:'待办', starred:'收藏', tag:'标签', notebook:'笔记本', vault:'隐私空间', trash:'回收站', settings:'设置', search:'搜索结果' };
+const FN_TITLE = { home:'首页', recent:'最近编辑', memo:'Memo', task:'待办', starred:'收藏', tag:'标签', notebook:'笔记本', vault:'加密空间', trash:'回收站', settings:'设置', search:'搜索结果' };
 
 function go(fn, opts){
   opts = opts || {};
@@ -1370,7 +1374,7 @@ function render(){
 }
 
 /* 条目来源。
-   隐私空间的内容只在空间内可见 —— 其它视图一律排除（锁不锁都一样：空间是密封容器，
+   加密空间的内容只在空间内可见 —— 其它视图一律排除（锁不锁都一样：空间是密封容器，
    与「单篇加密」的 n3 不同，后者仍留在笔记本与最近编辑里、锁定时只把正文遮住）。 */
 function itemList(scope){
   let data = scope === 'vault' ? NOTES.filter(n => n.vault) : NOTES.filter(n => !n.vault);
@@ -1380,13 +1384,13 @@ function itemList(scope){
   return data;
 }
 
-/* 双栏视图里，该条目是否允许显示在右列（防止把隐私空间内容渲染到其它视图） */
+/* 双栏视图里，该条目是否允许显示在右列（防止把加密空间内容渲染到其它视图） */
 function canShowIn(fn, n){
   if(!n) return false;
   return fn === 'vault' ? !!n.vault : !n.vault;
 }
 
-/* 走「列表 + 正文」双栏的视图（2026-09-26：隐私空间与三个记录视图都改为双栏） */
+/* 走「列表 + 正文」双栏的视图（2026-09-26：加密空间与三个记录视图都改为双栏） */
 const TWO_PANE = ['notebook','vault','recent','starred','tag'];
 
 /* ---------- 列表 ---------- */
@@ -1514,7 +1518,7 @@ function lockedDocPanel(n){
     + '<div class="placeholder">'
     + '<div class="big-ic">' + icon('i-lock') + '</div>'
     + '<h3>此内容已加密</h3>'
-    + '<p>锁定状态下正文与附件均不可读。单篇加密的条目标题保持明文，空间内条目的标题同样为密文。</p>'
+    + '<p>锁定状态下正文与附件都不渲染，也不进搜索结果；标题仍保持明文可读。内容和元数据在服务端与本机缓存中都是明文，锁定是一道界面门禁。</p>'
     + '<button class="btn primary" id="docUnlockBtn">' + icon('i-unlock') + '输入隐私密码解锁</button>'
     + '</div></div></div>';
 }
@@ -1570,7 +1574,7 @@ function bindDoc(){
     const isTable = n.kind === 'table';
     showMenu(moreBtn,
       '<div class="menu-item" data-doc="enc">' + icon('i-lock') + (n.enc ? '取消加密' : (isTable ? '加密此表格' : '加密此笔记')) + '</div>'
-      + '<div class="menu-item" data-doc="move">' + icon('i-folder') + '移动到…<span class="hint">含移入隐私空间</span></div>'
+      + '<div class="menu-item" data-doc="move">' + icon('i-folder') + '移动到…<span class="hint">含移入加密空间</span></div>'
       + '<div class="menu-item" data-doc="ver">' + icon('i-clock') + '版本历史<span class="hint">' + n.versions + ' 个</span></div>'
       + '<div class="menu-item" data-doc="share">' + icon('i-share') + '分享' + (n.enc ? '<span class="hint">加密内容不可分享</span>' : '') + '</div>'
       + (isTable ? '<div class="menu-item" data-doc="down">' + icon('i-note') + '降级为普通笔记</div>' : '')
@@ -1579,7 +1583,7 @@ function bindDoc(){
       item => {
         const k = item.dataset.doc;
         if(k === 'enc') toast('单篇加密：创建时不提供，只在「更多」菜单中开关；需处于解锁状态，旧明文版本与附件需一并处理（v2 M04-02 / 6.11）', 'info');
-        else if(k === 'move') toast('移动到…：未解锁时隐私空间只显示为单个节点，只能移入空间根目录（v2 M08-09）', 'info');
+        else if(k === 'move') toast('移动到…：未解锁时加密空间只显示为单个节点，只能移入空间根目录（v2 M08-09）', 'info');
         else if(k === 'ver') toast('版本历史：' + n.versions + ' 个版本，正文压缩后存 R2，元数据存 D1（第十二节）', 'info');
         else if(k === 'share'){
           if(n.enc) toast('加密内容不可分享：菜单项标注原因并置灰（16.1）', 'warn');
@@ -1710,19 +1714,18 @@ function tablePanel(n){
    6.5 首页（设计文档 §7.4 / 功能拆解 v2 M02-03）
    三类内容：概括预览（条目统计 / 今日待办 / 最近动态）· 快捷方式 · 快速导航。
    数据全部由本地元数据计算，不发额外请求。
-   隐私规则（M02-03 / Q7）：锁定时加密空间条目不计入统计；来自 Memo 的部分以「已锁定」占位。
+   统计口径（2026-09-26 用户确认）：**始终计入** —— 加密空间内的条目、单篇加密条目
+   都照常计入条目统计与最近动态，不因锁定/解锁改变口径。
+   来自 Memo 的部分仍按门禁规则占位（Q5 / Q7，未变）。
    ============================================================ */
 function homePanel(){
   const locked = state.locked;                             // 全局锁状态（Q5：一次解锁为一体）
   const memoLocked = state.locked && state.privacyBrowse;  // Memo 门禁
 
-  // 隐私空间的内容不计入首页统计 —— 空间是密封容器，其条目只在空间内可见
-  const visible   = NOTES.filter(n => !n.vault);
-  const allNotes  = visible.filter(n => n.kind !== 'table');
-  const allTables = visible.filter(n => n.kind === 'table');
-  // 锁定时不暴露加密空间内的条目数（§6.9「不显示条目数」）
-  const nNotes  = locked ? allNotes.length  - allNotes.filter(n => n.enc).length  : allNotes.length;
-  const nTables = locked ? allTables.length - allTables.filter(n => n.enc).length : allTables.length;
+  // 统计始终按全量口径计算（含加密空间内条目与单篇加密条目）
+  const all       = NOTES;
+  const nNotes    = all.filter(n => n.kind !== 'table').length;
+  const nTables   = all.filter(n => n.kind === 'table').length;
 
   // ① 概括预览
   const stats = '<div class="home-stats">'
@@ -1733,7 +1736,7 @@ function homePanel(){
         : '<div class="home-stat"><div class="n">' + MEMOS.length + '</div><div class="l">Memo</div></div>')
     + '</div>'
     + '<div class="hint-line">概览数据由客户端从本地元数据计算，不发额外网络请求（7.4）。'
-    + (locked ? '锁定状态下加密空间内的条目不计入统计（6.9）。' : '') + '</div>';
+    + '统计始终计入加密空间与单篇加密的条目，不区分锁定状态。</div>';
 
   // 今日待办（来自清单 Memo）
   const openTasks = TASKS.filter(t => t.status !== 'done').slice(0, 4);
@@ -1745,8 +1748,8 @@ function homePanel(){
             + '<span class="m">' + esc(t.due) + ' · ' + esc(t.pri) + '</span></div>').join('') + '</div>'
         : '<div class="home-empty">没有未完成的待办。</div>');
 
-  // 最近动态
-  const recent = (locked ? visible.filter(n => !n.enc) : visible).slice(0, 4);
+  // 最近动态：与统计同口径（含加密空间内条目）
+  const recent = NOTES.slice(0, 4);
   const dyn = '<div class="home-list">' + recent.map(n =>
       '<div class="home-line">' + icon(n.kind === 'table' ? 'i-table' : 'i-note')
       + '<span>' + esc(n.title) + '</span><span class="m">' + esc(n.date) + '</span></div>').join('')
@@ -1767,7 +1770,7 @@ function homePanel(){
     + '<button class="home-act" data-ha="new">' + icon('i-plus') + '新建笔记</button>'
     + '<button class="home-act" data-ha="memo">' + icon('i-clock') + '记录 Memo</button>'
     + '<button class="home-act" data-ha="task">' + icon('i-check-sq') + '新建待办</button>'
-    + '<button class="home-act" data-ha="vault">' + icon('i-lock') + '打开隐私空间</button>'
+    + '<button class="home-act" data-ha="vault">' + icon('i-lock') + '打开加密空间</button>'
     + '<button class="home-act" data-ha="search">' + icon('i-search') + '搜索（Ctrl+K）</button>'
     + '</div>'
     + '<div class="hint-line">快捷方式 = 常用内容或操作的入口（7.4）。此处给的是操作入口；常用内容的快捷入口随使用频率产生，细则后续定。</div>';
@@ -1782,7 +1785,7 @@ function homePanel(){
     +   ['读书','自托管','英语','灵感'].map(t => '<span class="chip tag" data-tag="' + t + '"># ' + t + '</span>').join('')
     + '</div></div>'
     + '<div class="grp"><div class="t">常用视图</div><div class="home-acts">'
-    +   [['recent','最近编辑'],['starred','收藏'],['memo','Memo'],['task','待办'],['notebook','笔记本'],['vault','隐私空间']]
+    +   [['recent','最近编辑'],['starred','收藏'],['memo','Memo'],['task','待办'],['notebook','笔记本'],['vault','加密空间']]
         .map(p => '<span class="chip clickable" data-hnav="fn:' + p[0] + '">' + p[1] + '</span>').join('')
     + '</div></div>'
     + '</div>';
@@ -1979,47 +1982,47 @@ function bindTask(){
 }
 
 /* ============================================================
-   8. 隐私空间 / 回收站 / 设置 / 搜索
+   8. 加密空间 / 回收站 / 设置 / 搜索
    ============================================================ */
-/* ---------- 隐私空间（2026-09-26 调整：解锁后与笔记本同构，做「列表 + 正文」双栏） ---------- */
+/* ---------- 加密空间（2026-09-26 调整：解锁后与笔记本同构，做「列表 + 正文」双栏） ---------- */
 
 /* 锁定时：整块占位，不显示任何条目，列表区整块隐藏（6.9） */
 function vaultLockedPanel(){
-  return '<div class="pane-head"><div><h1>隐私空间</h1>'
-    + '<div class="sub">账户内置的单一加密空间 · 名称明文、内部全部加密 · 不可删除</div></div></div>'
+  return '<div class="pane-head"><div><h1>加密空间</h1>'
+    + '<div class="sub">账户内置的单一加密空间 · 不可删除、不能新建第二个</div></div></div>'
     + '<div class="doc-scroll"><div class="placeholder boxed">'
     + '<div class="big-ic">' + icon('i-lock') + '</div>'
     + '<h3>此空间已锁定</h3>'
-    + '<p>空间节点不可展开、不显示条目数，列表区域不显示任何条目。空间内的文件夹名、文章标题、正文与附件全部为密文，服务端与本地缓存都拿不到明文。</p>'
+    + '<p>空间节点不可展开、不显示条目数，列表区域不显示任何条目。锁定是界面门禁：空间内的文件夹名、条目标题与正文在服务端与本机缓存中仍是明文，但锁定时不渲染、也不进搜索结果。</p>'
     + '<button class="btn primary" id="vaultUnlockBtn">' + icon('i-unlock') + '输入隐私密码解锁</button>'
     + '</div></div>';
 }
 
-/* 解锁后：左列的头部（标题 + 立即锁定 + 空间内文件夹）。文件夹名同样是密文。 */
+/* 解锁后：左列的头部（标题 + 立即锁定 + 空间内的文件夹） */
 function vaultListHead(){
   const folders = VAULT_TREE.filter(it => it.icon === 'folder');
   return '<div class="pane-head" style="padding:15px 20px 6px">'
-    + '<div><h1>隐私空间</h1>'
+    + '<div><h1>加密空间</h1>'
     + '<div class="sub">已解锁 · 5 分钟档</div></div>'
     + '<div class="actions"><button class="btn sm" id="vaultLockBtn">' + icon('i-lock') + '立即锁定</button></div>'
     + '</div>'
     + '<div style="padding:0 20px 10px;display:flex;flex-wrap:wrap;gap:6px">'
-    + folders.map(f => '<span class="chip amber" title="文件夹名同样是密文">'
+    + folders.map(f => '<span class="chip amber" title="空间内的文件夹">'
         + icon('i-folder') + esc(f.name) + '</span>').join('')
     + '</div>';
 }
 
-/* 解锁后：右列未选中条目时的占位（保留密钥说明与元数据泄露说明） */
+/* 解锁后：右列未选中条目时的占位 */
 function vaultEmptyDoc(){
   return '<div class="doc-scroll"><div class="pane-pad" style="max-width:720px">'
     + '<div class="vault-head">' + icon('i-unlock')
-    + '<div><h2>空间密钥 DEK_s 已解开</h2><p>空间内标题与文件夹名用 DEK_s 解密，正文用各篇自己的数据密钥 DEK</p></div></div>'
+    + '<div><h2>门禁已打开</h2><p>隐私密码只控制界面显示与备份导出加密，不改变存储方式</p></div></div>'
     + '<div class="placeholder boxed" style="margin-top:14px">'
     + '<div class="big-ic">' + icon('i-note') + '</div>'
-    + '<h3>选择左侧的一篇加密内容</h3>'
-    + '<p>隐私空间解锁后与笔记本同构：左列条目列表，右列阅读与编辑。空间内两个文件夹的名称同样是密文（如 8f3a… / c21d…）。</p></div>'
+    + '<h3>选择左侧的一篇内容</h3>'
+    + '<p>加密空间解锁后与笔记本同构：左列条目列表，右列阅读与编辑，点条目直接在右侧打开。</p></div>'
     + '<div class="warn-box info" style="margin-top:16px">' + icon('i-info')
-    + '<span>已知的元数据泄露（接受）：条目与文件夹的数量、大小、修改时间、置顶/收藏标记、附件数量、层级结构在服务端可见。</span></div>'
+    + '<span>保护边界（已确认）：内容在服务端与本机缓存中均为明文，锁定时前端不显示、备份导出时强制加密；不防爆破，也不防已登录的账号。</span></div>'
     + '</div></div>';
 }
 function bindVault(){
@@ -2084,13 +2087,13 @@ function settingsPanel(){
   + '<div class="set-card"><div class="set-head">' + icon('i-lock') + '<h3>隐私锁</h3>'
   + '<div class="right"><span class="chip green">已启用</span></div></div><div class="set-body">'
   + '<div class="field" style="margin-bottom:16px"><label>解锁档位</label><div class="radio-set" id="timeoutSet">'
-  +   '<div class="radio-opt" data-min="0"><div class="radio-dot"></div><div><div class="t">仅本次查看</div><div class="d">解开当前这一篇或当前隐私空间后立刻丢弃主钥，关闭即重新锁定；该档位不解除 Memo 门禁</div></div></div>'
-  +   '<div class="radio-opt on" data-min="5"><div class="radio-dot"></div><div><div class="t">5 分钟</div><div class="d">按无操作时间计时，到期自动锁定；密钥留在本标签页内存</div></div></div>'
+  +   '<div class="radio-opt" data-min="0"><div class="radio-dot"></div><div><div class="t">仅本次查看</div><div class="d">解锁后离开当前这一篇或加密空间即重新锁定；该档位不解除 Memo 门禁</div></div></div>'
+  +   '<div class="radio-opt on" data-min="5"><div class="radio-dot"></div><div><div class="t">5 分钟</div><div class="d">按无操作时间计时，到期自动锁定；解锁状态只在本标签页内保持</div></div></div>'
   +   '<div class="radio-opt" data-min="-1"><div class="radio-dot"></div><div><div class="t">本次浏览器会话</div><div class="d">多标签页共享解锁状态，最后一个标签页关闭后失效</div></div></div>'
   +   '<div class="radio-opt" data-min="-2"><div class="radio-dot"></div><div><div class="t">当前设备长期</div><div class="d">该设备上一直保持解锁，等于在该设备上关闭隐私保护</div></div></div>'
   + '</div></div>'
-  + '<div class="set-row"><div><div class="lbl">恢复码</div><div class="desc">生成于 2026-09-20 · 隐私密码与恢复码都丢失时，加密内容永久无法恢复</div></div>'
-  + '<div class="right"><span class="keycap">K7QM-3X2P-……</span><button class="btn sm">重新生成</button></div></div>'
+  + '<div class="set-row"><div><div class="lbl">重置隐私密码</div><div class="desc">忘记密码时直接重置；内容是明文存储的，不会丢内容，只有已导出的旧备份需要旧密码解密</div></div>'
+  + '<div class="right"><button class="btn sm" id="setResetPw">重置</button></div></div>'
   + '</div></div>'
 
   + '<div class="set-card"><div class="set-head">' + icon('i-clock') + '<h3>Memo 隐私浏览</h3></div><div class="set-body">'
@@ -2120,7 +2123,7 @@ function settingsPanel(){
   + '<div class="bk-card"><div class="bk-ic">' + icon('i-share','lg') + '</div><div><div class="t">Git 仓库</div>'
   + '<div class="d">已配置 · 同步删除（历史提交无法清除）· 上次成功 1 小时前</div></div><div class="right"><span class="chip amber">有延迟</span></div></div>'
   + '<div class="warn-box info">' + icon('i-info')
-  + '<span>备份始终以密文进行，无需解锁。镜像目标在删除目标文件后，同步删除 <code>backup_state</code> 中对应记录，避免该表无限增长（16.3）。</span></div>'
+  + '<span>加密空间内的条目与单篇加密内容在出站前强制加密，普通内容默认明文出站；这一步不需要解锁（16.3）。镜像目标在删除目标文件后，同步删除 <code>backup_state</code> 中对应记录，避免该表无限增长。</span></div>'
   + '</div></div>'
 
   + '<div class="set-card"><div class="set-head">' + icon('i-share') + '<h3>我的分享</h3></div>'
@@ -2176,6 +2179,9 @@ function bindSettings(){
     toast(state.privacyBrowse ? 'Memo 浏览已开启隐私密码门禁（存储不变，仅界面行为）'
       : '已关闭门禁：Memo 与普通内容一样随时可见', 'info');
   });
+  // 重置隐私密码（2026-09-26 模型修订：恢复码已废弃）
+  const rp = $('#setResetPw');
+  if(rp) rp.addEventListener('click', () => $('#resetPwOverlay').classList.add('open'));
   const ot = $('#openTrash');
   if(ot) ot.addEventListener('click', () => go('trash'));
 }
@@ -2669,16 +2675,16 @@ $('#unlockOverlay').addEventListener('click', e => { if(e.target === $('#unlockO
 $('#pwInput').addEventListener('keydown', e => { if(e.key === 'Enter') doUnlock(); });
 $('#forgotLink').addEventListener('click', () => {
   $('#unlockOverlay').classList.remove('open');
-  $('#recoverOverlay').classList.add('open');
+  $('#resetPwOverlay').classList.add('open');
 });
-$('#recoverOverlay').addEventListener('click', e => { if(e.target === $('#recoverOverlay')) $('#recoverOverlay').classList.remove('open'); });
-$('#recoverBack').addEventListener('click', () => {
-  $('#recoverOverlay').classList.remove('open'); openUnlock(unlockTarget, unlockArg);
+$('#resetPwOverlay').addEventListener('click', e => { if(e.target === $('#resetPwOverlay')) $('#resetPwOverlay').classList.remove('open'); });
+$('#resetPwBack').addEventListener('click', () => {
+  $('#resetPwOverlay').classList.remove('open'); openUnlock(unlockTarget, unlockArg);
 });
-$('#recoverSubmit').addEventListener('click', () => {
-  $('#recoverOverlay').classList.remove('open');
+$('#resetPwSubmit').addEventListener('click', () => {
+  $('#resetPwOverlay').classList.remove('open');
   setLocked(false);
-  toast('已用恢复码解开主钥，请设置新隐私密码并保存新恢复码', 'ok');
+  toast('隐私密码已重置，加密内容与空间都不受影响（已导出的旧备份需用旧密码解密）', 'ok');
 });
 
 /* 快捷键 */
@@ -2688,7 +2694,7 @@ document.addEventListener('keydown', e => {
   }
   if(e.key === 'Escape'){
     closeMenu(); closeUnlock(); closeDrawer();
-    $('#recoverOverlay').classList.remove('open');
+    $('#resetPwOverlay').classList.remove('open');
   }
 });
 

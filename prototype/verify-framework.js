@@ -12,7 +12,7 @@
 
    覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
          区块名与说明文字齐全 / 顶栏 6 块且账户入口紧邻隐私锁胶囊 /
-         导航顺序与首页项 / 隐私空间贴底且无小标题 / 待办独立视图 /
+         浏览三段（首页 / Memo / 待办 合并成一行）/ 隐私空间贴底且无小标题 / 待办独立视图 /
          Memo 去清单 / 录入框三模式与去加密 / 录入框行序（附加项在模式行之上）/
          主题（Claude 橙白双主题）/
          点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
@@ -156,14 +156,28 @@ step('功能栏页：新建笔记 / 笔记本新建入口 / 已无底部账户�
   if ($('#canvas [data-b="fnFoot"]')) throw new Error('底部仍有独立回收站 / 设置区块');
 });
 
-step('导航按 v2 Q1 重排：含首页与独立的待办项（不再是「待办并入 Memo」）', () => {
+step('导航按 v2 Q1 重排 + 浏览三段合并（2026-09-26 调整）', () => {
   gotoPage('功能栏');
-  if (!$('#canvas [data-b="navHome"]')) throw new Error('导航缺「首页」项');
+  const seg = $('#canvas [data-b="navSeg"]');
+  if (!seg) throw new Error('导航缺「浏览三段」');
+  // —— 先做结构检查：blockText 会点块触发画布重渲染，之后 DOM 引用会失效 ——
+  if ($('#canvas [data-b="navHome"]')) throw new Error('旧的独立首页块仍在');
+  const segBox = seg.parentElement;
+  if (segBox !== $('#canvas [data-b="navMain"]').parentElement) throw new Error('浏览三段与主导航不在同一容器');
+  const kids = Array.from(segBox.children).map(el => el.getAttribute('data-b'));
+  if (!(kids.indexOf('navSeg') < kids.indexOf('navMain'))) throw new Error('浏览三段未排在主导航之上');
+  // —— 再做文字检查（会重渲染，故放最后）——
+  const segText = blockText('navSeg');
+  ['首页', 'Memo', '待办'].forEach(x => {
+    if (!segText.includes(x)) throw new Error('浏览三段描述缺「' + x + '」：' + segText);
+  });
+  if (!segText.includes('横向一行')) throw new Error('浏览三段未说明压成一行：' + segText);
+  if (!segText.includes('视图跳转')) throw new Error('浏览三段未说明合并依据：' + segText);
   const nav = blockText('navMain');
-  ['首页', 'Memo', '待办', '最近编辑', '收藏'].forEach(x => {
+  ['最近编辑', '收藏'].forEach(x => {
     if (!nav.includes(x)) throw new Error('主导航描述缺「' + x + '」：' + nav);
   });
-  if (!nav.includes('独立成项')) throw new Error('主导航未说明待办已独立：' + nav);
+  if (!nav.includes('浏览三段')) throw new Error('主导航未说明首页/Memo/待办已抽走：' + nav);
 });
 
 step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
@@ -173,7 +187,7 @@ step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-
   // 贴底：是所在容器最后一个元素
   if (vn.parentElement.lastElementChild !== vn) throw new Error('隐私空间不是功能栏最底部的一段');
   // 不再嵌在可滚动的导航容器内
-  const navBox = $('#canvas [data-b="navHome"]').parentElement;
+  const navBox = $('#canvas [data-b="navTags"]').parentElement;
   if (navBox.contains(vn)) throw new Error('隐私空间仍嵌在导航容器里');
   // 字典说明已更新
   const n = blockText('navVault');

@@ -247,6 +247,19 @@ a{color:inherit;text-decoration:none}
 .nav-item:hover{background:var(--panel-2);color:var(--text)}
 .nav-item.active{background:var(--primary-soft);color:var(--primary-2);font-weight:600}
 .nav-item .count{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* 浏览三段（2026-09-26 用户调整）：首页 / Memo / 待办 三项压成横向一行，省纵向空间。
+   与收录框的 .mode-tabs 形似但用途不同（那只切录入模式），故不共用一套类。 */
+.nav-seg{display:flex;gap:3px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px;margin-bottom:7px}
+.seg-item{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:4px;
+  height:26px;border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none;
+  transition:.14s;white-space:nowrap}
+.seg-item:hover{color:var(--text-2)}
+.seg-item.active{background:var(--panel-3);color:var(--text);font-weight:600}
+.seg-item .ic{width:12px;height:12px;flex:none}
+.seg-item .count{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.seg-item.active .count{color:var(--primary-2)}
+
 .group{margin-top:15px}
 .group-title{display:flex;align-items:center;gap:5px;padding:0 9px 6px;font-size:10.5px;font-weight:600;letter-spacing:.9px;color:var(--muted);text-transform:uppercase}
 .group-title .ic{width:11px;height:11px}
@@ -767,11 +780,16 @@ table.data tbody tr:hover{background:var(--panel-2)}
       </div>
 
       <div class="fn-scroll">
-        <!-- 导航（功能拆解 v2 / Q1 已确认）：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔记本 · 标签 · 隐私空间 -->
+        <!-- 浏览三段（2026-09-26 用户调整，v2 Q1 修订）：首页 · Memo · 待办 三项压成横向一行，
+             保留原名，点不同位置进不同页面。三项都只是视图跳转、无附加功能，故合并以省纵向空间。 -->
+        <div class="nav-seg" id="navSeg">
+          <a class="seg-item active" data-fn="home" id="navHome"><svg class="ic"><use href="#i-home"/></svg>首页</a>
+          <a class="seg-item" data-fn="memo"><svg class="ic"><use href="#i-clock"/></svg>Memo<span class="count">49</span></a>
+          <a class="seg-item" data-fn="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办<span class="count" id="navTaskCount">6</span></a>
+        </div>
+
+        <!-- 导航（v2 Q1 已确认）：最近编辑 · 收藏 · 笔记本 · 标签 · 隐私空间（隐私空间贴底，见 .fn-vault） -->
         <nav class="nav" id="fnNav">
-          <a class="nav-item active" data-fn="home" id="navHome"><svg class="ic"><use href="#i-home"/></svg>首页</a>
-          <a class="nav-item" data-fn="memo"><svg class="ic"><use href="#i-clock"/></svg>Memo<span class="count">49</span></a>
-          <a class="nav-item" data-fn="task"><svg class="ic"><use href="#i-check-sq"/></svg>待办<span class="count" id="navTaskCount">6</span></a>
           <a class="nav-item" data-fn="recent"><svg class="ic"><use href="#i-refresh"/></svg>最近编辑</a>
           <a class="nav-item" data-fn="starred"><svg class="ic"><use href="#i-star"/></svg>收藏</a>
         </nav>
@@ -1235,7 +1253,7 @@ function go(fn, opts){
   if(opts.folder !== undefined) state.folder = opts.folder;
   if(opts.tag !== undefined) state.tag = opts.tag;
 
-  $$('.nav-item[data-fn]').forEach(n => n.classList.toggle('active', n.dataset.fn === fn));
+  $$('.nav-item[data-fn], .seg-item[data-fn]').forEach(n => n.classList.toggle('active', n.dataset.fn === fn));
   // 2026-09-26 调整：账户与设置移回顶栏（隐私锁胶囊旁），进设置或回收站时它保持高亮
   const acc = $('#topAccount');
   if(acc) acc.classList.toggle('active', fn === 'settings' || fn === 'trash');
@@ -2445,7 +2463,7 @@ function tierMenuHtml(){
    13. 事件绑定
    ============================================================ */
 /* 导航 */
-$$('.nav-item[data-fn]').forEach(el => el.addEventListener('click', e => {
+$$('.nav-item[data-fn], .seg-item[data-fn]').forEach(el => el.addEventListener('click', e => {
   e.stopPropagation();
   const fn = el.dataset.fn;
   if(fn === 'vault' && state.locked){ openUnlock('vault'); return; }
@@ -2551,7 +2569,7 @@ $('#searchInput').addEventListener('input', e => {
   if(state.fn !== 'search') state.searchedFrom = state.fn;
   state.searchQuery = q;
   state.fn = 'search';
-  $$('.nav-item[data-fn]').forEach(n => n.classList.remove('active'));
+  $$('.nav-item[data-fn], .seg-item[data-fn]').forEach(n => n.classList.remove('active'));
   $('#crumb').innerHTML = '<b>搜索结果</b>';
   closeDrawer();
   render();

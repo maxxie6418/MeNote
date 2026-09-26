@@ -8,7 +8,8 @@
      npm install jsdom
      NODE_PATH=<node_modules 路径> node verify-prototype.js
 
-   覆盖：导航顺序与路由（首页 / Memo / 待办 分离）/
+   覆盖：浏览三段（首页 / Memo / 待办 横向合并成一行，保留原名）/
+         导航顺序与路由（首页 / Memo / 待办 / 最近编辑 / 收藏 / 笔记本 / 标签 / 隐私空间）/
          账户入口唯一性（顶栏隐私锁胶囊旁，6 块顶栏；功能栏底部已无账户区）/
          首页三类内容与隐私占位 / 启动视图 / 主题（Claude 橙白双主题）/
          笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
@@ -37,6 +38,10 @@ const click = el => {
   el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
 };
 const input = (el, v) => { el.value = v; el.dispatchEvent(new window.Event('input', { bubbles: true })); };
+/* 2026-09-26 起「首页 / Memo / 待办」是浏览三段 .seg-item，其余导航项仍是 .nav-item。
+   统一走这两个助手取，避免后续再调整结构时满脚本改选择器。 */
+const navEl = fn => $('.nav-item[data-fn="' + fn + '"], .seg-item[data-fn="' + fn + '"]');
+const navAll = () => $$('.nav-item[data-fn], .seg-item[data-fn]');
 
 let pass = 0, fail = 0;
 function step(name, fn) {
@@ -70,9 +75,39 @@ step('初始渲染：首页三类内容（v2 M02-03）', () => {
 });
 
 step('导航顺序：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔记本 · 隐私空间（v2 Q1）', () => {
-  const order = $$('.nav-item[data-fn]').map(el => el.dataset.fn).join('/');
+  const order = navAll().map(el => el.dataset.fn).join('/');
   if (order !== 'home/memo/task/recent/starred/notebook/vault')
     throw new Error('导航顺序为 ' + order);
+});
+
+step('浏览三段：首页 / Memo / 待办 压成横向一行，保留原名（2026-09-26 调整）', () => {
+  const seg = $('#navSeg');
+  if (!seg) throw new Error('缺浏览三段容器 #navSeg');
+  const items = Array.from(seg.children).map(el => el.dataset.fn);
+  if (items.join('/') !== 'home/memo/task') throw new Error('三段为 ' + items.join('/'));
+  // 保留原名字
+  const labels = Array.from(seg.children).map(el => el.textContent.replace(/[0-9]+/g, '').trim());
+  if (labels.join('/') !== '首页/Memo/待办') throw new Error('段名为 ' + labels.join('/'));
+  // 旧的三行导航项已清除
+  if ($$('#navSeg .nav-item').length) throw new Error('三段里仍残留旧的三行导航项');
+  if ($('#fnNav [data-fn="home"], #fnNav [data-fn="memo"], #fnNav [data-fn="task"]'))
+    throw new Error('旧导航区仍留着首页 / Memo / 待办');
+  // 横向排布 + 等分宽度（靠 CSS 保证）
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const segRule = css.match(/\.nav-seg\{[^}]*\}/);
+  if (!segRule) throw new Error('未找到 .nav-seg 规则');
+  if (!/display:\s*flex/.test(segRule[0])) throw new Error('.nav-seg 未横向排布：' + segRule[0]);
+  const itemRule = css.match(/\.seg-item\{[^}]*\}/);
+  if (!itemRule) throw new Error('未找到 .seg-item 规则');
+  if (!/flex:\s*1/.test(itemRule[0])) throw new Error('.seg-item 未等分宽度：' + itemRule[0]);
+  // 点击每段仍能各自跳转
+  ['home', 'memo', 'task'].forEach(fn => {
+    click(navEl(fn));
+    if ($('.nav-item.active, .seg-item.active') !== navEl(fn)) {
+      throw new Error(fn + ' 点击后未高亮为当前项');
+    }
+  });
+  click(navEl('home'));
 });
 
 step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
@@ -98,13 +133,13 @@ step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-
   if (!/border-top/.test(rule[0])) throw new Error('.fn-vault 缺分隔线：' + rule[0]);
 
   // 导航末位仍是隐私空间
-  const order = $$('.nav-item[data-fn]').map(el => el.dataset.fn).join('/');
+  const order = navAll().map(el => el.dataset.fn).join('/');
   if (!order.endsWith('/vault')) throw new Error('隐私空间不在导航末位：' + order);
 });
 
 step('功能栏导航不含独立的回收站 / 设置项（7.4 修订，设置由顶栏账户入口进入）', () => {
-  if ($('.nav-item[data-fn="trash"]')) throw new Error('底部仍有独立回收站入口');
-  if ($('.nav-item[data-fn="settings"]')) throw new Error('底部仍有独立设置入口');
+  if (navEl('trash')) throw new Error('底部仍有独立回收站入口');
+  if (navEl('settings')) throw new Error('底部仍有独立设置入口');
 });
 
 step('账户入口：全站只有一个头像，位于顶栏隐私锁胶囊旁（2026-09-26 调整）', () => {
@@ -133,23 +168,23 @@ step('账户入口：全站只有一个头像，位于顶栏隐私锁胶囊旁�
 step('首页统计 = 最近编辑条目数（记录视图不含 Memo，v2 Q8）', () => {
   const nums = $$('.home-stat .n').map(n => n.textContent.trim());
   const total = parseInt(nums[0], 10) + parseInt(nums[1], 10);
-  click($('.nav-item[data-fn="recent"]'));
+  click(navEl('recent'));
   const rows = $$('#paneList .item-row').length;
   if (rows !== total) throw new Error('最近编辑条目数 ' + rows + ' ≠ 首页统计 ' + total);
   if ($('#paneList .memo-item')) throw new Error('记录视图出现 Memo');
-  click($('.nav-item[data-fn="starred"]'));
+  click(navEl('starred'));
   if ($('#paneList .memo-item')) throw new Error('收藏视图出现 Memo');
 });
 
 step('首页隐私规则：锁定时 Memo 统计与动态占位（M02-03 / Q7）', () => {
   lock();
-  click($('.nav-item[data-fn="home"]'));
+  click(navEl('home'));
   const memoStat = $$('.home-stat')[2];
   if (!memoStat.textContent.includes('已锁定')) throw new Error('锁定时 Memo 统计未占位');
   if (!$('.home-locked')) throw new Error('锁定时未提示 Memo 内容已锁定');
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   unlockVia('#memoUnlockBtn');
-  click($('.nav-item[data-fn="home"]'));
+  click(navEl('home'));
   if (!$$('.home-stat')[2].textContent.match(/\d/)) throw new Error('解锁后 Memo 统计未恢复');
 });
 
@@ -211,7 +246,7 @@ step('录入框顺序：输入区 → 模式附加项 → 模式行（2026-09-26
 
 /* ---------- Memo 与待办分离（v2 Q1） ---------- */
 step('Memo 视图只有 时间轴 / 瀑布流，无「清单」tab（v2 Q1 / M06-10）', () => {
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   if (!$('.pane-head h1').textContent.includes('Memo')) throw new Error('未进入 Memo 视图');
   const tabs = $$('#memoMode button').map(b => b.dataset.m);
   if (tabs.join('/') !== 'timeline/waterfall') throw new Error('Memo 视图 tab 为：' + tabs.join('/'));
@@ -220,7 +255,7 @@ step('Memo 视图只有 时间轴 / 瀑布流，无「清单」tab（v2 Q1 / M06
 });
 
 step('待办为独立视图，列表 / 看板可切（v2 Q1 / M07-05）', () => {
-  click($('.nav-item[data-fn="task"]'));
+  click(navEl('task'));
   if (!$('.pane-head h1').textContent.includes('待办')) throw new Error('未进入待办视图');
   if (!$('#taskAdd')) throw new Error('待办视图顶部缺「添加」按钮');
   const tabs = $$('#taskView button').map(b => b.dataset.t);
@@ -234,11 +269,11 @@ step('待办为独立视图，列表 / 看板可切（v2 Q1 / M07-05）', () => 
 });
 
 step('「添加」按钮复用录入框并切到对应模式（M06-10 / M07-01）', () => {
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   click($('#memoAdd'));
   if (!$('#composerModes button[data-mode="memo"]').classList.contains('on'))
     throw new Error('Memo「添加」未切到 Memo 模式');
-  click($('.nav-item[data-fn="task"]'));
+  click(navEl('task'));
   click($('#taskAdd'));
   if (!$('#composerModes button[data-mode="task"]').classList.contains('on'))
     throw new Error('待办「添加」未切到待办模式');
@@ -308,7 +343,7 @@ step('主色为 Claude 陶土橙，无蓝色系残留', () => {
 
 /* ---------- 笔记本 / 正文 ---------- */
 step('切到笔记本 → 列表 + 正文双栏', () => {
-  click($('.nav-item[data-fn="notebook"]'));
+  click(navEl('notebook'));
   if (!$$('#paneList .item-row').length) throw new Error('左侧列表为空');
   if (!$('#edSource')) throw new Error('右侧正文未渲染');
 });
@@ -339,7 +374,7 @@ step('文件夹筛选 → 双栏只剩该文件夹条目', () => {
 
 /* ---------- 录入发布 ---------- */
 step('录入框：待办模式发布 → 待办视图新增一条', () => {
-  click($('.nav-item[data-fn="task"]'));
+  click(navEl('task'));
   const before = $$('.task-row').length;
   click($('#composerModes button[data-mode="task"]'));
   click($('span[data-pri="低"]'));
@@ -358,7 +393,7 @@ step('录入框：笔记模式发布（首行作标题，落根目录）', () =>
 
 /* ---------- 条目侧栏 / 表格 ---------- */
 step('收藏 → 点击条目滑出详情侧栏', () => {
-  click($('.nav-item[data-fn="starred"]'));
+  click(navEl('starred'));
   click($$('#paneList .item-row')[0]);
   if (!$('#drawer').classList.contains('open')) throw new Error('抽屉未打开');
 });
@@ -374,7 +409,7 @@ step('标签筛选', () => {
 });
 
 step('表格条目：表格 / 图册切换', () => {
-  click($('.nav-item[data-fn="notebook"]'));
+  click(navEl('notebook'));
   click($$('#paneList .item-row').find(r => r.dataset.id === 't1'));
   if (!$('table.data')) throw new Error('表格未渲染');
   click($('#tableMode button[data-v="gallery"]'));
@@ -407,13 +442,13 @@ step('胶囊菜单 → 立即锁定', () => {
 });
 
 step('锁定态：加密日记转为锁定占位', () => {
-  click($('.nav-item[data-fn="notebook"]'));
+  click(navEl('notebook'));
   click($$('#paneList .item-row').find(r => r.dataset.id === 'n3'));
   if (!$('#docUnlockBtn')) throw new Error('未显示解锁入口');
 });
 
 step('锁定态点「隐私空间」→ 弹解锁框', () => {
-  click($('.nav-item[data-fn="vault"]'));
+  click(navEl('vault'));
   if (!$('#unlockOverlay').classList.contains('open')) throw new Error('解锁框未打开');
 });
 
@@ -425,22 +460,22 @@ step('解锁 → 进入隐私空间', () => {
 
 step('锁定态 Memo 与待办都显示门禁占位（M06-08 / M07-05）', () => {
   lock();
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   if (!$('#memoUnlockBtn')) throw new Error('未显示 Memo 门禁');
-  click($('.nav-item[data-fn="task"]'));
+  click(navEl('task'));
   if (!$('#taskUnlockBtn')) throw new Error('未显示待办门禁');
 });
 
 step('从待办门禁解锁恢复内容', () => {
   unlockVia('#taskUnlockBtn');
   if (!$$('.task-row').length) throw new Error('解锁后未恢复待办内容');
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   if (!$$('.memo-item').length) throw new Error('一次解锁应同时解开 Memo（v2 Q5）');
 });
 
 step('忘记密码 → 恢复码流程', () => {
   lock();
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   click($('#memoUnlockBtn'));
   click($('#forgotLink'));
   if (!$('#recoverOverlay').classList.contains('open')) throw new Error('恢复码弹窗未开');
@@ -467,7 +502,7 @@ step('设置：关闭 Memo 门禁 → 锁定后 Memo 仍可见', () => {
   click($('#privacyToggle'));
   if ($('#privacyToggle').classList.contains('on')) throw new Error('开关未关闭');
   lock();
-  click($('.nav-item[data-fn="memo"]'));
+  click(navEl('memo'));
   click($('#memoMode button[data-m="timeline"]'));
   if (!$$('.memo-item').length) throw new Error('门禁关闭后 Memo 应可见');
 });
@@ -498,7 +533,7 @@ step('笔记本新建入口：文件夹 / 表格（表格不在录入框里）',
 });
 
 step('账户与设置入口不弹菜单，直接进设置（2026-09-26 调整）', () => {
-  click($('.nav-item[data-fn="recent"]'));
+  click(navEl('recent'));
   click($('#topAccount'));
   if (!$('.pane-head h1').textContent.includes('设置')) throw new Error('未进入设置');
   if (doc.querySelector('.menu')) throw new Error('账户入口仍在弹菜单，与「合并为一个入口」不符');

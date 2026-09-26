@@ -55,3 +55,37 @@ export function inspectCryptoEnvironment(): CryptoEnvironment {
 export function describeCryptoEnvironment(env: CryptoEnvironment = inspectCryptoEnvironment()): string {
   return `地址 ${env.href} · 协议 ${env.protocol || "未知"} · 安全上下文 ${env.secure ? "是" : "否"} · WebCrypto ${env.hasSubtle ? "可用" : "缺失"}`;
 }
+
+/**
+ * 该不该把当前页面升级到 https，返回目标地址（不需要升级则 null）。
+ *
+ * 起因是一次真实故障：Cloudflare 的「Always Use HTTPS」默认**关闭**，用户直接敲域名就落在
+ * `http://` 上，而 http 下浏览器不提供 WebCrypto，登录/保存全部不可用。云端开关是治本手段，
+ * 这里再加一道**客户端兜底**，让"忘了开开关"或"用 http 链接打开"都不会把用户堵死。
+ *
+ * 保守起见只升级"明确的公网域名"：
+ * - 已经是 https → 不动；
+ * - `localhost` / `127.0.0.1` / `[::1]` / `*.local` / 纯 IP（含局域网地址）→ **不升级**
+ *   （本地开发与局域网调试都没有 TLS，跳过去会更糟）；
+ * - 其余（形如 `example.com`、`sub.example.com`）→ 保留路径与查询串，换成 https。
+ */
+export function httpsUpgradeUrl(env: CryptoEnvironment = inspectCryptoEnvironment()): string | null {
+  if (env.protocol !== "http:") return null;
+  if (typeof location === "undefined") return null;
+  if (env.secure && env.hasSubtle) return null; // localhost 下 http 也是安全上下文，能用就别跳
+
+  const host = location.hostname.toLowerCase();
+  const isLocal =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host === "[::1]" ||
+    host === "::1" ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host); // IPv4（含 127.0.0.1 与局域网地址）
+
+  if (isLocal) return null;
+  if (!host.includes(".")) return null; // 单标签主机名（内网常见）
+
+  return `https://${location.host}${location.pathname}${location.search}${location.hash}`;
+}
+

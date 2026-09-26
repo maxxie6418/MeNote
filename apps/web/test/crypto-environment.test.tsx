@@ -11,8 +11,23 @@ import { InsecureContextBanner } from "../src/app/ui/InsecureContextBanner";
 import {
   describeCryptoEnvironment,
   hasWebCrypto,
+  httpsUpgradeUrl,
   inspectCryptoEnvironment,
+  type CryptoEnvironment,
 } from "../src/app/ui/cryptoEnvironment";
+
+/** 造一个"看起来像在某个地址上"的环境（jsdom 的 location 改不动，用假的环境对象即可） */
+function envAt(href: string, overrides: Partial<CryptoEnvironment> = {}): CryptoEnvironment {
+  const url = new URL(href);
+  return {
+    secure: false,
+    protocol: url.protocol,
+    href,
+    hasSubtle: false,
+    reason: "测试用",
+    ...overrides,
+  };
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -62,6 +77,57 @@ describe("环境自检", () => {
     expect(text).toContain("协议 https:");
     expect(text).toContain("安全上下文 否");
     expect(text).toContain("WebCrypto 缺失");
+  });
+});
+
+describe("http 兜底升级到 https", () => {
+  // jsdom 里 location 固定是 http://localhost:3000，所以"公网域名"的用例通过改写 location 来造；
+  // 这里用一个最小替身，避免动 jsdom 的 location 实现。
+  function withLocation(href: string, run: () => void): void {
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: new URL(href),
+    });
+    try {
+      run();
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: original });
+    }
+  }
+
+  it("http 的公网域名：升级为 https，并保留路径 / 查询串 / hash", () => {
+    withLocation("http://me.861306.xyz/app?x=1#/login", () => {
+      expect(httpsUpgradeUrl(envAt("http://me.861306.xyz/app?x=1#/login"))).toBe(
+        "https://me.861306.xyz/app?x=1#/login",
+      );
+    });
+  });
+
+  it("已经在 https：不动", () => {
+    withLocation("https://me.861306.xyz/#/login", () => {
+      expect(httpsUpgradeUrl(envAt("https://me.861306.xyz/#/login", { secure: true }))).toBeNull();
+    });
+  });
+
+  it("本地与局域网不升级（那些环境没有 TLS，跳过去更糟）", () => {
+    for (const href of [
+      "http://localhost:5173/",
+      "http://127.0.0.1:5173/",
+      "http://192.168.1.9:5173/",
+      "http://nas.local/",
+      "http://intranet/", // 单标签主机名
+    ]) {
+      withLocation(href, () => {
+        expect(httpsUpgradeUrl(envAt(href))).toBeNull();
+      });
+    }
+  });
+
+  it("localhost 下 http 也是安全上下文：能用就不跳", () => {
+    withLocation("http://localhost:5173/", () => {
+      expect(httpsUpgradeUrl(envAt("http://localhost:5173/", { secure: true, hasSubtle: true }))).toBeNull();
+    });
   });
 });
 

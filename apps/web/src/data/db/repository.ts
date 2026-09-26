@@ -99,12 +99,20 @@ export async function applySyncFolders(folders: FolderMeta[]): Promise<void> {
 
 // ——————————————————————————— 本地读 ———————————————————————————
 
-/** 未删除的条目，按最近编辑倒序（置顶在界面层再排） */
+/** 未删除的条目，按最近编辑倒序（置顶在界面层再排）。**不含 Memo**（Q8：笔记视图不列 Memo） */
 export async function listLocalItems(): Promise<LocalItem[]> {
   const rows = await db.items.toArray();
   return rows
-    .filter((row) => row.deleted_at === null)
+    .filter((row) => row.deleted_at === null && row.type !== "memo")
     .sort((a, b) => b.updated_at - a.updated_at);
+}
+
+/** 未删除的 Memo，按发生时间倒序（时间轴用；置顶在界面层再排 —— Q9） */
+export async function listLocalMemos(): Promise<LocalItem[]> {
+  const rows = await db.items.toArray();
+  return rows
+    .filter((row) => row.deleted_at === null && row.type === "memo")
+    .sort((a, b) => (b.memo_at ?? 0) - (a.memo_at ?? 0));
 }
 
 export async function getLocalItem(id: string): Promise<LocalItem | undefined> {
@@ -312,6 +320,8 @@ export interface NewLocalItemInput {
   tags?: string[];
   memo_at?: number | null;
   body: string;
+  /** 清单标记（仅 Memo 有；由 `@menote/mdcore` 从 YAML 派生，前后端同一份实现） */
+  task?: { isTask: boolean; status: string | null; due: string | null; priority: string | null };
 }
 
 export async function createLocalItem(input: NewLocalItemInput, now: number): Promise<LocalItem> {
@@ -327,10 +337,10 @@ export async function createLocalItem(input: NewLocalItemInput, now: number): Pr
     content_hash: contentHash,
     tags: input.tags ?? [],
     memo_at: input.memo_at ?? null,
-    is_task: 0,
-    task_status: null,
-    task_due: null,
-    task_priority: null,
+    is_task: input.task?.isTask ? 1 : 0,
+    task_status: input.task?.status ?? null,
+    task_due: input.task?.due ?? null,
+    task_priority: input.task?.priority ?? null,
     pinned: 0,
     starred: 0,
     rev: 0,

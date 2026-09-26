@@ -2,12 +2,15 @@
  * 条目路由（架构 §2.3.2：`routes/items.ts`）。只做参数/请求头校验与转服务层，不写业务。
  */
 import {
+  BATCH_MAX_OPS,
+  BatchRequestSchema,
   ITEM_BASE_REV_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
   ItemMetaPatchSchema,
   decodeItemWriteMeta,
   isUlid,
+  type BatchResponse,
   type ItemBodyWriteResponse,
   type ItemMetaWriteResponse,
 } from "@menote/shared";
@@ -16,6 +19,7 @@ import type { Context } from "hono";
 import * as v from "valibot";
 import { DomainError } from "../errors";
 import { requireSession } from "../middleware/session";
+import { applyBatch } from "../services/batch";
 import { createItem, getItemBody, patchItemMeta, saveItemBody } from "../services/items";
 import type { AppEnv } from "../types";
 import { readJsonBody } from "../validation";
@@ -131,6 +135,30 @@ app.patch("/items/:id/meta", requireSession, async (c) => {
 
   const result = await patchItemMeta(c.env.DB, c.get("user").id, id, parsed.output, Date.now());
   const response: ItemMetaWriteResponse = result;
+  return c.json(response);
+});
+
+/**
+ * 批量写入（`POST /api/batch`；M2-9）。
+ *
+ * 入参最多 `BATCH_MAX_OPS` 个操作（每个操作 ≤3 条写语句，稳在 D1 的 45 条批次上限内）。
+ * **逐操作独立判定冲突**：某个操作失败（冲突 / 不存在）只记它自己，其余照常落库——
+ * 所以这里恒返回 200，逐条结果在 `results` 里（客户端按 `ok` 分派）。
+ */
+app.post("/batch", requireSession, async (c) => {
+  const parsed = v.safeParse(BatchRequestSchema, await readJsonBody(c));
+  if (!parsed.success) {
+    throw new DomainError("invalid", `单批最多 ${BATCH_MAX_OPS} 个操作，且每个操作必须合法`);
+  }
+
+  const results = await applyBatch(
+    c.env.DB,
+    c.get("user").id,
+    parsed.output.ops,
+    Date.now(),
+    deviceOf(c),
+  );
+  const response: BatchResponse = { results };
   return c.json(response);
 });
 

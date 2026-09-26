@@ -141,3 +141,75 @@ export const ItemMetaWriteResponseSchema = v.object({
   meta_rev: IntSchema,
 });
 export type ItemMetaWriteResponse = v.InferOutput<typeof ItemMetaWriteResponseSchema>;
+
+// ——————————————————————————— 批量写入（M2-9） ———————————————————————————
+
+/**
+ * 批量写入的一次操作（`POST /api/batch`）。
+ *
+ * 与三个单条端点的入参一一对应，**冲突语义也一一对应**：服务端逐操作独立判定，
+ * 一个失败不影响其它（见 `apps/worker/src/services/batch.ts`）。
+ */
+export const BatchOpSchema = v.variant("kind", [
+  v.object({
+    kind: v.literal("create"),
+    id: v.string(),
+    meta: ItemWriteMetaSchema,
+    body: v.string(),
+  }),
+  v.object({
+    kind: v.literal("save_body"),
+    id: v.string(),
+    base_rev: v.pipe(IntSchema, v.minValue(0)),
+    content_hash: v.string(),
+    body: v.string(),
+  }),
+  v.object({
+    kind: v.literal("patch_meta"),
+    id: v.string(),
+    patch: ItemMetaPatchSchema,
+  }),
+]);
+export type BatchOp = v.InferOutput<typeof BatchOpSchema>;
+
+/**
+ * 单批操作数上限。
+ *
+ * 每个操作最多产生 **3 条写语句**（主写入 + 正文 + 条件推进计数器），
+ * D1 的批次上限是 **45 条语句**：3 × 10 = 30，留出余量。服务端也会按这个上限校验入参。
+ */
+export const BATCH_MAX_OPS = 10;
+
+export const BatchRequestSchema = v.object({
+  ops: v.pipe(v.array(BatchOpSchema), v.maxLength(BATCH_MAX_OPS)),
+});
+export type BatchRequest = v.InferOutput<typeof BatchRequestSchema>;
+
+/** 单个操作的结果：成功带应答，失败带错误码与详情（接口形状与单条端点一致） */
+export const BatchResultSchema = v.variant("ok", [
+  v.object({
+    ok: v.literal(true),
+    index: v.pipe(IntSchema, v.minValue(0)),
+    kind: v.picklist(["create", "save_body", "patch_meta"]),
+    id: v.string(),
+    /** `create` / `save_body` 的 rev，或 `patch_meta` 的 meta_rev */
+    rev: IntSchema,
+    bytes: v.optional(v.pipe(IntSchema, v.minValue(0))),
+    chars: v.optional(v.pipe(IntSchema, v.minValue(0))),
+  }),
+  v.object({
+    ok: v.literal(false),
+    index: v.pipe(IntSchema, v.minValue(0)),
+    kind: v.picklist(["create", "save_body", "patch_meta"]),
+    id: v.string(),
+    code: v.string(),
+    message: v.string(),
+    detail: v.optional(v.unknown()),
+  }),
+]);
+export type BatchResult = v.InferOutput<typeof BatchResultSchema>;
+
+export const BatchResponseSchema = v.object({
+  results: v.array(BatchResultSchema),
+});
+export type BatchResponse = v.InferOutput<typeof BatchResponseSchema>;

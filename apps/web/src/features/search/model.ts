@@ -71,6 +71,27 @@ export function buildSearchText(input: {
     .join("\n");
 }
 
+/**
+ * 两条来源（本地索引 / 服务端兜底）合并：按 key 去重，**先出现的优先**（本地索引在前）。
+ * 本地索引是"已缓存的权威副本"，服务端只用来补齐索引还没覆盖到的条目。
+ */
+export function mergeBy<T>(
+  keyOf: (row: T) => string,
+  ...groups: ReadonlyArray<readonly T[]>
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const group of groups) {
+    for (const row of group) {
+      const key = keyOf(row);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+  }
+  return out;
+}
+
 export interface SearchableRow {
   item_id: string;
   text: string;

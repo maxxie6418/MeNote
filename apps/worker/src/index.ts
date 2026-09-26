@@ -12,6 +12,7 @@ import auth from "./routes/auth";
 import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
+import search from "./routes/search";
 import settings from "./routes/settings";
 import sync from "./routes/sync";
 import type { AppEnv, EnvBindings } from "./types";
@@ -42,6 +43,7 @@ app.route("/api", items);
 app.route("/api", folders);
 app.route("/api", sync);
 app.route("/api", settings);
+app.route("/api", search);
 
 app.notFound((c) => {
   applySecurityHeaders(c);

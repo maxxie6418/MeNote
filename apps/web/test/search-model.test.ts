@@ -3,6 +3,7 @@ import {
   bigramFallback,
   buildSearchText,
   makeSnippet,
+  mergeBy,
   searchRows,
   tokenize,
   type SearchableRow,
@@ -121,5 +122,24 @@ describe("检索", () => {
   it("每条命中都带片段", () => {
     const hits = searchRows("方案", rows);
     expect(hits.every((hit) => hit.snippet.match !== "")).toBe(true);
+  });
+});
+
+describe("两条来源合并（本地索引在前，服务端补齐）", () => {
+  it("按 key 去重，先出现的优先", () => {
+    const local = [{ id: "a", from: "local" }, { id: "b", from: "local" }];
+    const remote = [{ id: "b", from: "remote" }, { id: "c", from: "remote" }];
+
+    expect(mergeBy((row) => row.id, local, remote)).toEqual([
+      { id: "a", from: "local" },
+      { id: "b", from: "local" },
+      { id: "c", from: "remote" },
+    ]);
+  });
+
+  it("只有服务端结果时照常返回；都为空时返回空数组", () => {
+    const key = (row: { id: string }): string => row.id;
+    expect(mergeBy(key, [], [{ id: "x" }])).toEqual([{ id: "x" }]);
+    expect(mergeBy(key, [], [])).toEqual([]);
   });
 });

@@ -7,12 +7,14 @@ import {
   ITEM_BASE_REV_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
+  SearchResponseSchema,
   SyncResponseSchema,
   encodeItemWriteMeta,
   type AuthKdfParams,
   type AuthSessionResponse,
   type ChangePasswordResponse,
   type FolderCreate,
+  type SearchResponse,
   type FolderPatch,
   type FolderWriteResponse,
   type ItemBodyWriteResponse,
@@ -115,6 +117,29 @@ export const syncApi = {
   pull: async (cursor: number): Promise<SyncResponse> => {
     const raw = await apiRequest<unknown>(`/api/sync?cursor=${cursor}`);
     return v.parse(SyncResponseSchema, raw);
+  },
+};
+
+/** 搜索的服务端兜底（M2-6）：只在本地索引还没建完时调用 */
+export const searchApi = {
+  query: async (params: {
+    q: string;
+    type?: string;
+    folder?: string;
+    tag?: string;
+    from?: number;
+    to?: number;
+  }): Promise<SearchResponse> => {
+    const query = new URLSearchParams({ q: params.q });
+    if (params.type !== undefined && params.type !== "all") query.set("type", params.type);
+    if (params.folder !== undefined) query.set("folder", params.folder);
+    if (params.tag !== undefined && params.tag !== null) query.set("tag", params.tag);
+    if (params.from !== undefined && params.from !== null) query.set("from", String(params.from));
+    if (params.to !== undefined && params.to !== null) query.set("to", String(params.to));
+
+    // 响应同样过一遍共享 schema（喂界面的数据不做无条件信任）
+    const raw = await apiRequest<unknown>(`/api/search?${query.toString()}`);
+    return v.parse(SearchResponseSchema, raw);
   },
 };
 

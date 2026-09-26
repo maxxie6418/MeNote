@@ -15,11 +15,25 @@ import { useState, type ReactNode } from "react";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
 import { SegmentedControl } from "../../../app/ui/SegmentedControl";
-import type { LocalItem } from "../../../data/db";
 import type { SnippetParts } from "../model";
 
+/**
+ * 结果行需要的条目字段子集。
+ *
+ * 刻意不用完整的 `LocalItem`：服务端兜底返回的是**部分字段**（只够渲染结果行），
+ * 用一个窄接口能让两条来源（本地索引 / 服务端）共用同一个面板，且不假装拥有没拿到的数据。
+ */
+export interface SearchItemLike {
+  id: string;
+  type: "note" | "table" | "memo";
+  folder_id: string | null;
+  title: string | null;
+  tags: string[];
+  updated_at: number;
+}
+
 export interface SearchResult {
-  item: LocalItem;
+  item: SearchItemLike;
   snippet: SnippetParts;
   score: number;
 }

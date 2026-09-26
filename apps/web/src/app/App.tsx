@@ -43,6 +43,8 @@ import {
   type SearchResult,
 } from "../features/search/ui/SearchPanel";
 import { isSearchIndexComplete, searchLocal } from "../data/db";
+import { searchApi } from "../data/api/endpoints";
+import { makeSnippet, mergeBy } from "../features/search/model";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -135,15 +137,49 @@ export default function App() {
       const from = searchFilters.range === "all" ? null : now - days * 24 * 60 * 60 * 1000;
 
       const complete = await isSearchIndexComplete();
-      const results = await searchLocal(query, {
+      const localResults: SearchResult[] = await searchLocal(query, {
         type: searchFilters.type,
         folderId: searchFilters.folderId,
         tag: searchFilters.tag,
         from,
       });
+
+      // 索引还没建完 → 回退服务端补齐（离线或失败就只用本地结果，不弹错）
+      let remoteResults: SearchResult[] = [];
+      if (!complete) {
+        try {
+          const remote = await searchApi.query({
+            q: query,
+            type: searchFilters.type,
+            folder:
+              searchFilters.folderId === "all"
+                ? undefined
+                : searchFilters.folderId === null
+                  ? "root"
+                  : searchFilters.folderId,
+            tag: searchFilters.tag ?? undefined,
+            from: from ?? undefined,
+          });
+          remoteResults = remote.results.map((row) => ({
+            item: {
+              id: row.id,
+              type: row.type,
+              folder_id: row.folder_id,
+              title: row.title,
+              tags: row.tags,
+              updated_at: row.updated_at,
+            },
+            snippet: makeSnippet(row.snippet, query),
+            score: 0,
+          }));
+        } catch {
+          remoteResults = [];
+        }
+      }
+
       if (!alive) return;
-      setSearchResults(results);
-      // 索引没建完时说明"结果可能不完整"（服务端兜底在下一步接入）
+      setSearchResults(mergeBy((row) => row.item.id, localResults, remoteResults));
+      // 索引没建完时说明"结果可能不完整"（此刻的结果已尽量由服务端补齐）
       setSearchStale(!complete);
     })();
 

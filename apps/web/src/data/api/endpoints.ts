@@ -9,12 +9,15 @@ import {
   ITEM_META_HEADER,
   SearchResponseSchema,
   SyncResponseSchema,
+  UserSettingsPayloadSchema,
   encodeItemWriteMeta,
   type AuthKdfParams,
   type AuthSessionResponse,
   type ChangePasswordResponse,
   type FolderCreate,
   type SearchResponse,
+  type UserSettingsPayload,
+  type UserSettingsWrite,
   type FolderPatch,
   type FolderWriteResponse,
   type ItemBodyWriteResponse,
@@ -143,8 +146,23 @@ export const searchApi = {
   },
 };
 
-export const adminApi = {
-  getRegistration: () => apiRequest<RegistrationState>("/api/admin/registration"),
+/** 用户设置（M2-7）：整份覆盖、后写为准 */
+export const settingsApi = {
+  get: async (): Promise<UserSettingsPayload> => {
+    const raw = await apiRequest<unknown>("/api/settings");
+    return v.parse(UserSettingsPayloadSchema, raw);
+  },
+
+  put: async (input: UserSettingsWrite): Promise<UserSettingsPayload> => {
+    const raw = await apiRequest<unknown>("/api/settings", {
+      method: "PUT",
+      body: input,
+    });
+    return v.parse(UserSettingsPayloadSchema, raw);
+  },
+};
+
+export const adminApi = {  getRegistration: () => apiRequest<RegistrationState>("/api/admin/registration"),
 
   setRegistration: (open: boolean, closeAt?: number) =>
     apiRequest<RegistrationState>("/api/admin/registration", {

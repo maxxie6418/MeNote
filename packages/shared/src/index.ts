@@ -65,6 +65,7 @@ export * from "./hash";
 export * from "./items";
 export * from "./limits";
 export * from "./search";
+export * from "./settings";
 export * from "./sync";
 export * from "./text";
 export * from "./ulid";

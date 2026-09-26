@@ -66,6 +66,11 @@ function fakeApi(overrides: Partial<PushApi> = {}): PushApi {
     patchMeta: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
     createFolder: vi.fn(async (input: { id: string }) => ({ id: input.id, meta_rev: 1 })),
     patchFolder: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
+    putSettings: vi.fn(async (input: { settings: unknown }) => ({
+      settings: input.settings as never,
+      rev: 1,
+      updated_at: 1,
+    })),
     ...overrides,
   };
 }

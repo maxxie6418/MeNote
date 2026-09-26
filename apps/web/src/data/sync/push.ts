@@ -19,9 +19,11 @@ import {
   type ItemMetaPatch,
   type ItemMetaWriteResponse,
   type ItemWriteMeta,
+  type UserSettingsPayload,
+  type UserSettingsWrite,
 } from "@menote/shared";
 import { ApiError } from "../api/client";
-import { foldersApi, itemsApi } from "../api/endpoints";
+import { foldersApi, itemsApi, settingsApi } from "../api/endpoints";
 import {
   clearDraft,
   createLocalItem,
@@ -31,10 +33,12 @@ import {
   getEditableBody,
   getLocalFolder,
   getLocalItem,
+  getLocalSettings,
   headOutbox,
   markFolderSynced,
   markItemSynced,
   markOutboxFailure,
+  markSettingsSynced,
   putCachedBody,
   removeOutbox,
   type OutboxRow,
@@ -55,6 +59,8 @@ export interface PushApi {
   patchMeta(id: string, patch: ItemMetaPatch): Promise<ItemMetaWriteResponse>;
   createFolder(input: FolderCreate): Promise<FolderWriteResponse>;
   patchFolder(id: string, patch: FolderPatch): Promise<FolderWriteResponse>;
+  /** 用户设置：整份覆盖（M2-7） */
+  putSettings(input: UserSettingsWrite): Promise<UserSettingsPayload>;
 }
 
 const httpPushApi: PushApi = {
@@ -63,6 +69,7 @@ const httpPushApi: PushApi = {
   patchMeta: itemsApi.patchMeta,
   createFolder: foldersApi.create,
   patchFolder: foldersApi.patch,
+  putSettings: settingsApi.put,
 };
 
 export interface PushContext {
@@ -224,6 +231,28 @@ async function pushPatchFolder(row: OutboxRow, ctx: ResolvedContext, seq: number
   return "done";
 }
 
+/**
+ * 推送用户设置（M2-7）：整份覆盖、后写为准。
+ *
+ * 本地行先落盘再入队，所以这里读的是"用户最新的那份"；成功后把服务端返回的 `rev`
+ * 记回本地并清掉待上传标记。设置没有冲突语义（不是用户内容），服务端也不会回 409。
+ */
+async function pushPutSettings(row: OutboxRow, ctx: ResolvedContext, seq: number): Promise<PushOutcome> {
+  const local = await getLocalSettings();
+  if (!local.pending) {
+    await removeOutbox(seq);
+    return "done";
+  }
+
+  const result = await ctx.api.putSettings({
+    settings: local.settings,
+    base_rev: local.rev,
+  });
+  await markSettingsSynced(result.rev, result.updated_at);
+  await removeOutbox(seq);
+  return "done";
+}
+
 /** 冲突处理：哈希相同视为重放成功；否则本地内容另存冲突副本，原条目采纳服务端版本 */
 async function handleConflict(
   row: OutboxRow,
@@ -310,6 +339,8 @@ async function pushOne(row: OutboxRow, ctx: ResolvedContext): Promise<PushOutcom
         return await pushCreateFolder(row, ctx, seq);
       case "patch_folder":
         return await pushPatchFolder(row, ctx, seq);
+      case "put_settings":
+        return await pushPutSettings(row, ctx, seq);
       default:
         await failPermanently(row, `未知操作：${String(row.op)}`, seq);
         return "failed";

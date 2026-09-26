@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import {
+  DEFAULT_USER_SETTINGS,
   SYNC_PAGE_LIMIT,
   base64UrlEncode,
   encodeItemWriteMeta,
@@ -117,13 +118,14 @@ beforeEach(async () => {
 });
 
 describe("增量拉取", () => {
-  it("空库：空数组、游标不动、无更多", async () => {
+  it("空库：空数组、游标不动、无更多（设置载荷每次带回，未写过则为默认值与 rev 0）", async () => {
     const user = await registerUser("Alice", 1);
     const { status, body } = await pull(user.cookie);
     expect(status).toBe(200);
     expect(body).toEqual({
       items: [],
       folders: [],
+      settings: { settings: DEFAULT_USER_SETTINGS, rev: 0, updated_at: 0 },
       next_cursor: 0,
       has_more: false,
       full_resync: false,

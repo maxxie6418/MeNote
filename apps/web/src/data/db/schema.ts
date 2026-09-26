@@ -7,7 +7,7 @@
  * 本地库只是缓存：遇到无法迁移的情况可以清空后从服务端重建（清空前把 outbox 未上传项导出）。
  */
 import Dexie, { type EntityTable } from "dexie";
-import type { FolderMeta, ItemMeta } from "@menote/shared";
+import type { FolderMeta, ItemMeta, UserSettings } from "@menote/shared";
 
 /** 本地待上传标记：null 表示已同步 */
 export type PendingKind =
@@ -44,7 +44,14 @@ export interface DraftRow {
 }
 
 export type OutboxEntity = "item" | "folder" | "setting" | "attachment" | "version";
-export type OutboxOp = "create" | "save_body" | "patch_meta" | "create_folder" | "patch_folder";
+export type OutboxOp =
+  | "create"
+  | "save_body"
+  | "patch_meta"
+  | "create_folder"
+  | "patch_folder"
+  /** 用户设置整份覆盖（M2-7） */
+  | "put_settings";
 
 /** 待上传操作；正文不复制，指向 `drafts`（架构 §6.3） */
 export interface OutboxRow {
@@ -92,6 +99,19 @@ export interface SearchIndexRow {
   indexed_at: number;
 }
 
+/**
+ * 用户设置（M2-7）：只有一行（`key = "user"`）。
+ *
+ * `pending` 非空表示"本地改了但还没上传"，同步拉取时遇到它会**跳过**（别把用户刚改的设置顶掉）。
+ */
+export interface SettingsRow {
+  key: "user";
+  json: UserSettings;
+  rev: number;
+  updated_at: number;
+  pending: "put_settings" | null;
+}
+
 export class MenoteDatabase extends Dexie {
   items!: EntityTable<LocalItem, "id">;
   bodies!: EntityTable<BodyRow, "item_id">;
@@ -100,6 +120,7 @@ export class MenoteDatabase extends Dexie {
   outbox!: EntityTable<OutboxRow, "seq">;
   syncState!: EntityTable<SyncStateRow, "key">;
   searchIndex!: EntityTable<SearchIndexRow, "item_id">;
+  settings!: EntityTable<SettingsRow, "key">;
 
   constructor(name = "menote") {
     super(name);
@@ -120,6 +141,17 @@ export class MenoteDatabase extends Dexie {
       outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
       syncState: "key",
       searchIndex: "item_id, sync_seq, updated_at",
+    });
+    // 3：新增用户设置（M2-7）。同样纯本地表：只有一行（key = "user"），内容随同步往返。
+    this.version(3).stores({
+      items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+      bodies: "item_id",
+      drafts: "item_id",
+      folders: "id, parent_id, sync_seq",
+      outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+      syncState: "key",
+      searchIndex: "item_id, sync_seq, updated_at",
+      settings: "key",
     });
   }
 }

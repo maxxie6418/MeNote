@@ -21,6 +21,7 @@ import {
   SQL_SELECT_USER_TOMBSTONE_FLOOR,
 } from "../db/tables";
 import { DomainError } from "../errors";
+import { getUserSettings } from "./settings";
 
 interface ItemRow {
   id: string;
@@ -182,13 +183,21 @@ export async function pullSync(
   const floor = floorRow?.tombstone_floor ?? 0;
 
   if (cursor > 0 && cursor < floor) {
-    return { items: [], folders: [], next_cursor: 0, has_more: false, full_resync: true };
+    return {
+      items: [],
+      folders: [],
+      settings: await getUserSettings(db, userId),
+      next_cursor: 0,
+      has_more: false,
+      full_resync: true,
+    };
   }
 
   const probe = SYNC_PAGE_LIMIT + 1;
-  const [itemsResult, foldersResult] = await Promise.all([
+  const [itemsResult, foldersResult, settings] = await Promise.all([
     db.prepare(SQL_SELECT_ITEMS_SINCE).bind(userId, cursor, probe).all<ItemRow>(),
     db.prepare(SQL_SELECT_FOLDERS_SINCE).bind(userId, cursor, probe).all<FolderRow>(),
+    getUserSettings(db, userId),
   ]);
 
   const items = paginate(itemsResult.results, SYNC_PAGE_LIMIT, cursor);
@@ -201,6 +210,7 @@ export async function pullSync(
   return {
     items: items.rows.map(toItemMeta),
     folders: folders.rows.map(toFolderMeta),
+    settings,
     next_cursor: nextCursor,
     has_more: items.hasMore || folders.hasMore,
     full_resync: false,

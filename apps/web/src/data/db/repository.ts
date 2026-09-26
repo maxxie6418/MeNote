@@ -453,7 +453,8 @@ interface EnqueueInput {
   now: number;
 }
 
-async function enqueue(input: EnqueueInput): Promise<void> {
+/** 入队一条待上传操作。**导出供同层仓储模块（settings.ts 等）复用**，不给界面层 */
+export async function enqueue(input: EnqueueInput): Promise<void> {
   const row: OutboxRow = {
     entity: input.entity,
     entity_id: input.entity_id,

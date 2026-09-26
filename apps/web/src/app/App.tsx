@@ -18,6 +18,8 @@ import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
 import { useNotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { changeLoginPassword } from "../features/settings/model";
 import { SettingsPanel } from "../features/settings/ui/SettingsPanel";
+import { useUserSettings } from "../features/settings/useUserSettings";
+import type { UserSettings } from "@menote/shared";
 import { AppShell } from "./AppShell";
 import { FnBar } from "./fnbar/FnBar";
 import type { BrowsableView } from "./fnbar/NavSegmented";
@@ -263,6 +265,20 @@ export default function App() {
       .catch(() => setRegistration(null));
   }, [route, auth.snapshot.user?.role]);
 
+  /** 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎 */
+  const userSettings = useUserSettings({
+    onWrite: () => {
+      engineRef.current?.notifyLocalWrite();
+      void refreshPending();
+    },
+  });
+  const patchSettings = useCallback(
+    (partial: Partial<UserSettings>) => {
+      void userSettings.patch(partial);
+    },
+    [userSettings],
+  );
+
   /** 搜索筛选用的标签候选：笔记与 Memo 的标签并集（按出现次数倒序） */
   const searchTags = (() => {
     const counts = new Map<string, number>();
@@ -397,6 +413,8 @@ export default function App() {
             role={user.role}
             themeMode={theme.mode}
             onThemeMode={theme.setMode}
+            userSettings={userSettings.settings}
+            onPatchSettings={patchSettings}
             registrationOpen={registration?.open ?? false}
             onToggleRegistration={async (open) => {
               const next = await adminApi.setRegistration(open);

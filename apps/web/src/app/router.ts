@@ -5,7 +5,10 @@
  */
 import { useEffect, useState } from "react";
 
-export type SettingsPageId = "general" | "account" | "instance";
+/**
+ * 设置分类 id。M2-7 起是需求 §7.5 的分类（备份 / 分享 / MCP / 数据管理 等各自里程碑再加入）。
+ */
+export type SettingsPageId = "general" | "account" | "editor" | "privacy" | "versions" | "instance";
 
 export type Route =
   | { name: "login" }

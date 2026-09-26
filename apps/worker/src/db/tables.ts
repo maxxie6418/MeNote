@@ -192,3 +192,19 @@ export const SQL_SELECT_FOLDERS_SINCE = `SELECT id, parent_id, is_enc_space, in_
  WHERE user_id = ? AND sync_seq > ?
  ORDER BY sync_seq
  LIMIT ?`;
+
+// —— user_settings（M2-7：跟随账号同步的设置，整份覆盖、后写为准） ——
+
+export const SQL_SELECT_USER_SETTINGS =
+  "SELECT json, rev, sync_seq, updated_at FROM user_settings WHERE user_id = ?";
+
+/** 行上的 `sync_seq` 与其它表同规则：取用户计数器的下一个值，随后统一推进计数器 */
+export const SQL_UPSERT_USER_SETTINGS = `INSERT INTO user_settings (user_id, json, rev, sync_seq, updated_at)
+  VALUES (?, ?, 1, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?)
+  ON CONFLICT(user_id) DO UPDATE SET
+    json = excluded.json,
+    rev = user_settings.rev + 1,
+    sync_seq = excluded.sync_seq,
+    updated_at = excluded.updated_at`;
+
+export const SQL_BUMP_SYNC_SEQ_ON_SETTINGS = "UPDATE users SET sync_seq = sync_seq + 1 WHERE id = ?";

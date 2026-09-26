@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { newUlid, type ItemMeta, type SyncResponse } from "@menote/shared";
+import { DEFAULT_USER_SETTINGS, newUlid, type ItemMeta, type SyncResponse } from "@menote/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applySyncItems,
@@ -50,6 +50,7 @@ function page(partial: Partial<SyncResponse> = {}): SyncResponse {
   return {
     items: [],
     folders: [],
+    settings: { settings: DEFAULT_USER_SETTINGS, rev: 0, updated_at: 0 },
     next_cursor: 0,
     has_more: false,
     full_resync: false,
@@ -64,6 +65,11 @@ function fakePushApi(): PushApi {
     patchMeta: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
     createFolder: vi.fn(async (input: { id: string }) => ({ id: input.id, meta_rev: 1 })),
     patchFolder: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
+    putSettings: vi.fn(async (input: { settings: unknown }) => ({
+      settings: input.settings as never,
+      rev: 1,
+      updated_at: 1,
+    })),
   };
 }
 

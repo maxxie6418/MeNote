@@ -9,6 +9,7 @@ import { syncApi } from "../api/endpoints";
 import {
   applySyncFolders,
   applySyncItems,
+  applySyncSettings,
   clearSyncedLocalContent,
   getSyncState,
   setSyncCursor,
@@ -54,6 +55,8 @@ export async function pullOnce(
 
     await applySyncItems(page.items);
     await applySyncFolders(page.folders);
+    // 用户设置（M2-7）：不参与游标，每页都带；本地有未上传改动或服务端 rev 不更新时会被跳过
+    await applySyncSettings(page.settings);
     applied += page.items.length + page.folders.length;
     cursor = page.next_cursor;
     await setSyncCursor(cursor, now());

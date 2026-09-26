@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FnBar } from "../src/app/fnbar/FnBar";
 import { Topbar } from "../src/app/topbar/Topbar";
 import { InsecureContextBanner } from "../src/app/ui/InsecureContextBanner";
+import { DEFAULT_USER_SETTINGS } from "@menote/shared";
 import { toIndicator } from "../src/app/useSyncStatus";
 import { LoginPage } from "../src/features/auth/ui/LoginPage";
 import { RegisterPage } from "../src/features/auth/ui/RegisterPage";
@@ -305,6 +306,8 @@ describe("设置壳", () => {
     role: "owner" as const,
     themeMode: "light" as const,
     onThemeMode: vi.fn(),
+    userSettings: DEFAULT_USER_SETTINGS,
+    onPatchSettings: vi.fn(),
     registrationOpen: false,
     onToggleRegistration: vi.fn(async () => undefined),
     onChangePassword: vi.fn(async () => undefined),
@@ -312,16 +315,47 @@ describe("设置壳", () => {
     onNavigate: vi.fn(),
   };
 
-  it("owner 能看到三个分类；通用页有主题三档且当前档被选中", () => {
+  it("owner 能看到 M2 已实现的分类；通用页有主题三档且当前档被选中", () => {
     render(<SettingsPanel {...baseProps} page="general" />);
 
     const nav = screen.getByRole("navigation", { name: "设置分类" });
-    expect(within(nav).getByRole("button", { name: "通用" })).toBeTruthy();
-    expect(within(nav).getByRole("button", { name: "账户与安全" })).toBeTruthy();
-    expect(within(nav).getByRole("button", { name: "实例管理" })).toBeTruthy();
+    for (const label of ["通用", "账户与安全", "编辑器", "隐私锁", "版本与回收站", "实例管理"]) {
+      expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
+    }
+    // 未实现的分类不进导航（避免点进去空页面）
+    expect(within(nav).queryByRole("button", { name: "备份" })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: "MCP" })).toBeNull();
 
     const light = screen.getByRole("button", { name: "浅色" });
     expect(light.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("通用页：启动视图与快捷菜单开关都会即时回调", async () => {
+    const user = userEvent.setup();
+    const onPatchSettings = vi.fn();
+
+    render(<SettingsPanel {...baseProps} page="general" onPatchSettings={onPatchSettings} />);
+
+    await user.click(screen.getByRole("button", { name: "最近编辑" }));
+    expect(onPatchSettings).toHaveBeenCalledWith({ start_view: "recent" });
+
+    // 快捷菜单：默认关着的「搜索」点一下变开启
+    await user.click(screen.getByRole("switch", { name: "搜索" }));
+    expect(onPatchSettings).toHaveBeenCalledWith({ quick_menu: ["theme", "lock", "search"] });
+  });
+
+  it("编辑器页：三档可选，第四档「即时渲染」置灰并说明原因", async () => {
+    const user = userEvent.setup();
+    const onPatchSettings = vi.fn();
+
+    render(<SettingsPanel {...baseProps} page="editor" onPatchSettings={onPatchSettings} />);
+
+    await user.click(screen.getByRole("button", { name: "仅预览" }));
+    expect(onPatchSettings).toHaveBeenCalledWith({ editor_mode: "preview" });
+
+    const instant = screen.getByRole("button", { name: "即时渲染" }) as HTMLButtonElement;
+    expect(instant.disabled).toBe(true);
+    expect(instant.title).toContain("M2");
   });
 
   it("member 看不到实例管理；切换注册开关会回调", async () => {

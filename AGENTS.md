@@ -118,13 +118,14 @@
 
 说明：修改摘要、跑过的验证命令和结果、未验证内容或剩余风险。没法跑验证就写原因，不要假装验证过。
 
-每次改动必须在根目录 `CHANGELOG.md` **最上方**追加一条无序列表，一句话说明改了什么，并带上日期和应用版本号。若本次提交了 git，同一条里写上 commit hash。格式：
+每次改动必须在根目录 `CHANGELOG.md` **最上方**追加一条无序列表，一句话说明改了什么，并带上应用版本号；若本次提交了 git，同一条里写上 commit hash。**日期用小标题**（`## YYYY-MM-DD`）：同一天的条目都写在同一个日期标题下，不重复写日期；当天的小标题不存在时在文件顶部新建。格式：
 
 ```markdown
-- YYYY-MM-DD / vX.Y.Z / <commit-hash> — 一句话
-```
+## YYYY-MM-DD
 
-没有 commit 时省略 hash：`- YYYY-MM-DD / vX.Y.Z — 一句话`。
+- vX.Y.Z / <commit-hash> — 一句话
+- vX.Y.Z — 一句话（无 commit 时省略 hash）
+```
 
 Git：
 

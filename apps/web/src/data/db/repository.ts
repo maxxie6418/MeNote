@@ -324,6 +324,11 @@ export async function outboxCount(): Promise<number> {
   return db.outbox.count();
 }
 
+/** 某个条目的全部队列项（用于判断它是否卡在失败列表里） */
+export async function listItemOutbox(itemId: string): Promise<OutboxRow[]> {
+  return db.outbox.where("[entity+entity_id]").equals(["item", itemId]).toArray();
+}
+
 /** 队首（已到重试时间的）；没有则 undefined */
 export async function headOutbox(now: number): Promise<OutboxRow | undefined> {
   return db.outbox

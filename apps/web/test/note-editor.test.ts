@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { BODY_HARD_LIMIT_BYTES, newUlid, type ItemMeta } from "@menote/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applySyncItems, createLocalNote, db, getDraft, listOutbox } from "../src/data/db";
+import { FAILED_RETRY_AT } from "../src/data/sync/backoff";
 import { createNoteEditor } from "../src/features/notes/model";
 
 function serverItem(id: string, rev: number): ItemMeta {
@@ -153,6 +154,23 @@ describe("编辑器自动保存控制器", () => {
 
     expect(editor.getSnapshot().saveState).toBe("pending"); // 绝不能是 synced
     expect((await getDraft(id))?.body).toBe("刚敲的内容"); // 内存内容已落盘，不会丢
+  });
+
+  it("队列项被移入失败列表时，状态是「上传失败」而不是一直「待上传」", async () => {
+    const id = newUlid();
+    await applySyncItems([serverItem(id, 3)]);
+    const editor = createNoteEditor({ itemId: id, now: () => 1000 });
+    await editor.load();
+
+    editor.onInput("内容");
+    await editor.tick(3500); // 入队
+    // 模拟不可重试错误：队列项被停到哨兵时间（不再被队首选中）
+    const rows = await listOutbox();
+    await db.outbox.update(rows[0]?.seq, { next_retry_at: FAILED_RETRY_AT, retries: 1, last_error: "422" });
+
+    await editor.tick(6000);
+
+    expect(editor.getSnapshot().saveState).toBe("failed");
   });
 
   it("失败与冲突会反映到状态栏状态上", async () => {    const id = newUlid();

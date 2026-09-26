@@ -19,8 +19,10 @@ import {
   getDraft,
   getEditableBody,
   getLocalItem,
+  listItemOutbox,
   saveDraft,
 } from "../../data/db";
+import { isParkedOutboxRow } from "../../data/sync/backoff";
 
 export type SaveState = "synced" | "pending" | "failed" | "conflict" | "blocked";
 
@@ -196,6 +198,15 @@ export function createNoteEditor(options: NoteEditorOptions): NoteEditorControll
   async function reconcileState(): Promise<void> {
     const item = await getLocalItem(options.itemId);
     const draft = await getDraft(options.itemId);
+
+    // 已被移入"失败列表"（不可重试错误）的队列项：状态必须是"上传失败"，不能再显示"待上传"。
+    // 否则用户看到的是"还在传"，实际上它永远不会自己再传了（M1 只提示；重试界面属 M2）。
+    const rows = await listItemOutbox(options.itemId);
+    if (rows.some(isParkedOutboxRow)) {
+      setState("failed");
+      return;
+    }
+
     const unsynced = item?.pending != null || draft != null;
 
     if (unsynced) {

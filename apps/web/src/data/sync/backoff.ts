@@ -27,3 +27,11 @@ export function backoffDelayMs(retries: number, random: () => number = Math.rand
  * 于是它不会阻塞队列里的其他项，界面仍能在 `listOutbox()` 里看到它与 `last_error`。
  */
 export const FAILED_RETRY_AT = Number.MAX_SAFE_INTEGER;
+
+/**
+ * 该队列项是否已被移入"失败列表"（不可重试错误，等人工重试）。
+ * 界面据此把条目显示成"上传失败"而不是一直"待上传"——否则用户看到的永远是"还在传"。
+ */
+export function isParkedOutboxRow(row: { next_retry_at: number }): boolean {
+  return row.next_retry_at >= FAILED_RETRY_AT;
+}

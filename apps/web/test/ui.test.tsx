@@ -217,6 +217,13 @@ describe("正文状态栏（M04-04/M04-05）", () => {
     // 破坏性后果必须保持可见，不能收进 InfoHint（DESIGN.md 禁止项 #8）
     expect(screen.getByText("已达硬上限，无法继续保存，请拆分内容")).toBeTruthy();
     expect(screen.getByText("已达硬上限")).toBeTruthy();
+
+    rerender(
+      <DocStatusBar
+        snapshot={{ bytes: 40, sizeLabel: "0.0 MB / 2 MB", sizeLevel: "ok", saveState: "failed" }}
+      />,
+    );
+    expect(screen.getByText("上传失败")).toBeTruthy();
   });
 });
 

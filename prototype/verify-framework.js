@@ -12,7 +12,7 @@
 
    覆盖：页面切换器 13 标签 / 逐页渲染不抛错 / 面板标题与标签一致 /
          区块名与说明文字齐全 / 顶栏 6 块且账户入口紧邻隐私锁胶囊 /
-         导航顺序与首页项 / 待办独立视图 /
+         导航顺序与首页项 / 隐私空间贴底且无小标题 / 待办独立视图 /
          Memo 去清单 / 录入框三模式与去加密 / 录入框行序（附加项在模式行之上）/
          主题（Claude 橙白双主题）/
          点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
@@ -164,6 +164,21 @@ step('导航按 v2 Q1 重排：含首页与独立的待办项（不再是「待�
     if (!nav.includes(x)) throw new Error('主导航描述缺「' + x + '」：' + nav);
   });
   if (!nav.includes('独立成项')) throw new Error('主导航未说明待办已独立：' + nav);
+});
+
+step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
+  gotoPage('功能栏');
+  const vn = $('#canvas [data-b="navVault"]');
+  if (!vn) throw new Error('缺隐私空间区块');
+  // 贴底：是所在容器最后一个元素
+  if (vn.parentElement.lastElementChild !== vn) throw new Error('隐私空间不是功能栏最底部的一段');
+  // 不再嵌在可滚动的导航容器内
+  const navBox = $('#canvas [data-b="navHome"]').parentElement;
+  if (navBox.contains(vn)) throw new Error('隐私空间仍嵌在导航容器里');
+  // 字典说明已更新
+  const n = blockText('navVault');
+  if (!n.includes('贴底')) throw new Error('隐私空间未标注「贴底」：' + n);
+  if (!n.includes('小标题')) throw new Error('隐私空间未标注去掉小标题：' + n);
 });
 step('Memo 页：只剩时间轴 / 瀑布流，清单已移出（v2 Q1 / M06-10）', () => {
   gotoPage('Memo');

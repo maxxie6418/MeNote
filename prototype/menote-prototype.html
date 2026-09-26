@@ -265,6 +265,9 @@ a{color:inherit;text-decoration:none}
 .vault-node.unlocked .lock-ic{color:var(--amber)}
 .vault-node .tagline{margin-left:auto;font-size:10.5px;color:var(--muted)}
 
+/* 隐私空间（2026-09-26 用户调整：去掉「隐私」小标题；按钮贴底固定在功能栏底部，不随导航滚动） */
+.fn-vault{flex:none;padding:8px 12px 10px;border-top:1px solid var(--line)}
+
 .tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 9px}
 
 /* ============================================================
@@ -828,15 +831,15 @@ table.data tbody tr:hover{background:var(--panel-2)}
           </div>
         </div>
 
-        <div class="group">
-          <div class="group-title"><svg class="ic"><use href="#i-lock"/></svg>隐私</div>
-          <a class="nav-item vault-node locked" id="vaultNode" data-fn="vault">
-            <svg class="ic lock-ic"><use href="#i-lock"/></svg><span>隐私空间</span>
-            <span class="tagline">已锁定</span>
-          </a>
-        </div>
       </div>
 
+      <!-- 隐私空间（2026-09-26 用户调整：去掉「隐私」小标题；按钮贴底固定在功能栏底部，不随导航滚动） -->
+      <div class="fn-vault">
+        <a class="nav-item vault-node locked" id="vaultNode" data-fn="vault">
+          <svg class="ic lock-ic"><use href="#i-lock"/></svg><span>隐私空间</span>
+          <span class="tagline">已锁定</span>
+        </a>
+      </div>
     </aside>
 
     <!-- ==================== 主操作区 ==================== -->

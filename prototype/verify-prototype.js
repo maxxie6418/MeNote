@@ -14,6 +14,7 @@
          笔记本双栏 / 正文层级归并 / Memo 两视图 / 待办列表与看板 /
          快速录入框三模式（无加密选项）/ 录入框行序（输入区 → 附加项 → 模式行）/
          新建直连笔记 / 笔记本新建入口 /
+         隐私空间贴底且无分组小标题 /
          表格更多菜单 / 滑出详情侧栏 / 隐私锁锁定与解锁 / Memo 隐私门禁 /
          恢复码流程 / 搜索 / 表格视图切换
    ============================================================ */
@@ -72,6 +73,33 @@ step('导航顺序：首页 · Memo · 待办 · 最近编辑 · 收藏 · 笔�
   const order = $$('.nav-item[data-fn]').map(el => el.dataset.fn).join('/');
   if (order !== 'home/memo/task/recent/starred/notebook/vault')
     throw new Error('导航顺序为 ' + order);
+});
+
+step('隐私空间：无分组小标题，贴底固定在功能栏底部（2026-09-26 调整）', () => {
+  // 不再有「隐私」小标题（标签分组的标题要保留）
+  const titles = $$('.group-title').map(el => el.textContent.trim());
+  if (titles.some(t => t.includes('隐私'))) throw new Error('仍有「隐私」小标题：' + titles.join(' / '));
+  if (!titles.some(t => t.includes('标签'))) throw new Error('标签分组标题被误删：' + titles.join(' / '));
+
+  const vn = $('#vaultNode');
+  if (!vn) throw new Error('缺隐私空间节点');
+  // 移出可滚动导航区
+  if (vn.closest('.fn-scroll')) throw new Error('隐私空间仍在可滚动导航区内');
+  // 贴底：放在专门的不收缩容器里，且该容器是功能栏最后一段
+  const holder = vn.parentElement;
+  if (!holder.classList.contains('fn-vault')) throw new Error('隐私空间未放在贴底容器 .fn-vault 里');
+  const kids = Array.from($('.fnbar').children);
+  if (kids[kids.length - 1] !== holder) throw new Error('隐私空间不是功能栏最底部的一段');
+
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const rule = css.match(/\.fn-vault\{[^}]*\}/);
+  if (!rule) throw new Error('未找到 .fn-vault 规则');
+  if (!/flex:\s*none/.test(rule[0])) throw new Error('.fn-vault 未锁定为不收缩：' + rule[0]);
+  if (!/border-top/.test(rule[0])) throw new Error('.fn-vault 缺分隔线：' + rule[0]);
+
+  // 导航末位仍是隐私空间
+  const order = $$('.nav-item[data-fn]').map(el => el.dataset.fn).join('/');
+  if (!order.endsWith('/vault')) throw new Error('隐私空间不在导航末位：' + order);
 });
 
 step('功能栏导航不含独立的回收站 / 设置项（7.4 修订，设置由顶栏账户入口进入）', () => {

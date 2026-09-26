@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeNote 移动端界面 · 三方案评审稿</title>
+<style>
+/* ============================================================
+   令牌（取值与 apps/web/src/app/theme/tokens.css 一致，DESIGN.md v1.2 §3.3 / §4.3）
+   本稿只是评审用的线框页，不是实现；实现时一律走 tokens.css。
+   ============================================================ */
+:root{
+  --bg:#ffffff; --bg-soft:#f7f7f7; --panel:#ffffff; --panel-2:#f2f2f2; --panel-3:#e8e8e8;
+  --line:#e0e0e0; --line-2:#c9c9c9;
+  --text:#1d1d1d; --text-2:#4a4a4a; --muted:#6b6b6b;
+  --primary:#f6821f; --primary-2:#e8720d;
+  --primary-soft:rgba(246,130,31,.12); --primary-line:rgba(246,130,31,.35);
+  --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+  --primary-ink:#b45309; --on-primary:#1d1d1d;
+  --amber:#8a5a00; --amber-soft:rgba(138,90,0,.11); --amber-line:rgba(138,90,0,.26);
+  --green:#1f7a4d; --green-soft:rgba(31,122,77,.11);
+  --red:#c0392b; --red-soft:rgba(192,57,43,.1);
+  --purple:#6d47a8; --purple-soft:rgba(109,71,168,.12);
+  --hairline:rgba(29,29,29,.022);
+  --topbar-bg:rgba(255,255,255,.86);
+  --scrim:rgba(29,29,29,.42);
+  --shadow-1:0 4px 14px rgba(29,29,29,.07);
+  --shadow-2:0 16px 40px rgba(29,29,29,.13);
+  --shadow-3:0 28px 70px rgba(29,29,29,.2);
+  --phone-frame:#2b2b2b;
+  --topbar-h:54px;
+  --radius-sm:6px; --radius:10px; --radius-lg:14px;
+  --fs-display:20px; --fs-title:17px; --fs-body-lg:14px; --fs-body:13px; --fs-small:12px; --fs-micro:11px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,"SF Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#161616; --bg-soft:#1e1e1e; --panel:#242424; --panel-2:#2d2d2d; --panel-3:#383838;
+  --line:#333333; --line-2:#4a4a4a;
+  --text:#f2f2f2; --text-2:#bdbdbd; --muted:#8f8f8f;
+  --primary:#f6821f; --primary-2:#fbad41;
+  --primary-soft:rgba(246,130,31,.16); --primary-line:rgba(246,130,31,.34);
+  --primary-ink:#f6821f; --on-primary:#161616;
+  --amber:#e0a458; --amber-soft:rgba(224,164,88,.14); --amber-line:rgba(224,164,88,.3);
+  --green:#5cbf8a; --green-soft:rgba(92,191,138,.14);
+  --red:#f07167; --red-soft:rgba(240,113,103,.14);
+  --purple:#b5a2e0; --purple-soft:rgba(181,162,224,.16);
+  --hairline:rgba(255,255,255,.02);
+  --topbar-bg:rgba(22,22,22,.86);
+  --scrim:rgba(0,0,0,.55);
+  --shadow-1:0 4px 14px rgba(0,0,0,.35);
+  --shadow-2:0 16px 40px rgba(0,0,0,.45);
+  --shadow-3:0 28px 70px rgba(0,0,0,.55);
+  --phone-frame:#3a3a3a;
+}
+
+/* ---------- 评审页外壳 ---------- */
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg-soft); color:var(--text); font-family:var(--sans);
+  font-size:var(--fs-body-lg); line-height:1.6;
+  padding:var(--sp-6) var(--sp-5) 64px;
+}
+.pagehead{max-width:1360px;margin:0 auto var(--sp-6)}
+.pagehead h1{font-size:var(--fs-display);margin:0 0 var(--sp-2);letter-spacing:.2px}
+.pagehead p{margin:0;color:var(--text-2);max-width:900px}
+.pagehead .meta{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-4);margin-top:var(--sp-3);color:var(--muted);font-size:var(--fs-small)}
+.row-actions{display:flex;gap:var(--sp-2);align-items:center;margin-top:var(--sp-4);flex-wrap:wrap}
+.btn{
+  font:inherit;font-size:var(--fs-body);min-height:34px;padding:0 var(--sp-4);white-space:nowrap;
+  border-radius:var(--radius);border:1px solid var(--line-2);background:var(--panel);
+  color:var(--text);cursor:pointer
+}
+.btn:hover{background:var(--panel-2)}
+.btn--primary{background:var(--primary-grad);border-color:transparent;color:var(--on-primary);font-weight:600}
+.btn--ghost{border-color:transparent;background:transparent;color:var(--primary-ink)}
+:focus-visible{outline:2px solid var(--primary-2);outline-offset:2px}
+
+.grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(392px,1fr));
+  gap:var(--sp-5);max-width:1360px;margin:0 auto;align-items:start
+}
+.grid--4{grid-template-columns:repeat(auto-fit,minmax(288px,1fr))}
+.plan{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);
+  padding:var(--sp-4);box-shadow:var(--shadow-1);flex:0 0 auto
+}
+.plan[data-picked="true"]{border-color:var(--primary);box-shadow:var(--shadow-2)}
+.plan__head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--sp-3);max-width:360px}
+.plan__head h2{margin:0;font-size:var(--fs-title)}
+.plan__tag{margin:var(--sp-1) 0 0;font-size:var(--fs-small);color:var(--muted)}
+.plan__note{margin:var(--sp-3) 0 0;max-width:360px;font-size:var(--fs-small);color:var(--text-2)}
+.plan__note b{color:var(--text)}
+.plan__note ul{margin:var(--sp-2) 0 0;padding-left:1.1em}
+.plan__note li{margin:2px 0}
+.legend{margin:var(--sp-3) 0 0;padding:0;list-style:none;max-width:360px;font-size:var(--fs-small);color:var(--text-2)}
+.legend li{display:flex;gap:var(--sp-2);margin:3px 0}
+.legend .num{flex:0 0 16px;color:var(--primary-ink);font-family:var(--mono);font-size:var(--fs-micro)}
+
+/* ---------- 手机框 ---------- */
+.phone{
+  --phone-w:360px; --phone-h:740px;
+  width:min(var(--phone-w),100%);height:var(--phone-h);margin-top:var(--sp-3);
+  background:var(--phone-frame);border-radius:34px;padding:7px;box-shadow:var(--shadow-3)
+}
+.screen{
+  position:relative;width:100%;height:100%;background:var(--bg);border-radius:27px;overflow:hidden;
+  display:flex;flex-direction:column;color:var(--text)
+}
+.phone--mini{--phone-w:280px;--phone-h:576px}
+
+/* 系统状态栏（非应用内容，仅示意） */
+.sysbar{flex:0 0 22px;display:flex;align-items:center;justify-content:space-between;padding:0 var(--sp-4);font-size:var(--fs-micro);color:var(--muted);font-family:var(--mono)}
+.sysbar .right{display:flex;gap:5px;align-items:center}
+
+/* ① 应用顶栏（用户所述「状态栏」：站名 + 头像） */
+.appbar{
+  flex:0 0 auto;min-height:var(--topbar-h);display:flex;align-items:center;gap:var(--sp-2);
+  padding:0 var(--sp-3) 0 var(--sp-4);border-bottom:1px solid var(--line);background:var(--topbar-bg)
+}
+.brand{display:flex;align-items:center;gap:var(--sp-2);font-weight:700;font-size:var(--fs-body-lg);letter-spacing:.2px}
+.brand__mark{width:22px;height:22px;border-radius:var(--radius-sm);background:var(--primary-grad)}
+.appbar .spacer{flex:1}
+.pill{
+  display:inline-flex;align-items:center;gap:var(--sp-1);height:30px;padding:0 var(--sp-3);
+  border-radius:99px;border:1px solid var(--green-soft);background:var(--green-soft);
+  color:var(--green);font-size:var(--fs-micro)
+}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.avatar{
+  width:30px;height:30px;border-radius:50%;background:var(--primary-grad);color:var(--on-primary);
+  display:flex;align-items:center;justify-content:center;font-size:var(--fs-small);font-weight:700;border:0
+}
+.slot-dashed{
+  border:1px dashed var(--primary-line);border-radius:99px;padding:2px 8px;font-size:var(--fs-micro);
+  color:var(--primary-ink);background:var(--primary-soft);white-space:nowrap
+}
+
+/* ---------- ② 快捷输入区 ---------- */
+.composer{
+  flex:0 0 auto;display:flex;flex-direction:column;gap:var(--sp-2);
+  padding:var(--sp-3);margin:var(--sp-3) var(--sp-3) 0;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-1);overflow:hidden;
+  transition:height .2s ease, margin .2s ease, padding .2s ease
+}
+.composer__top{display:flex;align-items:center;gap:var(--sp-2)}
+.composer__mode{display:flex;gap:2px;padding:2px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.composer__mode button{
+  font:inherit;font-size:var(--fs-micro);min-height:28px;padding:0 var(--sp-3);border:0;border-radius:4px;
+  background:transparent;color:var(--text-2);cursor:pointer
+}
+.composer__mode button[aria-pressed="true"]{background:var(--panel);color:var(--text);font-weight:600;box-shadow:var(--shadow-1)}
+.composer__body{flex:1;min-height:40px;display:flex;align-items:flex-start;color:var(--muted);font-size:var(--fs-body)}
+.composer__body .caret{color:var(--primary-ink)}
+.composer__extras{
+  flex:0 0 26px;height:26px;display:flex;gap:var(--sp-1);align-items:center;
+  overflow-x:auto;white-space:nowrap;font-size:var(--fs-micro)
+}
+.sw{
+  display:inline-flex;align-items:center;gap:var(--sp-1);height:20px;padding:0 var(--sp-2);
+  border-radius:99px;border:1px solid var(--line-2);background:var(--panel);color:var(--text-2);flex:0 0 auto
+}
+.sw[aria-pressed="true"]{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-ink)}
+.composer__foot{display:flex;align-items:center;gap:var(--sp-2)}
+.composer__hint{font-size:var(--fs-micro);color:var(--muted);flex:1}
+.btn-publish{
+  font:inherit;font-size:var(--fs-body);font-weight:600;height:31px;padding:0 var(--sp-4);border:0;
+  border-radius:var(--radius);background:var(--primary-grad);color:var(--on-primary);cursor:pointer
+}
+.handle{
+  align-self:center;width:38px;height:4px;border-radius:99px;background:var(--line-2);
+  border:0;padding:0;margin-top:-2px;cursor:pointer
+}
+
+/* 方案 A：展开 = 屏高约 1/3；收起 = 一行 44px */
+.plan-a .composer{height:33%}
+.plan-a .composer.is-collapsed{height:44px;padding:var(--sp-1) var(--sp-3);gap:0;justify-content:center}
+.plan-a .composer.is-collapsed .composer__top,
+.plan-a .composer.is-collapsed .composer__extras,
+.plan-a .composer.is-collapsed .composer__foot,
+.plan-a .composer.is-collapsed .handle{display:none}
+.plan-a .composer.is-collapsed .composer__body{min-height:0;align-items:center;font-size:var(--fs-body)}
+
+/* 方案 C：顶部常驻输入行，点开展开为面板 */
+.plan-c .composer{height:44px;padding:var(--sp-1) var(--sp-3);gap:0;justify-content:center;margin-bottom:0}
+.plan-c .composer .composer__top,
+.plan-c .composer .composer__extras,
+.plan-c .composer .composer__foot,
+.plan-c .composer .handle{display:none}
+.plan-c .composer .composer__body{min-height:0;align-items:center;font-size:var(--fs-body)}
+.plan-c .composer.is-open{height:33%;padding:var(--sp-3);gap:var(--sp-2);justify-content:flex-start}
+.plan-c .composer.is-open .composer__top{display:flex}
+.plan-c .composer.is-open .composer__extras{display:flex}
+.plan-c .composer.is-open .composer__foot{display:flex}
+.plan-c .composer.is-open .composer__body{min-height:40px;align-items:flex-start}
+
+/* 方案 B：底部常驻输入条 + 贴底输入面板 */
+.plan-b .composerbar{
+  flex:0 0 auto;min-height:52px;display:flex;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-1) var(--sp-3);border-top:1px solid var(--line);background:var(--panel)
+}
+.plan-b .composerbar .fake{
+  flex:1;min-height:36px;display:flex;align-items:center;padding:0 var(--sp-3);
+  border:1px solid var(--line-2);border-radius:99px;background:var(--bg-soft);
+  color:var(--muted);font-size:var(--fs-body);font:inherit;font-size:var(--fs-body);cursor:pointer;text-align:left
+}
+.plan-b .sheet{position:absolute;inset:0;display:none}
+.plan-b .sheet.is-open{display:block}
+.plan-b .sheet__scrim{position:absolute;inset:0;background:var(--scrim)}
+.plan-b .sheet__panel{
+  position:absolute;left:0;right:0;bottom:0;height:33%;
+  background:var(--panel);border-top:1px solid var(--line-2);
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--shadow-2);
+  display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-3)
+}
+.plan-b .sheet__grab{width:38px;height:4px;border-radius:99px;background:var(--line-2);align-self:center}
+
+/* ---------- ③ 三档切换（下划线页签，DESIGN.md §5.3/§2.5-4） ---------- */
+.tabs{
+  flex:0 0 auto;display:flex;gap:var(--sp-5);padding:0 var(--sp-4);
+  border-bottom:1px solid var(--line);background:var(--bg)
+}
+.tab{
+  position:relative;font:inherit;font-size:var(--fs-body);min-height:44px;padding:0 2px;
+  background:none;border:0;color:var(--text-2);cursor:pointer
+}
+.tab[aria-selected="true"]{color:var(--primary-ink);font-weight:600}
+.tab[aria-selected="true"]::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--primary);border-radius:2px
+}
+
+/* ---------- ④ 内容区（唯一滚动容器） ---------- */
+.content{
+  flex:1;min-height:0;overflow-y:auto;padding:var(--sp-3) var(--sp-4) var(--sp-6);
+  -webkit-overflow-scrolling:touch
+}
+.content>.pane{display:none}
+.content[data-active="home"]>[data-pane="home"],
+.content[data-active="notes"]>[data-pane="notes"],
+.content[data-active="memo"]>[data-pane="memo"]{display:block}
+
+.panehead{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-4) 0 var(--sp-2)}
+.panehead:first-child{margin-top:var(--sp-1)}
+.panehead h3{margin:0;font-size:var(--fs-body-lg);flex:1}
+.panehead .ghost{
+  font:inherit;font-size:var(--fs-small);color:var(--primary-ink);background:none;border:0;
+  min-height:32px;padding:0 var(--sp-1);cursor:pointer
+}
+.rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--sp-1)}
+.row{
+  display:flex;align-items:center;gap:var(--sp-3);min-height:52px;padding:var(--sp-2) var(--sp-3);
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)
+}
+.row__ico{flex:0 0 26px;height:26px;border-radius:var(--radius-sm);background:var(--panel-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--text-2)}
+.row__main{flex:1;min-width:0}
+.row__t{font-size:var(--fs-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row__m{font-size:var(--fs-micro);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mark{
+  flex:0 0 auto;font-size:var(--fs-micro);color:var(--primary-ink);
+  border:1px solid var(--primary-line);background:var(--primary-soft);border-radius:99px;padding:0 6px;line-height:18px
+}
+
+/* 文件夹树 */
+.tree{list-style:none;margin:0;padding:0}
+.tree ul{list-style:none;margin:0;padding-left:var(--sp-4)}
+.tnode{
+  display:flex;align-items:center;gap:var(--sp-2);min-height:48px;padding:var(--sp-1) var(--sp-2);
+  border-radius:var(--radius);color:var(--text)
+}
+.tnode--on{background:var(--primary-soft);color:var(--primary-ink);font-weight:600}
+.tnode .tw{width:14px;text-align:center;color:var(--muted);font-size:var(--fs-micro)}
+.tnode .cnt{margin-left:auto;font-size:var(--fs-micro);color:var(--muted);font-family:var(--mono)}
+.tleaf{
+  display:flex;align-items:center;gap:var(--sp-2);min-height:44px;padding:var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-5);
+  font-size:var(--fs-small);color:var(--text-2)
+}
+
+/* Memo 时间轴 */
+.daylab{
+  position:sticky;top:0;z-index:1;background:var(--bg);padding:var(--sp-2) 0 var(--sp-1);
+  font-size:var(--fs-micro);color:var(--muted);font-family:var(--mono)
+}
+.memo{
+  padding:var(--sp-3);background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);margin-bottom:var(--sp-2)
+}
+.memo__head{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1)}
+.memo__time{font-family:var(--mono);font-size:var(--fs-micro);color:var(--muted)}
+.memo p{margin:0;font-size:var(--fs-body);line-height:1.65}
+.memo__foot{display:flex;gap:var(--sp-1);margin-top:var(--sp-2);flex-wrap:wrap}
+.chip{
+  font-size:var(--fs-micro);line-height:19px;padding:0 var(--sp-2);border-radius:99px;
+  background:var(--purple-soft);color:var(--purple);border:1px solid transparent
+}
+.chip--task{background:var(--amber-soft);color:var(--amber)}
+.chip--pin{background:var(--panel-2);color:var(--text-2);border-color:var(--line)}
+
+/* 空状态 */
+.empty{
+  display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-6) var(--sp-4);text-align:center
+}
+.empty__ico{width:50px;height:50px;border-radius:var(--radius);background:var(--panel-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.empty__t{font-size:var(--fs-title);font-weight:600}
+.empty__h{font-size:var(--fs-small);color:var(--text-2);max-width:280px}
+
+/* 键盘示意 / 标注 */
+.kbd{
+  flex:0 0 auto;height:280px;background:var(--panel-2);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(10,1fr);gap:5px;padding:var(--sp-2) var(--sp-1)
+}
+.kbd i{background:var(--panel);border-radius:var(--radius-sm);display:block}
+.kbd .lbl{grid-column:1/-1;height:auto;background:none;border-radius:0;text-align:center;color:var(--muted);font-size:var(--fs-micro);font-style:normal}
+.flag{
+  position:absolute;left:var(--sp-2);bottom:var(--sp-2);right:var(--sp-2);
+  background:var(--red-soft);color:var(--red);border:1px solid var(--red);
+  border-radius:var(--radius);padding:var(--sp-1) var(--sp-2);font-size:var(--fs-micro);text-align:center
+}
+.sliver{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:var(--fs-micro);border-bottom:1px dashed var(--line)
+}
+
+/* ---------- 底部说明 ---------- */
+.section{max-width:1360px;margin:var(--sp-6) auto 0;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-5);box-shadow:var(--shadow-1)}
+.section h2{font-size:var(--fs-title);margin:0 0 var(--sp-2)}
+.section h3{font-size:var(--fs-body-lg);margin:var(--sp-5) 0 var(--sp-2)}
+.section p,.section li{font-size:var(--fs-body);color:var(--text-2)}
+.section li{margin:var(--sp-1) 0}
+.section code{font-family:var(--mono);font-size:var(--fs-small);background:var(--panel-2);border-radius:4px;padding:1px 5px;color:var(--text)}
+.section table{border-collapse:collapse;width:100%;margin-top:var(--sp-2)}
+.section th,.section td{border:1px solid var(--line);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-small);text-align:left;vertical-align:top}
+.section th{background:var(--panel-2);color:var(--text);font-weight:600}
+.tag{display:inline-block;font-size:var(--fs-micro);font-family:var(--mono);border-radius:99px;padding:0 7px;line-height:18px;border:1px solid var(--line-2);color:var(--text-2)}
+.tag--warn{border-color:var(--amber-line);background:var(--amber-soft);color:var(--amber)}
+.tag--danger{border-color:var(--red);background:var(--red-soft);color:var(--red)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="pagehead">
+  <h1>MeNote 移动端界面 · 三方案评审稿</h1>
+  <p>
+    按你的描述做的第一版：顶栏（站名 + 头像）→ 快捷输入区（展开约 1/3 屏，选完档位向上缩回）→ 三档切换 → 内容区随档位变化（首页 = 最近编辑 + 收藏；笔记 = 文件夹树；Memo = 时间轴）。
+    三个方案可以点：切档位、展开/收起输入区、切明暗主题，都是可交互的。
+  </p>
+  <div class="meta">
+    <span>草稿 · 2026-09-26</span>
+    <span>令牌取值同 <code>tokens.css</code></span>
+    <span>手机框 360 × 740</span>
+    <span>不含任何实现代码，也不改仓库其它文件</span>
+  </div>
+  <div class="row-actions">
+    <button class="btn" type="button" id="themeToggle">切换深色主题</button>
+    <button class="btn btn--ghost" type="button" id="expandAll">全部展开输入区</button>
+    <button class="btn btn--ghost" type="button" id="collapseAll">全部收起输入区</button>
+    <span class="row-actions" style="color:var(--muted);font-size:var(--fs-small)">点方案卡右上角的「选这个」记录你的选择</span>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- ========================= 方案 A ========================= -->
+  <section class="plan plan-a" data-plan="A">
+    <div class="plan__head">
+      <div>
+        <h2>方案 A · 输入优先（你的原构思）</h2>
+        <p class="plan__tag">顶栏 → 输入区（展开约 1/3 屏）→ 三档页签 → 内容</p>
+      </div>
+      <button class="btn" type="button" data-pick="A">选这个</button>
+    </div>
+
+    <div class="phone">
+      <div class="screen">
+        <div class="sysbar"><span>9:41</span><span class="right">•••  ▮</span></div>
+
+        <header class="appbar">
+          <span class="brand"><span class="brand__mark"></span>MeNote</span>
+          <span class="spacer"></span>
+          <span class="slot-dashed" title="DESIGN.md §2.5-1 顶栏 6 块是桌面不变量，移动端是否沿用待确认">同步胶囊?</span>
+          <button class="avatar" type="button" aria-label="账户与设置">老</button>
+        </header>
+
+        <div class="composer" data-composer>
+          <div class="composer__top">
+            <div class="composer__mode" role="group" aria-label="录入模式">
+              <button type="button" aria-pressed="false">笔记</button>
+              <button type="button" aria-pressed="true">Memo</button>
+              <button type="button" aria-pressed="false">待办</button>
+            </div>
+            <span class="spacer" style="flex:1"></span>
+            <button class="handle" type="button" aria-label="收起输入区" data-collapse></button>
+          </div>
+          <div class="composer__body"><span>随手记点什么…<span class="caret">|</span></span></div>
+          <div class="composer__extras">
+            <span class="sw" aria-pressed="false">截止</span>
+            <span class="sw" aria-pressed="false">优先级 中</span>
+            <span class="sw" aria-pressed="true">#产品</span>
+            <span class="sw" aria-pressed="false">设为清单?</span>
+          </div>
+          <div class="composer__foot">
+            <span class="composer__hint">Ctrl/Cmd + Enter 发布</span>
+            <button class="btn-publish" type="button">发布</button>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="浏览">
+          <button class="tab" type="button" role="tab" data-tab="home" aria-selected="false">首页</button>
+          <button class="tab" type="button" role="tab" data-tab="notes" aria-selected="false">笔记</button>
+          <button class="tab" type="button" role="tab" data-tab="memo" aria-selected="true">Memo</button>
+        </div>
+
+        <div class="content" data-active="memo"></div>
+      </div>
+    </div>
+
+    <p class="plan__note">
+      <b>为什么它是「最省事」的一版</b>：桌面功能栏本身就是「新建按钮 → 快速录入框 → 导航区（浏览三段）」自上而下，窄屏把它竖着摞起来就是这套顺序——骨架同构，不用另起一套（DESIGN.md 禁止项 #5）。
+    </p>
+    <ul class="legend">
+      <li><span class="num">01</span><span>顶栏：站名 + 头像（你定的，暂定两块）</span></li>
+      <li><span class="num">02</span><span>输入区展开 ≈ 33%（244px），三行结构与桌面录入框一致</span></li>
+      <li><span class="num">03</span><span>页签：<b>下划线</b>；录入模式：<b>盒式分段</b>。两者相邻，造型必须能一眼分开（§2.5-4）</span></li>
+      <li><span class="num">04</span><span>内容区是这一屏唯一的滚动容器（§2.7）</span></li>
+    </ul>
+    <p class="plan__note">
+      <b>要你拍板的点</b>
+      <ul>
+        <li>进 App 的<b>初始态</b>：展开（邀请你随手记）还是收起（先看内容）？</li>
+        <li>「向上缩回」是就地收成一行（本稿实现），还是整体滑出顶部只留页签？</li>
+        <li>键盘弹起时输入区 + 页签已占 342px，内容只剩约 118px —— 见下方「关键态」</li>
+      </ul>
+    </p>
+  </section>
+
+  <!-- ========================= 方案 B ========================= -->
+  <section class="plan plan-b" data-plan="B">
+    <div class="plan__head">
+      <div>
+        <h2>方案 B · 内容优先（我的建议之一）</h2>
+        <p class="plan__tag">顶栏 → 三档页签 → 内容全屏 → 底部常驻输入条</p>
+      </div>
+      <button class="btn" type="button" data-pick="B">选这个</button>
+    </div>
+
+    <div class="phone">
+      <div class="screen">
+        <div class="sysbar"><span>9:41</span><span class="right">•••  ▮</span></div>
+
+        <header class="appbar">
+          <span class="brand"><span class="brand__mark"></span>MeNote</span>
+          <span class="spacer"></span>
+          <span class="pill"><span class="dot"></span>已同步</span>
+          <button class="avatar" type="button" aria-label="账户与设置">老</button>
+        </header>
+
+        <div class="tabs" role="tablist" aria-label="浏览">
+          <button class="tab" type="button" role="tab" data-tab="home" aria-selected="false">首页</button>
+          <button class="tab" type="button" role="tab" data-tab="notes" aria-selected="false">笔记</button>
+          <button class="tab" type="button" role="tab" data-tab="memo" aria-selected="true">Memo</button>
+        </div>
+
+        <div class="content" data-active="memo"></div>
+
+        <div class="composerbar">
+          <button class="fake" type="button" data-open-sheet>随手记点什么…</button>
+          <button class="avatar" type="button" aria-label="新建" style="width:36px;height:36px">+</button>
+        </div>
+
+        <div class="sheet" data-sheet>
+          <div class="sheet__scrim" data-close-sheet></div>
+          <div class="sheet__panel">
+            <div class="sheet__grab"></div>
+            <div class="composer__top">
+              <div class="composer__mode" role="group" aria-label="录入模式">
+                <button type="button" aria-pressed="false">笔记</button>
+                <button type="button" aria-pressed="true">Memo</button>
+                <button type="button" aria-pressed="false">待办</button>
+              </div>
+            </div>
+            <div class="composer__body" style="flex:1"><span>随手记点什么…<span class="caret">|</span></span></div>
+            <div class="composer__extras">
+              <span class="sw" aria-pressed="true">#产品</span>
+              <span class="sw" aria-pressed="false">设为清单?</span>
+            </div>
+            <div class="composer__foot">
+              <span class="composer__hint">Ctrl/Cmd + Enter 发布</span>
+              <button class="btn-publish" type="button" data-close-sheet>发布</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="plan__note">
+      <b>为什么推荐它</b>：移动端的稀缺资源是纵向空间。输入区常态只占 52px，内容是主角；要记东西时点一下从底部升起（贴着键盘），发布或点遮罩收起。
+    </p>
+    <ul class="legend">
+      <li><span class="num">01</span><span>页签紧贴顶栏 —— 与桌面「顶部同级导航」的位置关系一致（§5.3）</span></li>
+      <li><span class="num">02</span><span>内容区首屏拿到 100% 可用高度</span></li>
+      <li><span class="num">03</span><span>输入面板贴底升起，键盘弹起时天然在其下方，不需要额外避让</span></li>
+      <li><span class="num">04</span><span>底栏 + 安全区 <code>env(safe-area-inset-bottom)</code> 是移动端标准写法</span></li>
+    </ul>
+    <p class="plan__note">
+      <b>代价</b>：与你的原构思相反（输入在底不在顶）；「随手记」的随手感略弱于常驻大输入框。
+    </p>
+  </section>
+
+  <!-- ========================= 方案 C ========================= -->
+  <section class="plan plan-c" data-plan="C">
+    <div class="plan__head">
+      <div>
+        <h2>方案 C · 折中（我的建议之二）</h2>
+        <p class="plan__tag">顶栏 → 三档页签 → 顶部常驻一行输入 → 内容</p>
+      </div>
+      <button class="btn" type="button" data-pick="C">选这个</button>
+    </div>
+
+    <div class="phone">
+      <div class="screen">
+        <div class="sysbar"><span>9:41</span><span class="right">•••  ▮</span></div>
+
+        <header class="appbar">
+          <span class="brand"><span class="brand__mark"></span>MeNote</span>
+          <span class="spacer"></span>
+          <span class="slot-dashed">同步胶囊?</span>
+          <button class="avatar" type="button" aria-label="账户与设置">老</button>
+        </header>
+
+        <div class="tabs" role="tablist" aria-label="浏览">
+          <button class="tab" type="button" role="tab" data-tab="home" aria-selected="false">首页</button>
+          <button class="tab" type="button" role="tab" data-tab="notes" aria-selected="false">笔记</button>
+          <button class="tab" type="button" role="tab" data-tab="memo" aria-selected="true">Memo</button>
+        </div>
+
+        <div class="composer" data-composer data-toggle-open>
+          <div class="composer__top">
+            <div class="composer__mode" role="group" aria-label="录入模式">
+              <button type="button" aria-pressed="false">笔记</button>
+              <button type="button" aria-pressed="true">Memo</button>
+              <button type="button" aria-pressed="false">待办</button>
+            </div>
+          </div>
+          <div class="composer__body"><span>随手记点什么…</span></div>
+          <div class="composer__extras">
+            <span class="sw" aria-pressed="true">#产品</span>
+            <span class="sw" aria-pressed="false">设为清单?</span>
+          </div>
+          <div class="composer__foot">
+            <span class="composer__hint">Ctrl/Cmd + Enter 发布</span>
+            <button class="btn-publish" type="button">发布</button>
+          </div>
+        </div>
+
+        <div class="content" data-active="memo"></div>
+      </div>
+    </div>
+
+    <p class="plan__note">
+      <b>它想解决什么</b>：保留你在 A 里想要的「输入框在页签上面、随时能记」，但常态只留一行（44px），点一下才展开成 33% 的面板——不牺牲内容首屏，也不把输入入口藏到屏幕另一端。
+    </p>
+    <ul class="legend">
+      <li><span class="num">01</span><span>页签在输入行之上：导航优先级高于录入，符合「先在哪、再干什么」</span></li>
+      <li><span class="num">02</span><span>输入行常驻，等于把桌面的「录入框永远可见」搬过来</span></li>
+      <li><span class="num">03</span><span>展开是就地撑开（内容被下推），不是浮层，不需要遮罩</span></li>
+    </ul>
+    <p class="plan__note">
+      <b>代价</b>：比 A 多一个「点开」的动作；展开时内容被推到屏幕外，收起才能看全 —— 但这点和 A 的收起态是一样的。
+    </p>
+  </section>
+</main>
+
+<!-- ========================= 关键态 ========================= -->
+<section class="section">
+  <h2>关键态（这些地方最容易翻车，先看清楚再选）</h2>
+
+  <div class="grid grid--4" style="margin-top:var(--sp-4)">
+
+    <div class="plan plan-a">
+      <div class="plan__head"><div>
+        <h2 style="font-size:var(--fs-body-lg)">A · 输入展开 + 键盘</h2>
+        <p class="plan__tag">内容可见区只剩约 118px</p>
+      </div></div>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <header class="appbar" style="min-height:44px"><span class="brand" style="font-size:var(--fs-body)"><span class="brand__mark" style="width:18px;height:18px"></span>MeNote</span><span class="spacer"></span><span class="avatar" style="width:26px;height:26px;font-size:var(--fs-micro)">老</span></header>
+          <div class="composer" style="height:171px;margin:var(--sp-2) var(--sp-2) 0">
+            <div class="composer__top"><div class="composer__mode"><button type="button" aria-pressed="true">Memo</button><button type="button" aria-pressed="false">待办</button></div></div>
+            <div class="composer__body"><span>随手记点什么…</span></div>
+            <div class="composer__extras"><span class="sw" aria-pressed="false">截止</span><span class="sw" aria-pressed="false">优先级 中</span></div>
+            <div class="composer__foot"><span class="composer__hint">发布</span><button class="btn-publish" type="button" style="height:27px">发布</button></div>
+          </div>
+          <div class="tabs" style="gap:var(--sp-4)"><button class="tab" type="button" aria-selected="true" style="min-height:38px">首页</button><button class="tab" type="button" aria-selected="false" style="min-height:38px">笔记</button><button class="tab" type="button" aria-selected="false" style="min-height:38px">Memo</button></div>
+          <div class="sliver">内容区 ≈118px</div>
+          <div class="kbd"><span class="lbl">系统键盘（示意，约 280px）</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <p class="plan__note">打字时确实不需要看内容，所以不算坏；但<b>模式附加项（截止 / 优先级）必须挤进这 244px 内</b>，不能靠滚动找。</p>
+    </div>
+
+    <div class="plan plan-c">
+      <div class="plan__head"><div>
+        <h2 style="font-size:var(--fs-body-lg)">C · 输入展开 + 键盘</h2>
+        <p class="plan__tag">同 A，但页签始终在输入之上</p>
+      </div></div>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <header class="appbar" style="min-height:44px"><span class="brand" style="font-size:var(--fs-body)"><span class="brand__mark" style="width:18px;height:18px"></span>MeNote</span><span class="spacer"></span><span class="avatar" style="width:26px;height:26px;font-size:var(--fs-micro)">老</span></header>
+          <div class="tabs" style="gap:var(--sp-4)"><button class="tab" type="button" aria-selected="true" style="min-height:38px">首页</button><button class="tab" type="button" aria-selected="false" style="min-height:38px">笔记</button><button class="tab" type="button" aria-selected="false" style="min-height:38px">Memo</button></div>
+          <div class="composer" style="height:171px;margin:var(--sp-2) var(--sp-2) 0">
+            <div class="composer__top"><div class="composer__mode"><button type="button" aria-pressed="true">Memo</button><button type="button" aria-pressed="false">待办</button></div></div>
+            <div class="composer__body"><span>随手记点什么…</span></div>
+            <div class="composer__extras"><span class="sw" aria-pressed="false">设为清单?</span></div>
+            <div class="composer__foot"><span class="composer__hint">发布</span><button class="btn-publish" type="button" style="height:27px">发布</button></div>
+          </div>
+          <div class="sliver">内容区 ≈118px</div>
+          <div class="kbd"><span class="lbl">系统键盘（示意）</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <p class="plan__note">差别很小，但页签位置固定意味着<b>切档不会让导航跳走</b>——A 里输入区一收一放，页签会上下移动。</p>
+    </div>
+
+    <div class="plan plan-b">
+      <div class="plan__head"><div>
+        <h2 style="font-size:var(--fs-body-lg)">B · 输入面板 + 键盘</h2>
+        <p class="plan__tag">面板贴键盘，内容区被遮</p>
+      </div></div>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <header class="appbar" style="min-height:44px"><span class="brand" style="font-size:var(--fs-body)"><span class="brand__mark" style="width:18px;height:18px"></span>MeNote</span><span class="spacer"></span><span class="avatar" style="width:26px;height:26px;font-size:var(--fs-micro)">老</span></header>
+          <div class="tabs" style="gap:var(--sp-4)"><button class="tab" type="button" aria-selected="true" style="min-height:38px">首页</button><button class="tab" type="button" aria-selected="false" style="min-height:38px">笔记</button><button class="tab" type="button" aria-selected="false" style="min-height:38px">Memo</button></div>
+          <div class="content" data-active="memo" style="padding:var(--sp-3)"></div>
+          <div class="kbd" style="height:300px;background:var(--panel-2)"><span class="lbl" style="color:var(--text-2)">输入面板（贴键盘升起）+ 系统键盘</span><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i style="background:var(--primary-soft)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <p class="plan__note">输入时看不到内容，但<b>收起来就立刻回到全屏内容</b>，不存在「常态被占掉 244px」的问题。</p>
+    </div>
+
+    <div class="plan">
+      <div class="plan__head"><div>
+        <h2 style="font-size:var(--fs-body-lg)">空状态（收藏为空）</h2>
+        <p class="plan__tag">§5.4-3：必须给「为什么空 + 下一步」</p>
+      </div></div>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <div class="content" data-active="empty" style="padding:var(--sp-4)">
+            <div class="empty">
+              <span class="empty__ico">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 4l2.5 5.2 5.5.8-4 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4-3.9 5.5-.8z"/></svg>
+              </span>
+              <span class="empty__t">还没有收藏的笔记</span>
+              <span class="empty__h">在条目的更多菜单里点「收藏」，它就会出现在这里。</span>
+              <button class="btn" type="button">去笔记里看看</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="plan__note">三个方案共用同一套空状态与文案口径，不受布局选择影响。</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========================= 冲突与待确认 ========================= -->
+<section class="section">
+  <h2>和你现有定稿冲突的地方（我没自己决定，先摆出来）</h2>
+
+  <table>
+    <thead><tr><th>#</th><th>你的描述</th><th>现有定稿</th><th>我的建议</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>三档 = <b>首页 / 笔记 / Memo</b></td>
+        <td>桌面浏览三段 = <b>首页 / Memo / 待办</b>（<code>DESIGN.md</code> §2.5-4、<code>NavSegmented.tsx</code>）。笔记侧（最近编辑 / 收藏 / 笔记本 / 标签）是<b>另一层</b>导航，不是三段之一</td>
+        <td>把「笔记」提到三段，等于<b>待办没有入口</b>。三选一：① 三段变四段（首页 / 笔记 / Memo / 待办，窄屏放得下但偏挤）；② 保持你的三段，「待办」进笔记页的子筛选；③ 待办移到顶栏或「更多」菜单。<b>我倾向 ①</b>——待办已经做完了（M2-5），藏成二级入口会掉使用率</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td>顶栏只有站名 + 头像</td>
+        <td>§2.5-1：顶栏恒为 6 块、顺序不可变，且有脚本断言（品牌 · 面包屑 · 搜索框 · 同步胶囊 · 隐私锁胶囊 · 账户）</td>
+        <td>窄屏塞 6 块不现实，我认为<b>移动端应当另立一条参数</b>而不是硬套：保留「站名 + 同步胶囊 + 头像」，搜索改为内容区入口（或长按唤起）。这需要你确认，因为改的是一条【已定】不变量。稿子里我留了虚框占位，没有擅自塞进去</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>「三档切换按钮」</td>
+        <td>§5.3：顶部同级导航用<b>下划线页签</b>；录入框模式切换用<b>盒式分段控件</b>，两者不得合并、且相邻时必须能一眼区分（§2.5-4）</td>
+        <td>已按此实现：页签是下划线，录入模式是盒式。移动端若把这两个三档做成同一种按钮，就会同时踩到 §5.3 和 §2.5-4</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td>——</td>
+        <td>§2.4：窄屏 / 移动端布局【后续定】，禁止项 #16 禁止在定型前自行发明移动端布局</td>
+        <td>本稿正是「定型这件事」的过程稿，所以放在 <code>docs/scratch/</code>，不进 <code>prototype/</code>、不改 <code>DESIGN.md</code>。你确认方案后我再落 <code>docs/modules/</code> 的移动端界面稿</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>另外三个需要你拍板的小问题</h3>
+  <ul>
+    <li><b>初始态</b>：进 App 时输入区是展开（方案 A）还是收起？这决定第一眼看到的是输入框还是内容。</li>
+    <li><b>「向上缩回」的准确意思</b>：就地收成一行（本稿），还是整体滑出屏幕顶部、只留页签？</li>
+    <li><b>文件放哪</b>：这版 HTML 我放在 <code>docs/scratch/</code>。定稿后是移进 <code>prototype/</code>（和现有两个原型并列），还是只留 <code>docs/modules/</code> 的 md 稿、HTML 作为附件一起归档？</li>
+  </ul>
+
+  <h3>我的建议</h3>
+  <p>
+    如果「随手记」是这个 App 的高频动作（桌面把录入框放进功能栏最上方，说明它是），<b>选 A</b>：骨架与桌面同构，改动最小，你描述的行为也最自然。
+    如果第一眼看到内容更重要，<b>选 C</b>：保留顶部输入行，但把 244px 的常态占用换成 44px。
+    如果想让内容区永远吃满屏幕，<b>选 B</b>：代价是输入入口离开顶部，与桌面骨架的对应关系最弱。
+  </p>
+  <p>
+    三者可以混：例如 <b>A 的骨架 + B 的收起态（44px 底栏）</b>——常态是底栏，向上滑出顶部大输入区。要不要我把这个混搭也画出来，你说一声。
+  </p>
+</section>
+
+<script>
+/* ---------------- 三个档位的内容（三方案共用） ---------------- */
+const ICON_NOTE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg>';
+const ICON_FOLDER = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg>';
+
+function row(title, meta, mark) {
+  return '<li class="row" tabindex="0"><span class="row__ico">' + ICON_NOTE + '</span>' +
+    '<span class="row__main"><span class="row__t">' + title + '</span><span class="row__m">' + meta + '</span></span>' +
+    (mark ? '<span class="mark">' + mark + '</span>' : '') + '</li>';
+}
+function tnode(label, count, on, open) {
+  return '<li><div class="tnode' + (on ? ' tnode--on' : '') + '" tabindex="0">' +
+    '<span class="tw">' + (open ? '▾' : '▸') + '</span>' + ICON_FOLDER +
+    '<span>' + label + '</span><span class="cnt">' + count + '</span></div>';
+}
+function tleaf(label) { return '<div class="tleaf" tabindex="0">' + ICON_NOTE + '<span>' + label + '</span></div>'; }
+function memo(time, text, chips) {
+  return '<article class="memo"><div class="memo__head"><span class="memo__time">' + time + '</span>' +
+    (chips && chips.pin ? '<span class="mark">置顶</span>' : '') + '</div><p>' + text + '</p>' +
+    '<div class="memo__foot">' + (chips ? chips.html : '') + '</div></article>';
+}
+
+const PANES = {
+  home:
+    '<div class="panehead"><h3>最近编辑</h3><button class="ghost" type="button">全部</button></div>' +
+    '<ul class="rows">' +
+      row('M2 里程碑排期与遗留项', '12 分钟前') +
+      row('Cloudflare Workers 部署记录', '今天 09:40') +
+      row('读书笔记：如何阅读一本书', '昨天 21:05') +
+      row('家庭采购清单', '9 月 24 日', '置顶') +
+    '</ul>' +
+    '<div class="panehead"><h3>收藏</h3></div>' +
+    '<ul class="rows">' +
+      row('隐私锁的文案口径', '9 月 22 日', '收藏') +
+      row('会议纪要 0918', '9 月 18 日', '收藏') +
+    '</ul>',
+
+  notes:
+    '<div class="panehead"><h3>笔记本</h3><button class="ghost" type="button">＋ 新建文件夹</button></div>' +
+    '<ul class="tree">' +
+      tnode('工作', '12', false, true) +
+        '<ul>' +
+          tnode('工作日志', '5', true, true) +
+            '<ul>' + tleaf('0912 周会') + tleaf('0919 周会') + tleaf('0926 评审') + '</ul>' +
+          tnode('会议纪要', '7', false, false) +
+        '</ul>' +
+      '</li>' +
+      tnode('学习', '8', false, false) + '</li>' +
+      tnode('生活', '4', false, false) + '</li>' +
+    '</ul>',
+
+  memo:
+    '<div class="daylab">今天 · 9 月 26 日</div>' +
+    memo('09:12', '把移动端的三段导航想清楚了，输入框在页签上面，切档之后自动收起来。',
+      { html: '<span class="chip">#产品</span>' }) +
+    memo('08:40', '买牛奶、鸡蛋、面包', { pin: true, html: '<span class="chip chip--task">清单</span><span class="chip chip--pin">待办</span>' }) +
+    '<div class="daylab">昨天 · 9 月 25 日</div>' +
+    memo('21:05', '读完《如何阅读一本书》第三章，分析阅读的四个问题要抄进笔记。',
+      { html: '<span class="chip">#读书</span>' }),
+  empty: ''
+};
+
+/* ---------------- 交互 ---------------- */
+document.querySelectorAll('.content').forEach(function (content) {
+  var phone = content.closest('.screen');
+  Object.keys(PANES).forEach(function (key) {
+    if (key === 'empty') return;
+    var pane = document.createElement('div');
+    pane.className = 'pane';
+    pane.setAttribute('data-pane', key);
+    pane.innerHTML = PANES[key];
+    content.appendChild(pane);
+  });
+});
+
+document.querySelectorAll('.tabs').forEach(function (tabs) {
+  var screen = tabs.closest('.screen');
+  if (!screen) return;
+  var content = screen.querySelector('.content');
+  var plan = screen.closest('.plan');
+  tabs.querySelectorAll('[data-tab]').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.querySelectorAll('[data-tab]').forEach(function (t) { t.setAttribute('aria-selected', 'false'); });
+      tab.setAttribute('aria-selected', 'true');
+      if (content) { content.setAttribute('data-active', tab.dataset.tab); content.scrollTop = 0; }
+      var composer = screen.querySelector('[data-composer]');
+      if (!composer || !plan) return;
+      /* 方案 A：选完档位，输入区向上缩回 */
+      if (plan.classList.contains('plan-a')) composer.classList.add('is-collapsed');
+      /* 方案 C：输入行就地收起 */
+      if (plan.classList.contains('plan-c')) composer.classList.remove('is-open');
+    });
+  });
+});
+
+document.querySelectorAll('[data-collapse]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    btn.closest('[data-composer]').classList.add('is-collapsed');
+  });
+});
+document.querySelectorAll('.plan-a [data-composer]').forEach(function (composer) {
+  composer.addEventListener('click', function (event) {
+    if (composer.classList.contains('is-collapsed') && !event.target.closest('[data-collapse]')) {
+      composer.classList.remove('is-collapsed');
+    }
+  });
+});
+document.querySelectorAll('[data-toggle-open]').forEach(function (composer) {
+  composer.addEventListener('click', function (event) {
+    if (event.target.closest('.btn-publish') || event.target.closest('.sw') ||
+        event.target.closest('.composer__mode')) return;
+    composer.classList.toggle('is-open');
+  });
+});
+document.querySelectorAll('[data-open-sheet]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    btn.closest('.screen').querySelector('[data-sheet]').classList.add('is-open');
+  });
+});
+document.querySelectorAll('[data-close-sheet]').forEach(function (el) {
+  el.addEventListener('click', function () {
+    el.closest('.screen').querySelector('[data-sheet]').classList.remove('is-open');
+  });
+});
+document.querySelectorAll('.composer__mode').forEach(function (group) {
+  group.querySelectorAll('button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      group.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+      btn.setAttribute('aria-pressed', 'true');
+    });
+  });
+});
+document.querySelectorAll('.sw').forEach(function (sw) {
+  sw.addEventListener('click', function () {
+    sw.setAttribute('aria-pressed', sw.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  });
+});
+
+var root = document.documentElement;
+document.getElementById('themeToggle').addEventListener('click', function (event) {
+  var dark = root.getAttribute('data-theme') === 'dark';
+  root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  event.target.textContent = dark ? '切换深色主题' : '切换浅色主题';
+});
+document.getElementById('expandAll').addEventListener('click', function () {
+  document.querySelectorAll('.plan-a [data-composer]').forEach(function (c) { c.classList.remove('is-collapsed'); });
+  document.querySelectorAll('.plan-c [data-composer]').forEach(function (c) { c.classList.add('is-open'); });
+});
+document.getElementById('collapseAll').addEventListener('click', function () {
+  document.querySelectorAll('.plan-a [data-composer]').forEach(function (c) { c.classList.add('is-collapsed'); });
+  document.querySelectorAll('.plan-c [data-composer]').forEach(function (c) { c.classList.remove('is-open'); });
+});
+document.querySelectorAll('[data-pick]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var plan = btn.closest('.plan');
+    var on = plan.getAttribute('data-picked') === 'true';
+    document.querySelectorAll('.plan').forEach(function (p) { p.removeAttribute('data-picked'); p.querySelectorAll('[data-pick]').forEach(function (b) { b.textContent = '选这个'; }); });
+    if (!on) { plan.setAttribute('data-picked', 'true'); btn.textContent = '已选 ✓'; }
+  });
+});
+</script>
+</body>
+</html>

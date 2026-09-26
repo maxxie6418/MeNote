@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeNote 移动端界面 · C 方案（初版）</title>
+<style>
+/* ============================================================
+   令牌取值与 apps/web/src/app/theme/tokens.css 一致（DESIGN.md v1.2 §3.3 / §4.3）。
+   本文件是评审用的界面稿（初版方案），不是实现；实现时一律走 tokens.css。
+   ============================================================ */
+:root{
+  --bg:#ffffff; --bg-soft:#f7f7f7; --panel:#ffffff; --panel-2:#f2f2f2; --panel-3:#e8e8e8;
+  --line:#e0e0e0; --line-2:#c9c9c9;
+  --text:#1d1d1d; --text-2:#4a4a4a; --muted:#6b6b6b;
+  --primary:#f6821f; --primary-2:#e8720d;
+  --primary-soft:rgba(246,130,31,.12); --primary-line:rgba(246,130,31,.35);
+  --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+  --primary-ink:#b45309; --on-primary:#1d1d1d;
+  --amber:#8a5a00; --amber-soft:rgba(138,90,0,.11); --amber-line:rgba(138,90,0,.26);
+  --green:#1f7a4d; --green-soft:rgba(31,122,77,.11);
+  --red:#c0392b; --red-soft:rgba(192,57,43,.1);
+  --purple:#6d47a8; --purple-soft:rgba(109,71,168,.12);
+  --topbar-bg:rgba(255,255,255,.86);
+  --scrim:rgba(29,29,29,.42);
+  --shadow-1:0 4px 14px rgba(29,29,29,.07);
+  --shadow-2:0 16px 40px rgba(29,29,29,.13);
+  --shadow-3:0 28px 70px rgba(29,29,29,.2);
+  --phone-frame:#2b2b2b;
+  --topbar-h:54px;
+  --radius-sm:6px; --radius:10px; --radius-lg:14px;
+  --fs-display:20px; --fs-title:17px; --fs-body-lg:14px; --fs-body:13px; --fs-small:12px; --fs-micro:11px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,"SF Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#161616; --bg-soft:#1e1e1e; --panel:#242424; --panel-2:#2d2d2d; --panel-3:#383838;
+  --line:#333333; --line-2:#4a4a4a;
+  --text:#f2f2f2; --text-2:#bdbdbd; --muted:#8f8f8f;
+  --primary:#f6821f; --primary-2:#fbad41;
+  --primary-soft:rgba(246,130,31,.16); --primary-line:rgba(246,130,31,.34);
+  --primary-ink:#f6821f; --on-primary:#161616;
+  --amber:#e0a458; --amber-soft:rgba(224,164,88,.14); --amber-line:rgba(224,164,88,.3);
+  --green:#5cbf8a; --green-soft:rgba(92,191,138,.14);
+  --red:#f07167; --red-soft:rgba(240,113,103,.14);
+  --purple:#b5a2e0; --purple-soft:rgba(181,162,224,.16);
+  --topbar-bg:rgba(22,22,22,.86);
+  --shadow-1:0 4px 14px rgba(0,0,0,.35);
+  --shadow-2:0 16px 40px rgba(0,0,0,.45);
+  --shadow-3:0 28px 70px rgba(0,0,0,.55);
+  --phone-frame:#3a3a3a;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg-soft);color:var(--text);font-family:var(--sans);
+  font-size:var(--fs-body-lg);line-height:1.6;padding:var(--sp-6) var(--sp-5) 64px
+}
+.wrap{max-width:1240px;margin:0 auto}
+
+/* ---------- 页头 ---------- */
+.pagehead h1{font-size:var(--fs-display);margin:0 0 var(--sp-2);letter-spacing:.2px}
+.pagehead p{margin:0;color:var(--text-2);max-width:820px}
+.badges{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center;margin:var(--sp-3) 0 0}
+.badge{
+  font-size:var(--fs-micro);font-family:var(--mono);padding:1px 8px;border-radius:99px;
+  border:1px solid var(--amber-line);background:var(--amber-soft);color:var(--amber)
+}
+.badge--plain{border-color:var(--line-2);background:var(--panel);color:var(--text-2)}
+.toolbar{display:flex;gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-4)}
+.btn{
+  font:inherit;font-size:var(--fs-body);min-height:34px;padding:0 var(--sp-4);white-space:nowrap;
+  border-radius:var(--radius);border:1px solid var(--line-2);background:var(--panel);color:var(--text);cursor:pointer
+}
+.btn:hover{background:var(--panel-2)}
+.btn--primary{background:var(--primary-grad);border-color:transparent;color:var(--on-primary);font-weight:600}
+:focus-visible{outline:2px solid var(--primary-2);outline-offset:2px}
+
+/* ---------- 主体：左手机 / 右说明 ---------- */
+.stage{display:grid;grid-template-columns:minmax(320px,400px) minmax(320px,1fr);gap:var(--sp-6);margin-top:var(--sp-5);align-items:start}
+@media (max-width:900px){.stage{grid-template-columns:1fr}}
+.phonebox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-4);box-shadow:var(--shadow-1)}
+.phonebox h2{font-size:var(--fs-body-lg);margin:0 0 var(--sp-1)}
+.phonebox .sub{margin:0 0 var(--sp-3);font-size:var(--fs-small);color:var(--muted)}
+
+.phone{
+  --phone-w:360px;--phone-h:740px;
+  width:min(var(--phone-w),100%);height:var(--phone-h);margin:0 auto;
+  background:var(--phone-frame);border-radius:34px;padding:7px;box-shadow:var(--shadow-3)
+}
+.screen{
+  position:relative;width:100%;height:100%;background:var(--bg);border-radius:27px;overflow:hidden;
+  display:flex;flex-direction:column;color:var(--text)
+}
+.sysbar{
+  flex:0 0 22px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 var(--sp-4);font-size:var(--fs-micro);color:var(--muted);font-family:var(--mono)
+}
+
+/* ① 顶栏 */
+.appbar{
+  flex:0 0 auto;min-height:var(--topbar-h);display:flex;align-items:center;gap:var(--sp-2);
+  padding:0 var(--sp-3) 0 var(--sp-4);border-bottom:1px solid var(--line);background:var(--topbar-bg)
+}
+.brand{display:flex;align-items:center;gap:var(--sp-2);font-weight:700;font-size:var(--fs-body-lg);letter-spacing:.2px}
+.brand__mark{width:22px;height:22px;border-radius:var(--radius-sm);background:var(--primary-grad)}
+.spacer{flex:1}
+.pill{
+  display:inline-flex;align-items:center;gap:var(--sp-1);height:30px;padding:0 var(--sp-3);
+  border-radius:99px;background:var(--green-soft);color:var(--green);font-size:var(--fs-micro)
+}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.avatar{
+  width:30px;height:30px;border-radius:50%;background:var(--primary-grad);color:var(--on-primary);
+  display:flex;align-items:center;justify-content:center;font-size:var(--fs-small);font-weight:700;border:0;cursor:pointer
+}
+.slot-dashed{
+  border:1px dashed var(--primary-line);border-radius:99px;padding:2px 8px;font-size:var(--fs-micro);
+  color:var(--primary-ink);background:var(--primary-soft);white-space:nowrap
+}
+
+/* ② 三档页签（下划线） */
+.tabs{
+  flex:0 0 auto;display:flex;gap:var(--sp-5);padding:0 var(--sp-4);
+  border-bottom:1px solid var(--line);background:var(--bg)
+}
+.tab{
+  position:relative;font:inherit;font-size:var(--fs-body);min-height:44px;padding:0 2px;
+  background:none;border:0;color:var(--text-2);cursor:pointer
+}
+.tab[aria-selected="true"]{color:var(--primary-ink);font-weight:600}
+.tab[aria-selected="true"]::after{
+  content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--primary);border-radius:2px
+}
+
+/* ③ 快捷输入区：常态一行 44px，展开 33% */
+.composer{
+  flex:0 0 auto;display:flex;flex-direction:column;gap:var(--sp-2);
+  padding:var(--sp-1) var(--sp-3);margin:var(--sp-2) var(--sp-3) 0;height:44px;justify-content:center;
+  background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-1);overflow:hidden;cursor:pointer;
+  transition:height .2s ease,padding .2s ease,gap .2s ease
+}
+.composer__top{display:none;align-items:center;gap:var(--sp-2)}
+.composer__mode{display:flex;gap:2px;padding:2px;background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.composer__mode button{
+  font:inherit;font-size:var(--fs-micro);min-height:28px;padding:0 var(--sp-3);border:0;border-radius:4px;
+  background:transparent;color:var(--text-2);cursor:pointer
+}
+.composer__mode button[aria-pressed="true"]{background:var(--panel);color:var(--text);font-weight:600;box-shadow:var(--shadow-1)}
+.composer__body{display:flex;align-items:center;font-size:var(--fs-body);color:var(--muted);min-height:0}
+.composer__extras{
+  display:none;flex:0 0 26px;height:26px;gap:var(--sp-1);align-items:center;
+  overflow-x:auto;white-space:nowrap;font-size:var(--fs-micro)
+}
+.composer__foot{display:none;align-items:center;gap:var(--sp-2)}
+.composer__hint{font-size:var(--fs-micro);color:var(--muted);flex:1}
+.btn-publish{
+  font:inherit;font-size:var(--fs-body);font-weight:600;height:31px;padding:0 var(--sp-4);border:0;
+  border-radius:var(--radius);background:var(--primary-grad);color:var(--on-primary);cursor:pointer
+}
+.composer.is-open{height:33%;padding:var(--sp-3);gap:var(--sp-2);justify-content:flex-start;cursor:default}
+.composer.is-open .composer__top{display:flex}
+.composer.is-open .composer__body{align-items:flex-start;min-height:40px;flex:1}
+.composer.is-open .composer__extras{display:flex}
+.composer.is-open .composer__foot{display:flex}
+.caret{color:var(--primary-ink)}
+.sw{
+  display:inline-flex;align-items:center;gap:var(--sp-1);height:20px;padding:0 var(--sp-2);flex:0 0 auto;
+  border-radius:99px;border:1px solid var(--line-2);background:var(--panel);color:var(--text-2);cursor:pointer
+}
+.sw[aria-pressed="true"]{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-ink)}
+
+/* ④ 内容区（本屏唯一滚动容器） */
+.content{flex:1;min-height:0;overflow-y:auto;padding:var(--sp-3) var(--sp-4) var(--sp-6)}
+.content>.pane{display:none}
+.content[data-active="home"]>[data-pane="home"],
+.content[data-active="notes"]>[data-pane="notes"],
+.content[data-active="memo"]>[data-pane="memo"]{display:block}
+
+.panehead{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-4) 0 var(--sp-2)}
+.panehead:first-child{margin-top:var(--sp-1)}
+.panehead h3{margin:0;font-size:var(--fs-body-lg);flex:1}
+.ghost{
+  font:inherit;font-size:var(--fs-small);color:var(--primary-ink);background:none;border:0;
+  min-height:32px;padding:0 var(--sp-1);cursor:pointer
+}
+.rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--sp-1)}
+.row{
+  display:flex;align-items:center;gap:var(--sp-3);min-height:52px;padding:var(--sp-2) var(--sp-3);
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)
+}
+.row__ico{
+  flex:0 0 26px;height:26px;border-radius:var(--radius-sm);background:var(--panel-2);
+  border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--text-2)
+}
+.row__main{flex:1;min-width:0}
+.row__t{font-size:var(--fs-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row__m{font-size:var(--fs-micro);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mark{
+  flex:0 0 auto;font-size:var(--fs-micro);color:var(--primary-ink);line-height:18px;padding:0 6px;
+  border:1px solid var(--primary-line);background:var(--primary-soft);border-radius:99px
+}
+.tree{list-style:none;margin:0;padding:0}
+.tree ul{list-style:none;margin:0;padding-left:var(--sp-4)}
+.tnode{
+  display:flex;align-items:center;gap:var(--sp-2);min-height:48px;padding:var(--sp-1) var(--sp-2);
+  border-radius:var(--radius);color:var(--text)
+}
+.tnode--on{background:var(--primary-soft);color:var(--primary-ink);font-weight:600}
+.tnode .tw{width:14px;text-align:center;color:var(--muted);font-size:var(--fs-micro)}
+.tnode .cnt{margin-left:auto;font-size:var(--fs-micro);color:var(--muted);font-family:var(--mono)}
+.tleaf{
+  display:flex;align-items:center;gap:var(--sp-2);min-height:44px;
+  padding:var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-5);font-size:var(--fs-small);color:var(--text-2)
+}
+.daylab{
+  position:sticky;top:0;z-index:1;background:var(--bg);padding:var(--sp-2) 0 var(--sp-1);
+  font-size:var(--fs-micro);color:var(--muted);font-family:var(--mono)
+}
+.memo{padding:var(--sp-3);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:var(--sp-2)}
+.memo__head{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-1)}
+.memo__time{font-family:var(--mono);font-size:var(--fs-micro);color:var(--muted)}
+.memo p{margin:0;font-size:var(--fs-body);line-height:1.65}
+.memo__foot{display:flex;gap:var(--sp-1);margin-top:var(--sp-2);flex-wrap:wrap}
+.chip{
+  font-size:var(--fs-micro);line-height:19px;padding:0 var(--sp-2);
+  border-radius:99px;background:var(--purple-soft);color:var(--purple)
+}
+.chip--task{background:var(--amber-soft);color:var(--amber)}
+.chip--pin{background:var(--panel-2);color:var(--text-2)}
+.empty{display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);padding:var(--sp-6) var(--sp-4);text-align:center}
+.empty__ico{
+  width:50px;height:50px;border-radius:var(--radius);background:var(--panel-2);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;color:var(--muted)
+}
+.empty__t{font-size:var(--fs-title);font-weight:600}
+.empty__h{font-size:var(--fs-small);color:var(--text-2);max-width:280px}
+
+/* 键盘与标注 */
+.kbd{
+  flex:0 0 auto;height:280px;background:var(--panel-2);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(10,1fr);gap:5px;padding:var(--sp-2) var(--sp-1)
+}
+.kbd i{background:var(--panel);border-radius:var(--radius-sm);display:block}
+.kbd .lbl{grid-column:1/-1;height:auto;background:none;border-radius:0;text-align:center;color:var(--muted);font-size:var(--fs-micro);font-style:normal}
+.sliver{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:var(--fs-micro);border-bottom:1px dashed var(--line)
+}
+
+/* ---------- 右侧说明 ---------- */
+.spec{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-5);box-shadow:var(--shadow-1)}
+.spec h2{font-size:var(--fs-title);margin:0 0 var(--sp-2)}
+.spec h3{font-size:var(--fs-body-lg);margin:var(--sp-5) 0 var(--sp-2)}
+.spec h3:first-of-type{margin-top:var(--sp-3)}
+.spec p,.spec li{font-size:var(--fs-body);color:var(--text-2)}
+.spec li{margin:var(--sp-1) 0}
+.spec ul,.spec ol{padding-left:1.2em;margin:var(--sp-2) 0}
+.spec code{font-family:var(--mono);font-size:var(--fs-small);background:var(--panel-2);border-radius:4px;padding:1px 5px;color:var(--text)}
+table{border-collapse:collapse;width:100%;margin-top:var(--sp-2)}
+th,td{border:1px solid var(--line);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-small);text-align:left;vertical-align:top}
+th{background:var(--panel-2);color:var(--text);font-weight:600}
+.warn{
+  margin-top:var(--sp-3);border-left:3px solid var(--amber);background:var(--amber-soft);
+  border-radius:var(--radius);padding:var(--sp-3);font-size:var(--fs-body);color:var(--text)
+}
+.warn b{color:var(--amber)}
+
+/* ---------- 关键态 ---------- */
+.states{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--sp-5);margin-top:var(--sp-5)}
+.statecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-4);box-shadow:var(--shadow-1)}
+.statecard h3{margin:0 0 var(--sp-1);font-size:var(--fs-body-lg)}
+.statecard .sub{margin:0 0 var(--sp-3);font-size:var(--fs-small);color:var(--muted)}
+.phone--mini{--phone-w:280px;--phone-h:576px}
+.statecard .note{margin:var(--sp-3) 0 0;font-size:var(--fs-small);color:var(--text-2)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="pagehead">
+    <h1>MeNote 移动端界面 · C 方案（折中）</h1>
+    <p>
+      这是从三套方案里挑出的一套，单独成页方便评审与分享。
+      结构自上而下：<b>顶栏（站名 + 头像）→ 三档页签 → 顶部常驻输入行 → 内容区</b>。
+      手机框里的东西都能点：切档位、点输入行展开/收起、切深色主题。
+    </p>
+    <div class="badges">
+      <span class="badge">初版方案 · 不是最终结论</span>
+      <span class="badge--plain badge">草稿 2026-09-26</span>
+      <span class="badge--plain badge">令牌取值同 tokens.css</span>
+      <span class="badge--plain badge">手机框 360 × 740</span>
+    </div>
+    <div class="toolbar">
+      <button class="btn" type="button" id="themeToggle">切换深色主题</button>
+      <button class="btn btn--primary" type="button" id="openComposer">展开输入区</button>
+      <button class="btn" type="button" id="closeComposer">收起输入区</button>
+    </div>
+  </header>
+
+  <div class="stage">
+
+    <!-- ================= 可交互手机 ================= -->
+    <section class="phonebox">
+      <h2>可交互稿</h2>
+      <p class="sub">点页签看三个档位的内容；点输入行展开成输入面板</p>
+      <div class="phone">
+        <div class="screen">
+          <div class="sysbar"><span>9:41</span><span>•••  ▮</span></div>
+
+          <!-- ① 顶栏 -->
+          <header class="appbar">
+            <span class="brand"><span class="brand__mark"></span>MeNote</span>
+            <span class="spacer"></span>
+            <span class="slot-dashed" title="DESIGN.md §2.5-1 的桌面顶栏是 6 块不可增减；移动端是否沿用待确认">同步胶囊?</span>
+            <button class="avatar" type="button" aria-label="账户与设置">老</button>
+          </header>
+
+          <!-- ② 三档页签 -->
+          <div class="tabs" role="tablist" aria-label="浏览">
+            <button class="tab" type="button" role="tab" data-tab="home" aria-selected="false">首页</button>
+            <button class="tab" type="button" role="tab" data-tab="notes" aria-selected="false">笔记</button>
+            <button class="tab" type="button" role="tab" data-tab="memo" aria-selected="true">Memo</button>
+          </div>
+
+          <!-- ③ 快捷输入区：常态一行，展开 33% -->
+          <div class="composer" data-composer>
+            <div class="composer__top">
+              <div class="composer__mode" role="group" aria-label="录入模式">
+                <button type="button" aria-pressed="false">笔记</button>
+                <button type="button" aria-pressed="true">Memo</button>
+                <button type="button" aria-pressed="false">待办</button>
+              </div>
+            </div>
+            <div class="composer__body"><span>随手记点什么…<span class="caret">|</span></span></div>
+            <div class="composer__extras">
+              <span class="sw" aria-pressed="false">截止</span>
+              <span class="sw" aria-pressed="false">优先级 中</span>
+              <span class="sw" aria-pressed="true">#产品</span>
+              <span class="sw" aria-pressed="false">设为清单?</span>
+            </div>
+            <div class="composer__foot">
+              <span class="composer__hint">Ctrl/Cmd + Enter 发布</span>
+              <button class="btn-publish" type="button">发布</button>
+            </div>
+          </div>
+
+          <!-- ④ 内容区 -->
+          <div class="content" data-active="memo"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 介绍内容 ================= -->
+    <section class="spec">
+      <h2>这一屏是怎么组织的</h2>
+
+      <h3>四个块（自上而下）</h3>
+      <table>
+        <thead><tr><th>块</th><th>高</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>① 顶栏</td><td>54px</td><td>暂定只放站名 + 头像（虚框那处是待确认的同步胶囊位置）</td></tr>
+          <tr><td>② 三档页签</td><td>44px</td><td><b>下划线页签</b>，不是盒式分段控件</td></tr>
+          <tr><td>③ 快捷输入行 / 输入面板</td><td>44px / 33%</td><td>常态一行；点开就地撑开，内容被下推</td></tr>
+          <tr><td>④ 内容区</td><td>剩余全部</td><td>本屏<b>唯一</b>的滚动容器</td></tr>
+        </tbody>
+      </table>
+
+      <h3>三个档位的内容</h3>
+      <ul>
+        <li><b>首页</b> —— 最近编辑 + 收藏两组卡片，每组一个「全部」入口。</li>
+        <li><b>笔记</b> —— 笔记本树（两层：文件夹 / 子文件夹 / 条目），节点带计数与待上传标记。</li>
+        <li><b>Memo</b> —— 按天分组的时间轴，条目带时间、标签、清单与置顶标记。</li>
+      </ul>
+
+      <h3>录入模式与页签刻意做成两种造型</h3>
+      <p>
+        页签是<b>下划线</b>（导航），录入模式是<b>盒式分段控件</b>（参数）。两个三档上下相邻，
+        如果做成同一种按钮就分不清「我在哪」和「我要记什么」。这条来自 <code>DESIGN.md</code> §5.3 与 §2.5-4。
+      </p>
+
+      <h3>主要交互</h3>
+      <ol>
+        <li>点页签切档位：内容换、输入面板<b>自动收起</b>（不改高度、不推挤页签）。</li>
+        <li>点输入行展开到 <b>33%</b>（360×740 框下约 240px）；再点一次或发布后收起。</li>
+        <li>页签位置<b>固定不动</b>——这是 C 与 A 的关键差别：A 里输入区一收一放，页签会上下跳。</li>
+        <li>可点元素命中区不小于 44×44px；不作悬停依赖；<code>viewport</code> 允许缩放。</li>
+      </ol>
+
+      <h3>空状态</h3>
+      <p>如「还没有收藏的笔记」+ 为什么空 + 下一步出口，三档共用同一套口径。</p>
+
+      <div class="warn">
+        <b>这是初版方案，不是最终结论。</b>
+        落地前还需要定：三段是三个还是四个（待办目前在桌面是独立一段）、
+        顶栏在移动端保留几块、进入时的初始态是展开还是收起，
+        以及「向上缩回」到底是就地收成一行还是滑出屏幕顶部。
+        详见 <code>docs/modules/Menote-移动端界面稿-v1.md</code>。
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 关键态 ================= -->
+  <h2 style="font-size:var(--fs-title);margin:var(--sp-6) 0 0">关键态</h2>
+  <div class="states">
+
+    <div class="statecard">
+      <h3>常态（默认落地）</h3>
+      <p class="sub">输入行 44px，内容几乎全屏</p>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <header class="appbar" style="min-height:44px">
+            <span class="brand" style="font-size:var(--fs-body)"><span class="brand__mark" style="width:18px;height:18px"></span>MeNote</span>
+            <span class="spacer"></span><span class="avatar" style="width:26px;height:26px;font-size:var(--fs-micro)">老</span>
+          </header>
+          <div class="tabs" style="gap:var(--sp-4)">
+            <button class="tab" type="button" aria-selected="true" style="min-height:38px">首页</button>
+            <button class="tab" type="button" aria-selected="false" style="min-height:38px">笔记</button>
+            <button class="tab" type="button" aria-selected="false" style="min-height:38px">Memo</button>
+          </div>
+          <div class="composer" style="cursor:default"><div class="composer__body"><span>随手记点什么…</span></div></div>
+          <div class="content" data-active="home" style="padding:var(--sp-3)"></div>
+        </div>
+      </div>
+      <p class="note">第一眼看到的是内容，录入入口仍在一屏之内。</p>
+    </div>
+
+    <div class="statecard">
+      <h3>输入展开 + 键盘</h3>
+      <p class="sub">内容区约剩 118px</p>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <header class="appbar" style="min-height:44px">
+            <span class="brand" style="font-size:var(--fs-body)"><span class="brand__mark" style="width:18px;height:18px"></span>MeNote</span>
+            <span class="spacer"></span><span class="avatar" style="width:26px;height:26px;font-size:var(--fs-micro)">老</span>
+          </header>
+          <div class="tabs" style="gap:var(--sp-4)">
+            <button class="tab" type="button" aria-selected="true" style="min-height:38px">首页</button>
+            <button class="tab" type="button" aria-selected="false" style="min-height:38px">笔记</button>
+            <button class="tab" type="button" aria-selected="false" style="min-height:38px">Memo</button>
+          </div>
+          <div class="composer is-open" style="height:171px;margin:var(--sp-2) var(--sp-2) 0;cursor:default">
+            <div class="composer__top"><div class="composer__mode"><button type="button" aria-pressed="true">Memo</button><button type="button" aria-pressed="false">待办</button></div></div>
+            <div class="composer__body"><span>随手记点什么…</span></div>
+            <div class="composer__extras"><span class="sw" aria-pressed="false">设为清单?</span></div>
+            <div class="composer__foot"><span class="composer__hint">发布</span><button class="btn-publish" type="button" style="height:27px">发布</button></div>
+          </div>
+          <div class="sliver">内容区 ≈118px</div>
+          <div class="kbd"><span class="lbl">系统键盘（示意）</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <p class="note">打字时不需要看内容；但模式附加项（截止 / 优先级）必须挤进展开后的面板内，不能靠滚动找。</p>
+    </div>
+
+    <div class="statecard">
+      <h3>空状态（收藏为空）</h3>
+      <p class="sub">为什么空 + 下一步出口</p>
+      <div class="phone phone--mini">
+        <div class="screen">
+          <div class="content" data-active="empty" style="padding:var(--sp-4)">
+            <div class="empty">
+              <span class="empty__ico">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 4l2.5 5.2 5.5.8-4 3.9 1 5.6-5-2.7-5 2.7 1-5.6-4-3.9 5.5-.8z"/></svg>
+              </span>
+              <span class="empty__t">还没有收藏的笔记</span>
+              <span class="empty__h">在条目的更多菜单里点「收藏」，它就会出现在这里。</span>
+              <button class="btn" type="button">去笔记里看看</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note">空状态与文案口径不受布局选择影响。</p>
+    </div>
+
+    <div class="statecard">
+      <h3>深色主题</h3>
+      <p class="sub">点右上角按钮整体切换</p>
+      <div class="phone phone--mini" data-dark-preview="true">
+        <div class="screen">
+          <header class="appbar" style="min-height:44px">
+            <span class="brand" style="font-size:var(--fs-body)"><span class="brand__mark" style="width:18px;height:18px"></span>MeNote</span>
+            <span class="spacer"></span><span class="avatar" style="width:26px;height:26px;font-size:var(--fs-micro)">老</span>
+          </header>
+          <div class="tabs" style="gap:var(--sp-4)">
+            <button class="tab" type="button" aria-selected="false" style="min-height:38px">首页</button>
+            <button class="tab" type="button" aria-selected="false" style="min-height:38px">笔记</button>
+            <button class="tab" type="button" aria-selected="true" style="min-height:38px">Memo</button>
+          </div>
+          <div class="composer" style="cursor:default"><div class="composer__body"><span>随手记点什么…</span></div></div>
+          <div class="content" data-active="memo" style="padding:var(--sp-3)"></div>
+        </div>
+      </div>
+      <p class="note">两套令牌成对提供，深色不是浅色的机械反转。</p>
+    </div>
+  </div>
+
+  <p style="font-size:var(--fs-small);color:var(--muted);margin-top:var(--sp-6)">
+    界面稿（初版方案）。配套设计文档：<code>docs/modules/Menote-移动端界面稿-v1.md</code>。
+    本文件不改任何实现代码，也不修改 <code>DESIGN.md</code>。
+  </p>
+</div>
+
+<script>
+const ICON_NOTE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg>';
+const ICON_FOLDER = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"/></svg>';
+
+function row(title, meta, mark) {
+  return '<li class="row" tabindex="0"><span class="row__ico">' + ICON_NOTE + '</span>' +
+    '<span class="row__main"><span class="row__t">' + title + '</span><span class="row__m">' + meta + '</span></span>' +
+    (mark ? '<span class="mark">' + mark + '</span>' : '') + '</li>';
+}
+function tnode(label, count, on, open) {
+  return '<li><div class="tnode' + (on ? ' tnode--on' : '') + '" tabindex="0"><span class="tw">' + (open ? '▾' : '▸') + '</span>' +
+    ICON_FOLDER + '<span>' + label + '</span><span class="cnt">' + count + '</span></div>';
+}
+function tleaf(label) { return '<div class="tleaf" tabindex="0">' + ICON_NOTE + '<span>' + label + '</span></div>'; }
+function memo(time, text, chips) {
+  return '<article class="memo"><div class="memo__head"><span class="memo__time">' + time + '</span>' +
+    (chips && chips.pin ? '<span class="mark">置顶</span>' : '') + '</div><p>' + text + '</p>' +
+    '<div class="memo__foot">' + (chips ? chips.html : '') + '</div></article>';
+}
+
+const PANES = {
+  home:
+    '<div class="panehead"><h3>最近编辑</h3><button class="ghost" type="button">全部</button></div>' +
+    '<ul class="rows">' +
+      row('M2 里程碑排期与遗留项', '12 分钟前') +
+      row('Cloudflare Workers 部署记录', '今天 09:40') +
+      row('读书笔记：如何阅读一本书', '昨天 21:05') +
+      row('家庭采购清单', '9 月 24 日', '置顶') +
+    '</ul>' +
+    '<div class="panehead"><h3>收藏</h3></div>' +
+    '<ul class="rows">' +
+      row('隐私锁的文案口径', '9 月 22 日', '收藏') +
+      row('会议纪要 0918', '9 月 18 日', '收藏') +
+    '</ul>',
+  notes:
+    '<div class="panehead"><h3>笔记本</h3><button class="ghost" type="button">＋ 新建文件夹</button></div>' +
+    '<ul class="tree">' +
+      tnode('工作', '12', false, true) +
+        '<ul>' +
+          tnode('工作日志', '5', true, true) +
+            '<ul>' + tleaf('0912 周会') + tleaf('0919 周会') + tleaf('0926 评审') + '</ul>' +
+          tnode('会议纪要', '7', false, false) +
+        '</ul></li>' +
+      tnode('学习', '8', false, false) + '</li>' +
+      tnode('生活', '4', false, false) + '</li>' +
+    '</ul>',
+  memo:
+    '<div class="daylab">今天 · 9 月 26 日</div>' +
+    memo('09:12', '把移动端的三段导航想清楚了：输入行放在页签下面，常态只留一行。', { html: '<span class="chip">#产品</span>' }) +
+    memo('08:40', '买牛奶、鸡蛋、面包', { pin: true, html: '<span class="chip chip--task">清单</span><span class="chip chip--pin">待办</span>' }) +
+    '<div class="daylab">昨天 · 9 月 25 日</div>' +
+    memo('21:05', '读完《如何阅读一本书》第三章，分析阅读的四个问题要抄进笔记。', { html: '<span class="chip">#读书</span>' })
+};
+
+/* 给每个内容容器铺三档内容 */
+document.querySelectorAll('.content').forEach(function (content) {
+  ['home', 'notes', 'memo'].forEach(function (key) {
+    var pane = document.createElement('div');
+    pane.className = 'pane';
+    pane.setAttribute('data-pane', key);
+    pane.innerHTML = PANES[key];
+    content.appendChild(pane);
+  });
+});
+
+/* 页签切档：内容换、输入面板收起、页签位置不动 */
+document.querySelectorAll('.tabs').forEach(function (tabs) {
+  var screen = tabs.closest('.screen');
+  var content = screen.querySelector('.content');
+  tabs.querySelectorAll('[data-tab]').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      tabs.querySelectorAll('[data-tab]').forEach(function (t) { t.setAttribute('aria-selected', 'false'); });
+      tab.setAttribute('aria-selected', 'true');
+      content.setAttribute('data-active', tab.dataset.tab);
+      content.scrollTop = 0;
+      var composer = screen.querySelector('[data-composer]');
+      if (composer) composer.classList.remove('is-open');
+    });
+  });
+});
+
+/* 输入行 / 输入面板 */
+document.querySelectorAll('[data-composer]').forEach(function (composer) {
+  composer.addEventListener('click', function (event) {
+    if (event.target.closest('.btn-publish') || event.target.closest('.sw') || event.target.closest('.composer__mode')) return;
+    composer.classList.toggle('is-open');
+  });
+});
+document.querySelectorAll('.composer__mode').forEach(function (group) {
+  group.querySelectorAll('button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      group.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+      btn.setAttribute('aria-pressed', 'true');
+    });
+  });
+});
+document.querySelectorAll('.sw').forEach(function (sw) {
+  sw.addEventListener('click', function () {
+    sw.setAttribute('aria-pressed', sw.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  });
+});
+
+/* 工具条 */
+var root = document.documentElement;
+document.getElementById('openComposer').addEventListener('click', function () {
+  var c = document.querySelector('.phonebox [data-composer]');
+  c.classList.add('is-open');
+});
+document.getElementById('closeComposer').addEventListener('click', function () {
+  var c = document.querySelector('.phonebox [data-composer]');
+  c.classList.remove('is-open');
+});
+document.getElementById('themeToggle').addEventListener('click', function (event) {
+  var dark = root.getAttribute('data-theme') === 'dark';
+  root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  event.target.textContent = dark ? '切换深色主题' : '切换浅色主题';
+});
+
+/* 关键态里的「深色主题」那一帧：独立套深色令牌，不受页面主题影响 */
+(function () {
+  var frame = document.querySelector('[data-dark-preview] .screen');
+  if (!frame) return;
+  var dark = {
+    '--bg':'#161616','--bg-soft':'#1e1e1e','--panel':'#242424','--panel-2':'#2d2d2d',
+    '--line':'#333333','--line-2':'#4a4a4a','--text':'#f2f2f2','--text-2':'#bdbdbd','--muted':'#8f8f8f',
+    '--primary-ink':'#f6821f','--primary-soft':'rgba(246,130,31,.16)','--primary-line':'rgba(246,130,31,.34)',
+    '--on-primary':'#161616','--purple':'#b5a2e0','--purple-soft':'rgba(181,162,224,.16)',
+    '--amber':'#e0a458','--amber-soft':'rgba(224,164,88,.14)','--topbar-bg':'rgba(22,22,22,.86)',
+    '--green':'#5cbf8a','--green-soft':'rgba(92,191,138,.14)'
+  };
+  Object.keys(dark).forEach(function (k) { frame.style.setProperty(k, dark[k]); });
+})();
+</script>
+</body>
+</html>

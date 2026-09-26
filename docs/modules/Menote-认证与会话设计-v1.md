@@ -17,6 +17,7 @@
 | v1.2 | v0.1.5 | 2026-09-26 | M1-3 落地回写：§4.1 的 CSRF 口径修正为「`Origin` 缺失放行、在场必须匹配」并说明理由（主防线是 `X-Menote` 自定义头）；标注 dev 浏览器验证仍待 M1-10 补做；§5.3 的设置壳分类与实现一致 | deepseek-v4.1-flash |
 | v1.3 | v0.1.10 | 2026-09-26 | dev 链路实测回写：§4.1 记录 17 项断言结果（Cookie 属性、CSRF 两路、注册登录、隔离），并如实标注"真实浏览器 Cookie 存储仍未验、留到 M1-11"与 miniflare 的 `Request.cf` 告警 | deepseek-v4.1-flash |
 | v1.4 | v0.1.11 | 2026-09-26 | 修掉会导致锁死账号的落地缺陷：注册与改密改用**与 prelogin 同源的确定盐**（§3.3 记录理由与附带防枚举收益）；§3 接口表补公开接口 `GET /api/auth/registration-state` | deepseek-v4.1-flash |
+| v1.5 | v0.1.12 | 2026-09-26 | 修正机密声明方式：`wrangler.jsonc` 的 `secrets.required` 是 **deploy 硬门禁**（首次部署必失败），改为运行时 `config-guard.ts` fail-closed；§6 表与 `wiki/guides/local-dev.md` §8 同步更正 | deepseek-v4.1-flash |
 
 ---
 
@@ -191,7 +192,7 @@ UPDATE sessions
 |---|---|---|
 | `AUTH_PEPPER` | ✅ 必需 | 生成：`openssl rand -base64 32`。用于 `auth_verifier`、prelogin 假盐；M5 起分享令牌签名键由它 HKDF 派生 |
 | `.dev.vars.example` | ✅ 新建，但**需先改 `.gitignore`** | 内容形如 `AUTH_PEPPER=<32 字节 base64>`，附生成命令。**实测冲突**：`git check-ignore -v .dev.vars.example` → `.gitignore:16:.dev.vars*`，该文件当前永远无法提交，而架构 §15.5 要求随仓库提供它以支持一键部署。需把 `.gitignore` 第 16 行改为 `.dev.vars` / `.dev.vars.*` 并加 `!.dev.vars.example`（属根配置改动，列入 §8 待点头项） |
-| `wrangler.jsonc` 的 `secrets.required` | ✅ 加 | `"secrets": { "required": ["AUTH_PEPPER"] }`。**已验证**：该字段存在于 `wrangler@4.141.0` 的配置 schema（`node_modules/wrangler/config-schema.json`），描述为"必需机密名单：取代 .dev.vars/.env 推断用于类型生成，并在本地开发时对缺失机密给出警告"。**未验证**：架构 §15.5 说它能让一键部署的设置页"逐项提示填密钥"——schema 描述里没有这一作用，落地时以实际部署页行为为准（反正加上它零成本） |
+| `wrangler.jsonc` 的 `secrets.required` | ❌ **不要加（v1.5 修正）** | 该字段确实存在于 `wrangler@4.141.0` 的配置 schema，但**它是 deploy 的硬门禁**：机密未设置时 `wrangler deploy` 直接失败（`✘ [ERROR] The following required secrets have not been set: AUTH_PEPPER`）。首次部署时 Worker 尚不存在、无法先设机密 → 一键部署/Workers Builds 被永久堵死（M1-10 实测踩到，v0.1.12 修复）。改由 `apps/worker/src/middleware/config-guard.ts` 在运行时检查：缺 `AUTH_PEPPER` 时 `/api/auth/*`、`/api/admin/*` 返回 503 并说明缺什么，且**不会**用空密钥算 HMAC |
 | `SESSION_SECRET` | ❌ **取消** | 无用途（§1 结论 2）。`wiki/guides/local-dev.md` §8 与架构 §15.5 的例子需同步删除 |
 | `BACKUP_CRED_KEY` | ⏳ M5 | 备份内容密钥 K 的包裹键 |
 

@@ -88,5 +88,8 @@ wrangler.jsonc    唯一 Worker 配置（仓库根）：main、assets、D1 绑�
 ## 八、M1 开工前必办（M0 遗留挂钩）
 
 - **迁移挂钩（已定）**：迁移走**运行时自愈**（架构 §15.4）——`apps/worker/src/db/selfheal.ts` 在首个请求读 `app_meta.schema_version`、抢锁、按序建表、校验、写版本。**不需要**手工步骤，也**不要**把 `wrangler d1 migrations apply` 加进 `deploy` 脚本（该命令在全新账户上会因查不到库而失败，于是 `wrangler deploy` 永远执行不到；且 Workers Builds 用的是 `npx wrangler deploy`，改本脚本对它无效）。首次部署流程因此是：Workers Builds 跑 `npx wrangler deploy` → D1 自动供给并绑定 → 首个请求建表。
-- **机密声明**：第一个服务端机密是 **`AUTH_PEPPER`**（架构 §13.2；生成 `openssl rand -base64 32`）。在 `wrangler.jsonc` 加 `"secrets": { "required": ["AUTH_PEPPER"] }`，并随仓库提供 `.dev.vars.example` 说明格式与生成方式（注意 `.gitignore` 需放行该示例文件）。**不存在 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，无需服务端密钥。
+- **机密声明**：第一个服务端机密是 **`AUTH_PEPPER`**（架构 §13.2；生成 `openssl rand -base64 32`），随仓库提供 `.dev.vars.example` 说明格式与生成方式（`.gitignore` 需放行该示例文件）。
+  - **不要在 `wrangler.jsonc` 里写 `"secrets": { "required": [...] }`**：该字段不是"部署页提示"，而是 **deploy 的硬门禁**——机密没设时 `wrangler deploy` 直接失败，而首次部署时 Worker 还不存在、无法先设机密，会把一键部署与 Workers Builds 永久堵死（M1 实测踩到过，见 CHANGELOG v0.1.12）。
+  - 缺机密的保护改在运行时：`apps/worker/src/middleware/config-guard.ts` 对 `/api/auth/*` 与 `/api/admin/*` 返回 503 并说明缺哪一项，且**不会**用空密钥去算 HMAC。首次部署成功后，在 Dashboard 的 Worker 设置里添加 `AUTH_PEPPER` 即可。
+  - **不存在 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，无需服务端密钥。
 - **前端 feature 互不依赖的 ESLint 规则**：M2 引入 `features/` 时补 no-restricted-imports（跨 feature 复用只走 `app/` 或 `data/`）。

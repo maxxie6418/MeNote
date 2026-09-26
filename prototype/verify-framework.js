@@ -14,6 +14,7 @@
          区块名与说明文字齐全 / 顶栏 6 块且账户入口紧邻隐私锁胶囊 /
          浏览三段（首页 / Memo / 待办 合并成一行）/ 隐私空间贴底且无小标题 / 待办独立视图 /
          Memo 去清单 / 录入框三模式与去加密 / 录入框行序（附加项在模式行之上）/
+         最近编辑·收藏·标签与隐私空间的双栏（侧滑详情保留但不触发）/
          主题（Claude 橙白双主题）/
          点块进块详情 / 嵌套块选内层 / 返回页面说明 / chip 反向跳转 /
          Esc 退出 / 键盘左右切页 / 切页清选中 / 块说明与网格两个开关
@@ -319,6 +320,36 @@ step('笔记本正文：加密状态条与尺寸提示条已并入状态栏', ()
   const st = $('#canvas [data-b="docStatus"]');
   if (!st) throw new Error('缺正文状态栏');
   if (!st.textContent.includes('唯一一条')) throw new Error('状态栏未标注为合并后唯一一条');
+});
+
+step('最近编辑 / 收藏 / 标签页：主操作区改为「列表 + 正文」双栏（2026-09-26 调整）', () => {
+  gotoPage('最近编辑 · 收藏 · 标签');
+  const list = $('#canvas [data-b="listHead"]');
+  const docH = $('#canvas [data-b="docHead"]');
+  if (!list || !docH) throw new Error('缺列表栏或正文栏');
+  if (list.parentElement === docH.parentElement) throw new Error('列表与正文仍同栏，未拆成双栏');
+  if (!$('#canvas [data-b="editorPane"]')) throw new Error('正文栏缺编辑区');
+  // 侧滑详情保留为独立区块，不再作为浮层覆盖主操作区
+  const dr = $('#canvas [data-b="drawer"]');
+  if (!dr) throw new Error('侧滑详情块被删除（应保留能力备用）');
+  if (dr.closest('.wf-overlay')) throw new Error('侧滑详情仍以浮层覆盖主操作区，应改为独立区块');
+  const n = blockText('drawer');
+  if (!n.includes('保留')) throw new Error('侧滑详情未标注为保留能力：' + n);
+  if (!n.includes('不再由条目列表点击触发')) throw new Error('侧滑详情未标注不再由列表触发：' + n);
+});
+
+step('隐私空间页：锁定态整块 + 解锁后「列表 + 正文」双栏（2026-09-26 调整）', () => {
+  gotoPage('隐私空间');
+  if (!$('#canvas [data-b="vaultLocked"]')) throw new Error('缺锁定态占位');
+  const tree = $('#canvas [data-b="vaultTree"]');
+  const docH = $('#canvas [data-b="docHead"]');
+  if (!tree || !docH) throw new Error('解锁后缺列表栏或正文栏');
+  if (tree.parentElement === docH.parentElement) throw new Error('隐私空间仍是单栏，未拆成双栏');
+  if (!$('#canvas [data-b="editorPane"]')) throw new Error('隐私空间正文栏缺编辑区');
+  if (!$('#canvas [data-b="vaultNode"]')) throw new Error('缺侧边栏空间节点');
+  // 文字检查（blockText 会重渲染，放最后）
+  if (!blockText('vaultHead').includes('列表栏顶部')) throw new Error('空间状态头未标注位于列表栏顶部');
+  if (!blockText('vaultTree').includes('密文')) throw new Error('空间内条目未说明以密文呈现');
 });
 
 step('点击线框块 → 说明面板切到块详情', () => {

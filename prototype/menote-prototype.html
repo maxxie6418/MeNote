@@ -968,7 +968,19 @@ const NOTES = [
   { id:'t2', kind:'table', title:'观影清单', folder:'（根目录）',
     tags:['读书'], star:false, pin:false, enc:false, date:'9月20日', words:310, versions:2,
     created:'2026-09-14 22:30', share:null,
-    snippet:'表格条目 · 5 行 · 4 列 · 列类型：文字 / 状态 / 时间 / 纯数字' }
+    snippet:'表格条目 · 5 行 · 4 列 · 列类型：文字 / 状态 / 时间 / 纯数字' },
+
+  /* 隐私空间内的条目（2026-09-26 新增）：vault:true 表示隶属加密空间。
+     它们只在隐私空间解锁后可见 —— 其它视图（最近编辑 / 收藏 / 标签 / 首页）一律排除，
+     因为空间是密封容器，与「单篇加密」（n3）不是一回事。 */
+  { id:'v1', kind:'note', title:'日记 · 2026 秋', folder:'（加密空间）/ 日记', vault:true,
+    tags:['日记'], star:false, pin:false, enc:true, date:'今天 23:12', words:268, versions:7,
+    created:'2026-09-02 22:05', share:null,
+    snippet:'存储池的迁移顺序理了一遍：先做快照、再切盘，中途断电最坏也只是回到快照点，不会损坏池……' },
+  { id:'v2', kind:'note', title:'账户与恢复码备忘', folder:'（加密空间）/ 备份', vault:true,
+    tags:['备份'], star:false, pin:false, enc:true, date:'9月24日', words:142, versions:3,
+    created:'2026-09-24 20:40', share:null,
+    snippet:'恢复码分两处存放，任何一处单独泄露都不足以恢复账户；设备丢失即轮换登录密码与恢复码……' }
 ];
 
 const MEMOS = [
@@ -1111,6 +1123,39 @@ tags: [项目]
 - [x] 本地链路打通
 - [x] 云端 VPS 部署
 - [ ] 线上验证确认
+`;
+
+/* 隐私空间内的正文（解锁后可读） */
+const NOTE_BODY_V1 = `---
+tags: [日记]
+---
+
+# 日记 · 2026 秋
+
+存储池的迁移顺序理了一遍：**先做快照、再切盘**，中途断电最坏也只是回到快照点，不会损坏池。
+
+- 快照放独立存储池，不和数据盘同一块物理盘
+- 迁移安排在家人不用 NAS 的时段
+- 迁移前把最近的备份校验一遍，不做未验证的备份
+
+教训：可用性让位于可恢复性，家庭场景尤其如此。
+`;
+
+const NOTE_BODY_V2 = `---
+tags: [备份]
+---
+
+# 账户与恢复码备忘
+
+恢复码分两处存放，任何一处单独泄露都不足以恢复账户：
+
+1. 纸质件放在书房文件柜（与密码本分开）
+2. 加密密钥库另存一份，口令不与主密码相同
+
+## 轮换约定
+
+- 设备丢失即轮换登录密码与恢复码
+- 恢复码用过一次就作废重生成
 `;
 
 /* ============================================================
@@ -1289,7 +1334,21 @@ function render(){
   if(fn === 'home'){ list.classList.add('hidden'); doc.innerHTML = homePanel(); bindHome(); return; }
   if(fn === 'memo'){ list.classList.add('hidden'); doc.innerHTML = memoPanel(); bindMemo(); return; }
   if(fn === 'task'){ list.classList.add('hidden'); doc.innerHTML = taskPanel(); bindTask(); return; }
-  if(fn === 'vault'){ list.classList.add('hidden'); doc.innerHTML = vaultPanel(); bindVault(); return; }
+  if(fn === 'vault'){
+    // 锁定时：整块占位、不显示任何条目（6.9）
+    if(state.locked){
+      list.classList.add('hidden');
+      doc.innerHTML = vaultLockedPanel();
+      bindVault();
+      return;
+    }
+    // 解锁后：与笔记本同构的「列表 + 正文」双栏（2026-09-26 用户要求）
+    const vact = getNote(state.activeId);
+    list.innerHTML = listPanel(itemList('vault'), vaultListHead());
+    doc.innerHTML = canShowIn('vault', vact) ? docPanel(vact) : vaultEmptyDoc();
+    bindList(); bindDoc(); bindVault();
+    return;
+  }
   if(fn === 'trash'){ list.classList.add('hidden'); doc.innerHTML = trashPanel(); bindTrash(); return; }
   if(fn === 'settings'){ list.classList.add('hidden'); doc.innerHTML = settingsPanel(); bindSettings(); return; }
   if(fn === 'search'){ list.classList.add('wide'); list.innerHTML = searchPanel(); doc.innerHTML = ''; bindSearchList(); return; }
@@ -1301,27 +1360,40 @@ function render(){
     return;
   }
 
-  // 最近编辑 / 收藏 / 标签 → 单栏列表 + 滑出详情
-  list.classList.add('wide');
+  // 最近编辑 / 收藏 / 标签 → 同样是「列表 + 正文」双栏（2026-09-26 调整）：
+  // 点条目在右侧直接打开内容，不再侧滑。侧滑详情保留能力，只留给「主操作区在使用时
+  // 临时看属性」的场景，不由列表触发（后续按用户指示再接入）。
+  const act = getNote(state.activeId);
   list.innerHTML = listPanel(itemList(fn));
-  doc.innerHTML = '';
-  bindList(true);
+  doc.innerHTML = canShowIn(fn, act) ? docPanel(act) : emptyDocPanel();
+  bindList(); bindDoc();
 }
 
-/* 条目来源 */
+/* 条目来源。
+   隐私空间的内容只在空间内可见 —— 其它视图一律排除（锁不锁都一样：空间是密封容器，
+   与「单篇加密」的 n3 不同，后者仍留在笔记本与最近编辑里、锁定时只把正文遮住）。 */
 function itemList(scope){
-  let data = NOTES.slice();
+  let data = scope === 'vault' ? NOTES.filter(n => n.vault) : NOTES.filter(n => !n.vault);
   if(scope === 'starred') data = data.filter(n => n.star);
   else if(scope === 'tag') data = data.filter(n => n.tags.includes(state.tag));
   else if(scope === 'folder') data = state.folder ? data.filter(n => n.folder.includes(state.folder)) : data;
   return data;
 }
 
+/* 双栏视图里，该条目是否允许显示在右列（防止把隐私空间内容渲染到其它视图） */
+function canShowIn(fn, n){
+  if(!n) return false;
+  return fn === 'vault' ? !!n.vault : !n.vault;
+}
+
+/* 走「列表 + 正文」双栏的视图（2026-09-26：隐私空间与三个记录视图都改为双栏） */
+const TWO_PANE = ['notebook','vault','recent','starred','tag'];
+
 /* ---------- 列表 ---------- */
 function listPanel(items, headHtml){
   const guide = '<div class="guide" id="guideBar" style="margin:14px 14px 4px">'
     + icon('i-info')
-    + '<span>原型演示：① 左下快速录入框切 Memo / 待办 / 笔记三种模式；② 点条目右侧滑出详情；③ 顶栏隐私锁可模拟锁定与解锁。</span>'
+    + '<span>原型演示：① 左下快速录入框切 Memo / 待办 / 笔记三种模式；② 点条目在右侧直接打开阅读与编辑；③ 顶栏隐私锁可模拟锁定与解锁。</span>'
     + '<svg class="ic x" id="guideClose"><use href="#i-x"/></svg></div>';
 
   const rows = items.map(n => {
@@ -1329,7 +1401,7 @@ function listPanel(items, headHtml){
     const lockedEnc = isEnc && state.locked;
     const snippet = lockedEnc ? '已加密' : n.snippet;
     const words = lockedEnc ? '' : (' · ' + n.words + ' 字');
-    return '<div class="item-row' + (n.id === state.activeId && state.fn === 'notebook' ? ' active' : '') + '" data-id="' + n.id + '">'
+    return '<div class="item-row' + (n.id === state.activeId && TWO_PANE.indexOf(state.fn) >= 0 ? ' active' : '') + '" data-id="' + n.id + '">'
       + '<div class="item-lead' + (isEnc ? ' enc' : '') + '">' + icon(isEnc ? (state.locked?'i-lock':'i-unlock') : (n.kind === 'table' ? 'i-table' : 'i-note')) + '</div>'
       + '<div class="item-body">'
       +   '<div class="item-title">'
@@ -1353,6 +1425,9 @@ function listPanel(items, headHtml){
   return (state.fn === 'recent' ? guide : '') + (headHtml || '') + (items.length ? rows : empty);
 }
 
+/* 列表条目点击。
+   drawerMode 保留：侧滑详情改为「主操作区在使用时临时查看属性」的辅助手段（2026-09-26 用户口径），
+   当前所有列表视图都走「点开即读」，不再由列表触发侧滑；触发点后续由用户明确后再接入。 */
 function bindList(drawerMode){
   $$('#paneList .item-row').forEach(row => {
     row.addEventListener('click', e => {
@@ -1422,6 +1497,8 @@ function bodyOf(n){
   if(n.id === 'n2') return NOTE_BODY_2;
   if(n.id === 'n3') return NOTE_BODY_3;
   if(n.id === 'n4') return NOTE_BODY_4;
+  if(n.id === 'v1') return NOTE_BODY_V1;
+  if(n.id === 'v2') return NOTE_BODY_V2;
   if(n.enc) return NOTE_BODY_3;
   return buildBody(n);
 }
@@ -1639,8 +1716,10 @@ function homePanel(){
   const locked = state.locked;                             // 全局锁状态（Q5：一次解锁为一体）
   const memoLocked = state.locked && state.privacyBrowse;  // Memo 门禁
 
-  const allNotes  = NOTES.filter(n => n.kind !== 'table');
-  const allTables = NOTES.filter(n => n.kind === 'table');
+  // 隐私空间的内容不计入首页统计 —— 空间是密封容器，其条目只在空间内可见
+  const visible   = NOTES.filter(n => !n.vault);
+  const allNotes  = visible.filter(n => n.kind !== 'table');
+  const allTables = visible.filter(n => n.kind === 'table');
   // 锁定时不暴露加密空间内的条目数（§6.9「不显示条目数」）
   const nNotes  = locked ? allNotes.length  - allNotes.filter(n => n.enc).length  : allNotes.length;
   const nTables = locked ? allTables.length - allTables.filter(n => n.enc).length : allTables.length;
@@ -1667,7 +1746,7 @@ function homePanel(){
         : '<div class="home-empty">没有未完成的待办。</div>');
 
   // 最近动态
-  const recent = locked ? NOTES.filter(n => !n.enc).slice(0, 4) : NOTES.slice(0, 4);
+  const recent = (locked ? visible.filter(n => !n.enc) : visible).slice(0, 4);
   const dyn = '<div class="home-list">' + recent.map(n =>
       '<div class="home-line">' + icon(n.kind === 'table' ? 'i-table' : 'i-note')
       + '<span>' + esc(n.title) + '</span><span class="m">' + esc(n.date) + '</span></div>').join('')
@@ -1902,30 +1981,43 @@ function bindTask(){
 /* ============================================================
    8. 隐私空间 / 回收站 / 设置 / 搜索
    ============================================================ */
-function vaultPanel(){
-  const head = '<div class="pane-head"><div><h1>隐私空间</h1>'
-    + '<div class="sub">账户内置的单一加密空间 · 名称明文、内部全部加密 · 不可删除</div></div>'
-    + '<div class="actions">' + (state.locked ? '' : '<button class="btn sm" id="vaultLockBtn">' + icon('i-lock') + '立即锁定</button>') + '</div></div>';
+/* ---------- 隐私空间（2026-09-26 调整：解锁后与笔记本同构，做「列表 + 正文」双栏） ---------- */
 
-  if(state.locked){
-    return head + '<div class="doc-scroll"><div class="placeholder boxed">'
-      + '<div class="big-ic">' + icon('i-lock') + '</div>'
-      + '<h3>此空间已锁定</h3>'
-      + '<p>空间节点不可展开、不显示条目数，列表区域不显示任何条目。空间内的文件夹名、文章标题、正文与附件全部为密文，服务端与本地缓存都拿不到明文。</p>'
-      + '<button class="btn primary" id="vaultUnlockBtn">' + icon('i-unlock') + '输入隐私密码解锁</button>'
-      + '</div></div>';
-  }
+/* 锁定时：整块占位，不显示任何条目，列表区整块隐藏（6.9） */
+function vaultLockedPanel(){
+  return '<div class="pane-head"><div><h1>隐私空间</h1>'
+    + '<div class="sub">账户内置的单一加密空间 · 名称明文、内部全部加密 · 不可删除</div></div></div>'
+    + '<div class="doc-scroll"><div class="placeholder boxed">'
+    + '<div class="big-ic">' + icon('i-lock') + '</div>'
+    + '<h3>此空间已锁定</h3>'
+    + '<p>空间节点不可展开、不显示条目数，列表区域不显示任何条目。空间内的文件夹名、文章标题、正文与附件全部为密文，服务端与本地缓存都拿不到明文。</p>'
+    + '<button class="btn primary" id="vaultUnlockBtn">' + icon('i-unlock') + '输入隐私密码解锁</button>'
+    + '</div></div>';
+}
 
-  return head + '<div class="doc-scroll"><div class="pane-pad" style="max-width:720px">'
+/* 解锁后：左列的头部（标题 + 立即锁定 + 空间内文件夹）。文件夹名同样是密文。 */
+function vaultListHead(){
+  const folders = VAULT_TREE.filter(it => it.icon === 'folder');
+  return '<div class="pane-head" style="padding:15px 20px 6px">'
+    + '<div><h1>隐私空间</h1>'
+    + '<div class="sub">已解锁 · 5 分钟档</div></div>'
+    + '<div class="actions"><button class="btn sm" id="vaultLockBtn">' + icon('i-lock') + '立即锁定</button></div>'
+    + '</div>'
+    + '<div style="padding:0 20px 10px;display:flex;flex-wrap:wrap;gap:6px">'
+    + folders.map(f => '<span class="chip amber" title="文件夹名同样是密文">'
+        + icon('i-folder') + esc(f.name) + '</span>').join('')
+    + '</div>';
+}
+
+/* 解锁后：右列未选中条目时的占位（保留密钥说明与元数据泄露说明） */
+function vaultEmptyDoc(){
+  return '<div class="doc-scroll"><div class="pane-pad" style="max-width:720px">'
     + '<div class="vault-head">' + icon('i-unlock')
-    + '<div><h2>已解锁 · 5 分钟档</h2><p>空间内标题与文件夹名用空间密钥 DEK_s 解密，正文用各篇自己的数据密钥 DEK</p></div></div>'
-    + '<div class="card" style="padding:8px"><ul class="mini-tree">'
-    + VAULT_TREE.map(it => '<li><div class="mini-row">'
-        + icon(it.icon === 'folder' ? 'i-folder' : 'i-note')
-        + '<span>' + esc(it.name) + '</span>'
-        + (it.enc ? '<svg class="ic lock-dot"><use href="#i-lock"/></svg>' : '')
-        + '<span class="meta">' + esc(it.meta) + '</span></div></li>').join('')
-    + '</ul></div>'
+    + '<div><h2>空间密钥 DEK_s 已解开</h2><p>空间内标题与文件夹名用 DEK_s 解密，正文用各篇自己的数据密钥 DEK</p></div></div>'
+    + '<div class="placeholder boxed" style="margin-top:14px">'
+    + '<div class="big-ic">' + icon('i-note') + '</div>'
+    + '<h3>选择左侧的一篇加密内容</h3>'
+    + '<p>隐私空间解锁后与笔记本同构：左列条目列表，右列阅读与编辑。空间内两个文件夹的名称同样是密文（如 8f3a… / c21d…）。</p></div>'
     + '<div class="warn-box info" style="margin-top:16px">' + icon('i-info')
     + '<span>已知的元数据泄露（接受）：条目与文件夹的数量、大小、修改时间、置顶/收藏标记、附件数量、层级结构在服务端可见。</span></div>'
     + '</div></div>';

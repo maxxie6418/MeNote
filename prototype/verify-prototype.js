@@ -407,16 +407,33 @@ step('录入框：笔记模式发布（首行作标题，落根目录）', () =>
   if (!$('#docTitle').value.includes('临时笔记标题')) throw new Error('首行未作标题');
 });
 
-/* ---------- 条目侧栏 / 表格 ---------- */
-step('收藏 → 点击条目滑出详情侧栏', () => {
+/* ---------- 双栏打开 / 侧滑详情（2026-09-26 调整） ---------- */
+step('记录视图：点条目在右侧直接打开内容，不再侧滑', () => {
   click(navEl('starred'));
-  click($$('#paneList .item-row')[0]);
-  if (!$('#drawer').classList.contains('open')) throw new Error('抽屉未打开');
+  const first = $$('#paneList .item-row')[0];
+  if (!first) throw new Error('收藏列表为空');
+  click(first);
+  if ($('#drawer').classList.contains('open')) throw new Error('点条目仍会侧滑出详情');
+  const row = $$('#paneList .item-row').find(r => r.dataset.id === first.dataset.id);
+  if (!row.classList.contains('active')) throw new Error('被点条目未高亮为当前项');
+  if (!$$('#paneList .item-row').length) throw new Error('列表未保留');
+  if ($('#paneList').classList.contains('wide')) throw new Error('记录视图仍是单栏宽列表');
+  if (!$('#docTitle') && !$('table.data')) throw new Error('右列未打开内容');
 });
 
-step('抽屉「在笔记本中打开」', () => {
-  click($('#drawerOpen'));
-  if (!$('#edSource') && !$('table.data')) throw new Error('未跳转到正文');
+step('侧滑详情：能力保留，但不由列表触发（2026-09-26 用户口径）', () => {
+  // 容器、样式、函数都还在 —— 留给「主操作区在使用时临时查看属性」
+  if (!$('#drawer')) throw new Error('侧滑详情容器被删除');
+  if (!/\.drawer\s*\{/.test(html)) throw new Error('侧滑详情样式被删除');
+  if (!/function\s+openDrawer\s*\(/.test(html)) throw new Error('openDrawer 被删除');
+  // 三个记录视图逐个确认不会侧滑
+  ['recent', 'starred', 'notebook'].forEach(fn => {
+    click(navEl(fn));
+    const row = $$('#paneList .item-row')[0];
+    if (!row) throw new Error(fn + ' 视图列表为空');
+    click(row);
+    if ($('#drawer').classList.contains('open')) throw new Error(fn + ' 视图点条目仍会侧滑');
+  });
 });
 
 step('标签筛选', () => {
@@ -468,10 +485,42 @@ step('锁定态点「隐私空间」→ 弹解锁框', () => {
   if (!$('#unlockOverlay').classList.contains('open')) throw new Error('解锁框未打开');
 });
 
-step('解锁 → 进入隐私空间', () => {
+step('解锁 → 隐私空间为「列表 + 正文」双栏（与笔记本同构，2026-09-26 调整）', () => {
   input($('#pwInput'), 'demo');
   click($('#unlockConfirm'));
-  if (!$('.mini-tree')) throw new Error('空间内容未渲染');
+  // 双栏：左列条目、右列正文都在
+  if ($('#paneList').classList.contains('hidden')) throw new Error('隐私空间仍是单栏（左列被隐藏）');
+  if (!$('#paneList').innerHTML.trim()) throw new Error('左列未渲染空间内条目');
+  if (!$('#paneDoc').innerHTML.trim()) throw new Error('右列未渲染');
+  // 空间内条目在列表里，非空间内容不得混入
+  const ids = $$('#paneList .item-row').map(r => r.dataset.id);
+  if (!ids.includes('v1') || !ids.includes('v2')) throw new Error('空间内条目缺失：' + ids.join('/'));
+  if (ids.some(id => id !== 'v1' && id !== 'v2')) throw new Error('非空间内容混进空间列表：' + ids.join('/'));
+  // 点空间内条目 → 右列直接打开正文
+  click($('#paneList .item-row[data-id="v1"]'));
+  if (!$('#docTitle')) throw new Error('点空间内条目后右列未打开编辑器');
+  if ($('#docTitle').value.indexOf('日记') < 0) throw new Error('右列打开的不是该条目：' + $('#docTitle').value);
+  if (!$('#edSource').value.includes('存储池')) throw new Error('右列打开的是别的正文');
+});
+
+step('隐私空间内容不泄漏到其它视图', () => {
+  ['recent', 'starred', 'notebook', 'home'].forEach(fn => {
+    click(navEl(fn));
+    const ids = $$('#paneList .item-row').map(r => r.dataset.id);
+    if (ids.includes('v1') || ids.includes('v2')) throw new Error('隐私空间内容泄漏到 ' + fn);
+  });
+  click(navEl('vault'));
+});
+
+step('锁定态：隐私空间不显示任何条目，列表区整块隐藏', () => {
+  const b = $('#vaultLockBtn');
+  if (!b) throw new Error('隐私空间缺「立即锁定」按钮');
+  click(b);
+  if ($$('#paneList .item-row').length) throw new Error('锁定时空间仍显示条目');
+  if (!$('#paneList').classList.contains('hidden')) throw new Error('锁定时列表区未隐藏');
+  if (!$('#vaultUnlockBtn')) throw new Error('锁定时缺解锁入口');
+  // 复原为解锁态，后续步骤沿用原来的状态
+  unlockVia('#vaultUnlockBtn');
 });
 
 step('锁定态 Memo 与待办都显示门禁占位（M06-08 / M07-05）', () => {

@@ -14,6 +14,11 @@ export interface MenuItemSpec {
   /** 禁用时**必须**给 `title` 说明原因（DESIGN.md §6.1） */
   disabled?: boolean;
   title?: string;
+  /**
+   * 选中后**不关闭菜单**（需求 M18-03：菜单里的主题切换切完不收起，便于连续比色）。
+   * 其余项点完即收起。
+   */
+  keepOpen?: boolean;
 }
 
 export interface DropdownMenuProps {
@@ -21,6 +26,12 @@ export interface DropdownMenuProps {
   label: string;
   trigger: ReactNode;
   header?: ReactNode;
+  /**
+   * 自定义内容块（渲染在头部之后、条目之前）。
+   * 用于放"一排三档"这类**不是单个菜单项**的控件（例如账户菜单里的主题切换）——
+   * 菜单项是 `role="menuitem"` 的按钮，里面不能再嵌按钮。
+   */
+  blocks?: ReactNode;
   items: MenuItemSpec[];
   align?: "left" | "right";
   /** 触发元素本身已是图标按钮时（如笔记本的 `+`）不需要再挂箭头 */
@@ -31,6 +42,7 @@ export function DropdownMenu({
   label,
   trigger,
   header,
+  blocks,
   items,
   align = "right",
   showChevron = true,
@@ -111,6 +123,7 @@ export function DropdownMenu({
         >
           {header ? <div className="menu__head">{header}</div> : null}
           {header ? <div className="menu__sep" /> : null}
+          {blocks ? <div className="menu__block">{blocks}</div> : null}
           {items.map((item, index) => (
             <button
               key={item.id}
@@ -123,7 +136,7 @@ export function DropdownMenu({
               disabled={item.disabled}
               title={item.title}
               onClick={() => {
-                setOpen(false);
+                if (!item.keepOpen) setOpen(false);
                 item.onSelect();
               }}
             >

@@ -267,7 +267,21 @@ export function SettingsPanel({
         ) : null}
 
         {page === "account" ? (
-          <AccountPage onChangePassword={onChangePassword} onLogout={onLogout} />
+          <>
+            <AccountPage onChangePassword={onChangePassword} onLogout={onLogout} />
+            <section className="setcard" aria-label="登录设备与会话">
+              <h3 className="setcard__title">登录设备与会话</h3>
+              <div className="setrow">
+                <div className="setrow__label">
+                  <span className="setrow__name">已登录设备</span>
+                  <span className="setrow__desc">
+                    设备列表与"踢出其他设备"将在后续里程碑提供；当前改密码会使其他设备的会话立即失效。
+                  </span>
+                </div>
+                <span className="setrow__desc">后续</span>
+              </div>
+            </section>
+          </>
         ) : null}
 
         {page === "instance" ? (

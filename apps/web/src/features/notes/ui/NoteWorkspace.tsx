@@ -32,6 +32,8 @@ export interface NoteWorkspaceProps {
   item: LocalItem | null;
   initialBody: string;
   snapshot: NoteEditorSnapshot | null;
+  /** 打开条目时的模式；来自 设置 › 编辑器 › 默认编辑模式（M2-7），之后可手动切换 */
+  initialMode?: DocMode;
   onInput: (text: string) => void;
   onTitleChange: (title: string) => void;
 }
@@ -40,10 +42,11 @@ export function NoteWorkspace({
   item,
   initialBody,
   snapshot,
+  initialMode,
   onInput,
   onTitleChange,
 }: NoteWorkspaceProps) {
-  const [mode, setMode] = useState<DocMode>("split");
+  const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
   const [previewSource, setPreviewSource] = useState(initialBody);
 

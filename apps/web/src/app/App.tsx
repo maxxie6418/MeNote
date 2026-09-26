@@ -190,8 +190,25 @@ export default function App() {
     };
   }, [searchFilters, searchQuery]);
 
-  /** 待办视图的"今天"：按设置时区算，且只在挂载时取一次（渲染期调 Date.now() 不纯） */
-  const [today] = useState(() => dayKeyInZone(Date.now()));
+  /**
+   * 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎。
+   * 放在"今天"之前：待办视图的日期口径要用它的时区。
+   */
+  const userSettings = useUserSettings({
+    onWrite: () => {
+      engineRef.current?.notifyLocalWrite();
+      void refreshPending();
+    },
+  });
+  const patchSettings = useCallback(
+    (partial: Partial<UserSettings>) => {
+      void userSettings.patch(partial);
+    },
+    [userSettings],
+  );
+
+  /** 待办视图的"今天"：按**用户设置的时区**算，且只在挂载时取一次（渲染期调 Date.now() 不纯） */
+  const [today] = useState(() => dayKeyInZone(Date.now(), userSettings.settings.timezone));
 
   // Ctrl/Cmd+K 聚焦顶栏搜索（M2-6）；输入框用固定 id 定位，避免为一处焦点穿透多个组件
   useEffect(() => {
@@ -264,20 +281,6 @@ export default function App() {
       .then(setRegistration)
       .catch(() => setRegistration(null));
   }, [route, auth.snapshot.user?.role]);
-
-  /** 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎 */
-  const userSettings = useUserSettings({
-    onWrite: () => {
-      engineRef.current?.notifyLocalWrite();
-      void refreshPending();
-    },
-  });
-  const patchSettings = useCallback(
-    (partial: Partial<UserSettings>) => {
-      void userSettings.patch(partial);
-    },
-    [userSettings],
-  );
 
   /** 搜索筛选用的标签候选：笔记与 Memo 的标签并集（按出现次数倒序） */
   const searchTags = (() => {
@@ -362,6 +365,12 @@ export default function App() {
             }
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
+            userSettings={userSettings.settings}
+            themeMode={theme.mode}
+            onThemeMode={theme.setMode}
+            onFocusSearch={() => {
+              document.getElementById("search-input")?.focus();
+            }}
             sync={sync}
             onOpenSettings={() => navigate({ name: "settings", page: "general" })}
             onLogout={() => {
@@ -477,8 +486,7 @@ export default function App() {
                 today={today}
                 onStatusChange={(id, status) => {
                   void setTaskStatus(id, status).then(() => workspace.refresh());
-                }}
-                onClearMarker={(id) => {
+                }}                onClearMarker={(id) => {
                   void clearTaskMarker(id).then(() => workspace.refresh());
                 }}
               />
@@ -493,6 +501,7 @@ export default function App() {
               <MemoPanel
                 memos={workspace.memos}
                 contents={workspace.memoContents}
+                timeZone={userSettings.settings.timezone}
                 onSave={(id, text) => {
                   void workspace.updateMemo(id, text);
                 }}
@@ -550,6 +559,7 @@ export default function App() {
                 item={workspace.selected}
                 initialBody={workspace.initialBody}
                 snapshot={workspace.snapshot}
+                initialMode={userSettings.settings.editor_mode}
                 onInput={workspace.input}
                 onTitleChange={(title) => {
                   void workspace.changeTitle(title);

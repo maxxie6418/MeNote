@@ -810,6 +810,59 @@ button {
   color: var(--text);
 }
 
+/* 菜单里的自定义块（账户菜单的主题一排三档）：不是菜单项，所以自己排版 */
+.menu__block {
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.menu__theme {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+}
+
+.menu__theme-item {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+
+.menu__theme-item[aria-pressed="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+/* 账户头（头像 + 用户名 + 角色与实例） */
+.acct {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.acct__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.acct__name {
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.acct__sub {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
 .empty {
   display: flex;
   flex-direction: column;

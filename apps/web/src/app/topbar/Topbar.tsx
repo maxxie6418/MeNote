@@ -7,9 +7,11 @@
  * - 隐私锁胶囊**不渲染**（未启用隐私锁时整个不显示，拆解 M02-05）。
  */
 import type { ReactNode } from "react";
-import { Avatar, Pill } from "../ui/Controls";
-import { DropdownMenu } from "../ui/Menu";
+import type { UserSettings } from "@menote/shared";
+import { Pill } from "../ui/Controls";
+import { AccountQuickMenu } from "./AccountQuickMenu";
 import { SearchBox } from "./SearchBox";
+import type { ThemeMode } from "../theme/useTheme";
 import type { SyncIndicator } from "../useSyncStatus";
 
 export interface TopbarUser {
@@ -24,6 +26,12 @@ export interface TopbarProps {
   /** 搜索框的值（M2-6）；由 App 持有，清空即回到进入搜索前的视图 */
   searchQuery: string;
   onSearchChange: (value: string) => void;
+  /** 账户快捷菜单（M2-7）：显示哪些功能项由设置决定 */
+  userSettings: UserSettings;
+  themeMode: ThemeMode;
+  onThemeMode: (mode: ThemeMode) => void;
+  /** 菜单里的「搜索」项：把焦点送到搜索框 */
+  onFocusSearch: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
 }
@@ -34,6 +42,10 @@ export function Topbar({
   sync,
   searchQuery,
   onSearchChange,
+  userSettings,
+  themeMode,
+  onThemeMode,
+  onFocusSearch,
   onOpenSettings,
   onLogout,
 }: TopbarProps) {
@@ -61,24 +73,15 @@ export function Topbar({
 
         {/* ⑤ 隐私锁胶囊：未启用隐私锁时不显示（M1 恒不显示） */}
 
-        {/* ⑥ 账户与设置 */}
-        <DropdownMenu
-          label="账户与设置"
-          align="right"
-          header={
-            <>
-              <Avatar username={user.username} size={26} />
-              <span>
-                {user.username}
-                {user.role === "owner" ? " · owner" : ""}
-              </span>
-            </>
-          }
-          trigger={<Avatar username={user.username} />}
-          items={[
-            { id: "settings", label: "设置", icon: "settings", onSelect: onOpenSettings },
-            { id: "logout", label: "退出登录", icon: "logout", onSelect: onLogout },
-          ]}
+        {/* ⑥ 账户快捷菜单（M2-7：账户头 → 可配置功能项 → 定底设置/退出） */}
+        <AccountQuickMenu
+          user={user}
+          settings={userSettings}
+          themeMode={themeMode}
+          onThemeMode={onThemeMode}
+          onFocusSearch={onFocusSearch}
+          onOpenSettings={onOpenSettings}
+          onLogout={onLogout}
         />
       </div>
     </header>

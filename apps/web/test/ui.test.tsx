@@ -62,6 +62,10 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
         sync={toIndicator("idle", 0)}
         searchQuery=""
         onSearchChange={vi.fn()}
+        userSettings={DEFAULT_USER_SETTINGS}
+        themeMode="light"
+        onThemeMode={vi.fn()}
+        onFocusSearch={vi.fn()}
         onOpenSettings={vi.fn()}
         onLogout={vi.fn()}
       />,
@@ -95,6 +99,10 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
         sync={toIndicator("idle", 0)}
         searchQuery=""
         onSearchChange={vi.fn()}
+        userSettings={DEFAULT_USER_SETTINGS}
+        themeMode="light"
+        onThemeMode={vi.fn()}
+        onFocusSearch={vi.fn()}
         onOpenSettings={onOpenSettings}
         onLogout={onLogout}
       />,

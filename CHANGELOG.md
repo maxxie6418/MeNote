@@ -4,6 +4,7 @@
 
 ## 2026-09-26
 
+- 预开发 / ca3674e — 按文档约定迁移主线文档至 wiki/ 并归档功能拆解 v1，新增 README（架构 v1.8）
 - 预开发 / 2c61a80 — CHANGELOG 改为日期小标题格式（AGENTS.md 规则同步）
 - 预开发 / b38fb20 — 草稿改为 docs/scratch/ 文件夹（一份讨论一份文件），架构升 v1.7 与 AGENTS.md 同步
 - 预开发 / f68de6e — CHANGELOG 补记 scratch 目录化

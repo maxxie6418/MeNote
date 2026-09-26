@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FnBar } from "../src/app/fnbar/FnBar";
 import { Topbar } from "../src/app/topbar/Topbar";
+import { InsecureContextBanner } from "../src/app/ui/InsecureContextBanner";
 import { toIndicator } from "../src/app/useSyncStatus";
 import { LoginPage } from "../src/features/auth/ui/LoginPage";
 import { RegisterPage } from "../src/features/auth/ui/RegisterPage";
@@ -319,6 +320,18 @@ describe("设置壳", () => {
     expect(screen.getByLabelText("当前登录密码")).toBeTruthy();
     expect(screen.getByRole("button", { name: "修改登录密码" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "退出登录" })).toBeTruthy();
+  });
+});
+
+describe("非安全连接的常驻警告", () => {
+  it("http 打开时给出可行动的解释（不是 TypeError）", () => {
+    const { rerender } = render(<InsecureContextBanner secure={false} />);
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("https");
+    expect(alert.textContent).toContain("无法登录");
+
+    rerender(<InsecureContextBanner secure />);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 

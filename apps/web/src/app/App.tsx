@@ -23,6 +23,7 @@ import { useRoute } from "./router";
 import { useTheme } from "./theme/useTheme";
 import { Topbar } from "./topbar/Topbar";
 import { IconSprite } from "./ui/Icon";
+import { InsecureContextBanner, isSecureContextNow } from "./ui/InsecureContextBanner";
 import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 
@@ -122,6 +123,7 @@ export default function App() {
     return (
       <>
         <IconSprite />
+        <InsecureContextBanner secure={isSecureContextNow()} />
         <div className="authpage">正在检查登录状态…</div>
       </>
     );
@@ -131,6 +133,7 @@ export default function App() {
     return (
       <>
         <IconSprite />
+        <InsecureContextBanner secure={isSecureContextNow()} />
         {route.name === "register" ? (
           <RegisterPage
             firstUser={!auth.snapshot.hasUsers}
@@ -165,7 +168,9 @@ export default function App() {
       <IconSprite />
       <AppShell
         banner={
-          syncStatus === "offline" ? (
+          !isSecureContextNow() ? (
+            <InsecureContextBanner secure={false} />
+          ) : syncStatus === "offline" ? (
             <div className="banner" role="status">
               离线，改动会在联网后上传
             </div>

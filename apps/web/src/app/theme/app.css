@@ -808,6 +808,14 @@ button {
   color: var(--amber);
 }
 
+/* 破坏性/阻塞性后果：红色常驻横幅（DESIGN.md：必须保持可见） */
+.banner--danger {
+  border-bottom-color: var(--red-line);
+  background: var(--red-soft);
+  color: var(--red);
+  font-weight: 600;
+}
+
 .skeleton {
   height: 14px;
   border-radius: var(--sp-1);

@@ -16,6 +16,14 @@ export async function deriveLoginKey(
   saltBase64Url: string,
   kdf: AuthKdfParams = LOGIN_KDF_DEFAULT,
 ): Promise<string> {
+  // 非安全上下文（http 打开的页面）里浏览器不提供 WebCrypto：必须给出人话解释，
+  // 而不是让用户看到 "Cannot read properties of undefined (reading 'importKey')"。
+  if (typeof crypto === "undefined" || !crypto.subtle) {
+    throw new Error(
+      "当前页面不是安全连接（http），浏览器不提供加密能力，无法登录或注册。请改用 https 打开本应用。",
+    );
+  }
+
   const salt = base64UrlDecode(saltBase64Url);
   const passwordBytes = new TextEncoder().encode(password);
 

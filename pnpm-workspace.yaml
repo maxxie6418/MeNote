@@ -1,0 +1,17 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 11 默认的 package-map 布局对 tsc/Vite 的模块解析不透明，
+# 用经典 hoisted 扁平布局，TS / Vite / vitest-pool-workers 都按常规解析
+nodeLinker: hoisted
+
+# 这些依赖的 postinstall 用于校验/安装平台二进制（esbuild、workerd），必须放行
+allowBuilds:
+  esbuild: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/vite-plugin@1.60.2'
+  - '@cloudflare/workers-types@5.20260926.1'
+  - miniflare@5.20260925.0-alpha
+  - wrangler@4.141.0

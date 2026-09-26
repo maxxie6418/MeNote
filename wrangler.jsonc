@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "menote",
+  // 注意：受 @cloudflare/vitest-pool-workers 0.22 内置 workerd 上限（2026-08-22）
+  // 约束，本地测试跑不了更新的兼容日；该包跟进后随 wrangler 一并上移
+  "compatibility_date": "2026-08-22",
+  // 唯一 Worker 入口（架构 §2.3.1）：只做装配，业务在 routes/ 与 services/
+  "main": "apps/worker/src/index.ts",
+  "assets": {
+    // SPA：未命中静态资源时回 index.html；/api/* 一律由 Worker 处理
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+    "binding": "ASSETS"
+  },
+  // 不写 database_id：部署时自动供给并回写（架构 §15.5，wrangler ≥ 4.45）
+  "d1_databases": [
+    { "binding": "DB", "database_name": "menote-db" }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

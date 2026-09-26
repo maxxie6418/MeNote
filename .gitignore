@@ -4,3 +4,14 @@
 
 # 评审产物，不入库
 deliverables/
+
+# 依赖与构建产物
+node_modules/
+dist/
+dist-types/
+*.tsbuildinfo
+
+# Wrangler / Cloudflare 本地产物与机密
+.wrangler/
+.dev.vars*
+

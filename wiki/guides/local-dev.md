@@ -68,14 +68,14 @@ wrangler.jsonc    唯一 Worker 配置（仓库根）：main、assets、D1 绑�
 
 1. Cloudflare Dashboard → Workers & Pages → Create → 导入本仓库。
 2. 构建命令：`pnpm install --frozen-lockfile && pnpm build`
-3. 部署命令：`pnpm --filter @menote/web exec wrangler deploy -c dist/menote/wrangler.json`
+3. 部署命令：`npx wrangler deploy`（默认命令即可，见下方要点）
 4. 生产分支 `main`；非生产分支与 PR 自动获得预览 URL。
 
 要点：
 
 - `wrangler.jsonc` 不写资源 ID：首次部署时 D1 按名（`menote-db`）自动供给并回写绑定。
-- 部署命令必须显式指向 `-c dist/menote/wrangler.json`（Vite 插件生成的输出配置）：从仓库直接 `wrangler deploy` 会因同时找到根配置与输出配置而歧义报错。
-- 部署命令行部署手动跑：`pnpm build && pnpm deploy`（需 `wrangler login`）。
+- **部署配置指针**：真正的部署配置是 Vite 构建产物 `apps/web/dist/menote/wrangler.json`；`pnpm build` 的最后一步会在仓库根生成 `.wrangler/deploy/config.json` 指向它，wrangler 检测到该指针即改用产物配置（日志显示 "Using redirected Wrangler configuration"）。因此根目录的默认 `npx wrangler deploy` 可直接使用；不要删除 `scripts/write-deploy-config.mjs`。
+- 命令行手动部署：`pnpm deploy`（= `pnpm build && wrangler deploy`，需先 `wrangler login`）。
 - 他人自部署可走 README 的 Deploy to Cloudflare 按钮（部署时自动供给资源并克隆新仓库）。
 - R2（附件）M4 才接入；未绑卡账户届时需先处理绑卡决策。
 

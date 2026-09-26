@@ -4,6 +4,8 @@
 
 ## 2026-09-26
 
+- v0.1.1 / 4f05411 — 修复 Workers Builds 部署失败（assets 缺 directory）：build 末尾在仓库根生成 .wrangler/deploy/config.json 指针，默认 `npx wrangler deploy` 即采用 Vite 产物配置；guide §6 部署说明同步更新
+
 - v0.1.0 / 5fce691 — 版本号规范落进 AGENTS.md（主版本号仅用户主动变更；次版本号随里程碑 +0.1；修订号 +0.0.1，分批可合并）；根 package.json 同步为 0.1.0
 - v0.1.0 / 7a8d42b — 重写 README：特性与技术栈（含已接入/规划状态）、快速开始、目录结构、常用命令、部署（Deploy 按钮 + Workers Builds）、文档导航与冲突优先级
 - v0.1.0 / 5b371c6 — M0 工程骨架：pnpm workspace（apps/web + apps/worker + packages/shared）、Worker /api/health、Vite 8 + React 19 前端、wrangler 部署链路（D1 自动供给 + SPA 静态资源 + CSP 头）、CI（lint / typecheck / 测试 / 构建 / 体积检查）、本地开发指南 wiki/guides/local-dev.md

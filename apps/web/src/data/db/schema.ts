@@ -10,7 +10,14 @@ import Dexie, { type EntityTable } from "dexie";
 import type { FolderMeta, ItemMeta } from "@menote/shared";
 
 /** 本地待上传标记：null 表示已同步 */
-export type PendingKind = "create" | "save_body" | "patch_meta";
+export type PendingKind =
+  | "create"
+  | "save_body"
+  | "patch_meta"
+  /** 新建文件夹（M2-3） */
+  | "create_folder"
+  /** 文件夹改名/移动（M2-3） */
+  | "patch_folder";
 
 export interface LocalItem extends ItemMeta {
   pending: PendingKind | null;

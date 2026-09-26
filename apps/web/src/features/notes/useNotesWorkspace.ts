@@ -7,11 +7,16 @@
 import { newUlid } from "@menote/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  countItemsByFolder,
+  createLocalFolder,
   createLocalNote,
   db,
   enqueueMetaPatch,
   getLocalItem,
+  listItemSummaries,
+  listLocalFolders,
   listLocalItems,
+  type LocalFolder,
   type LocalItem,
 } from "../../data/db";
 import { createNoteEditor, type NoteEditorController, type NoteEditorSnapshot } from "./model";
@@ -19,6 +24,8 @@ import {
   collectTags,
   DEFAULT_VIEW,
   filterByView,
+  folderDepthFor,
+  MAX_FOLDER_DEPTH,
   viewTitle,
   type NotesView,
 } from "./views";
@@ -60,12 +67,24 @@ export interface NotesWorkspace {
   tags: Array<{ tag: string; count: number }>;
   selectedId: string | null;
   selected: LocalItem | null;
+  /** 本地文件夹（两层树）与其条目计数 */
+  folders: LocalFolder[];
+  folderCounts: Record<string, number>;
+  /** 列表行的摘要（取自已缓存正文的第一行） */
+  summaries: Record<string, string>;
   initialBody: string;
   snapshot: NoteEditorSnapshot | null;
   refresh: () => Promise<void>;
   open: (id: string) => Promise<void>;
   createNote: (options?: { title?: string; body?: string }) => Promise<void>;
   changeTitle: (title: string) => Promise<void>;
+  /** 新建文件夹（深度超限时抛错，界面本该不给出入口） */
+  createFolder: (name: string, parentId: string | null) => Promise<void>;
+  /** 把条目移入文件夹（`null` = 根目录） */
+  moveItemToFolder: (itemId: string, folderId: string | null) => Promise<void>;
+  /** 置顶 / 收藏：都走元数据补丁（服务端白名单已含这两列） */
+  togglePinned: (itemId: string) => Promise<void>;
+  toggleStarred: (itemId: string) => Promise<void>;
   input: (text: string) => void;
   notifyUploaded: () => void;
   notifyFailed: () => void;
@@ -81,14 +100,25 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   const [initialBody, setInitialBody] = useState("");
   const [snapshot, setSnapshot] = useState<NoteEditorSnapshot | null>(null);
   const [view, setView] = useState<NotesView>(DEFAULT_VIEW);
+  const [folders, setFolders] = useState<LocalFolder[]>([]);
+  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;
 
   /** 内容没变就不要替换数组：每次同步都塞新数组会让下游依赖无谓地变身份 */
   const refresh = useCallback(async () => {
-    const rows = await listLocalItems();
+    const [rows, folderRows, counts, bodySummaries] = await Promise.all([
+      listLocalItems(),
+      listLocalFolders(),
+      countItemsByFolder(),
+      listItemSummaries(),
+    ]);
     setAllItems((previous) => (sameItems(previous, rows) ? previous : rows));
+    setFolders(folderRows);
+    setFolderCounts(counts);
+    setSummaries(bodySummaries);
   }, []);
 
   // 首次加载：setState 放在 then 回调里，不在 effect 体内同步触发（react-hooks/set-state-in-effect）
@@ -150,6 +180,67 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
   const tags = useMemo(() => collectTags(allItems), [allItems]);
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
+  /** 选中文件夹时用文件夹名当列表标题（`viewTitle` 是纯函数，不认识文件夹数据） */
+  const title = useMemo(() => {
+    if (view.kind === "notebook" && view.folderId) {
+      const folder = folders.find((row) => row.id === view.folderId);
+      if (folder) return folder.name;
+    }
+    return viewTitle(view);
+  }, [folders, view]);
+
+  const createFolder = useCallback(
+    async (name: string, parentId: string | null) => {
+      const parent = parentId === null ? null : (folders.find((row) => row.id === parentId) ?? null);
+      const depth = folderDepthFor(parent);
+      // 客户端先挡一层：界面本该不给出非法入口，真出现了也不该把脏数据写进本地库
+      if (depth > MAX_FOLDER_DEPTH) {
+        throw new Error(`最多支持 ${MAX_FOLDER_DEPTH} 层文件夹`);
+      }
+      const id = newUlid();
+      await createLocalFolder(id, name, parentId, depth, Date.now());
+      await refresh();
+      setView({ kind: "notebook", folderId: id });
+      onLocalWrite?.();
+    },
+    [folders, onLocalWrite, refresh],
+  );
+
+  const patchItem = useCallback(
+    async (itemId: string, patch: Partial<Pick<LocalItem, "folder_id" | "pinned" | "starred">>) => {
+      const item = await getLocalItem(itemId);
+      if (!item) return;
+      await db.items.update(itemId, { ...patch, updated_at: Date.now() });
+      await enqueueMetaPatch(itemId, item.meta_rev, Date.now());
+      await refresh();
+      onLocalWrite?.();
+    },
+    [onLocalWrite, refresh],
+  );
+
+  const moveItemToFolder = useCallback(
+    (itemId: string, folderId: string | null) => patchItem(itemId, { folder_id: folderId }),
+    [patchItem],
+  );
+
+  const togglePinned = useCallback(
+    async (itemId: string) => {
+      const item = await getLocalItem(itemId);
+      if (!item) return;
+      await patchItem(itemId, { pinned: item.pinned === 1 ? 0 : 1 });
+    },
+    [patchItem],
+  );
+
+  const toggleStarred = useCallback(
+    async (itemId: string) => {
+      const item = await getLocalItem(itemId);
+      if (!item) return;
+      await patchItem(itemId, { starred: item.starred === 1 ? 0 : 1 });
+    },
+    [patchItem],
+  );
+
   /**
    * **必须 memo**：返回值身份不稳定会让调用方的 effect 依赖（如 App 里启动同步引擎的 effect）
    * 每次渲染都变化 → 引擎被反复 stop/create/start → 请求风暴（M1-11 实测：10 秒 35 次 sync）。
@@ -160,17 +251,24 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       allItems,
       loading,
       view,
-      viewTitle: viewTitle(view),
+      viewTitle: title,
       setView,
       tags,
       selectedId,
       selected,
+      folders,
+      folderCounts,
+      summaries,
       initialBody,
       snapshot,
       refresh,
       open,
       createNote,
       changeTitle,
+      createFolder,
+      moveItemToFolder,
+      togglePinned,
+      toggleStarred,
       input: (text: string) => editorRef.current?.onInput(text),
       notifyUploaded: () => editorRef.current?.notifyUploaded(),
       notifyFailed: () => editorRef.current?.notifyFailed(),
@@ -180,16 +278,24 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [
       allItems,
       changeTitle,
+      createFolder,
       createNote,
+      folderCounts,
+      folders,
       initialBody,
       items,
       loading,
+      moveItemToFolder,
       open,
       refresh,
       selected,
       selectedId,
       snapshot,
+      summaries,
       tags,
+      title,
+      togglePinned,
+      toggleStarred,
       view,
     ],
   );

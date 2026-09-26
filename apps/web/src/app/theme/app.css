@@ -301,8 +301,9 @@ button {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
+  gap: var(--sp-2);
+  /* 间距按 DESIGN §4.3 的 4px 刻度收敛（原型是 7px/9px，属定稿前的散值） */
+  padding: var(--sp-1) var(--sp-2);
   border-radius: var(--radius);
   color: var(--text-2);
   font-size: var(--fs-body);
@@ -407,6 +408,50 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 置顶 / 收藏 / 待上传等标记：文字表意，颜色只是辅助（DESIGN.md 禁止项 #4） */
+.itemrow__mark {
+  display: inline-block;
+  margin-right: var(--sp-1);
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+
+.itemrow__excerpt {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行内"更多"菜单：默认不占位，悬停/聚焦时才出现（键盘可达：focus-within 也会显示） */
+.itemrow__wrap {
+  position: relative;
+}
+
+.itemrow__menu {
+  position: absolute;
+  top: var(--sp-1);
+  right: var(--sp-1);
+  opacity: 0;
+}
+
+.itemrow__wrap:hover .itemrow__menu,
+.itemrow__wrap:focus-within .itemrow__menu {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  /* 触屏没有悬停：常显，避免"唯一入口靠悬停"（DESIGN.md 禁止项 #16） */
+  .itemrow__menu {
+    opacity: 1;
+  }
 }
 
 .itemrow__meta {
@@ -954,7 +999,7 @@ button.chip--tag:hover {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 0 9px var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-2);
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -987,7 +1032,57 @@ button.chip--tag:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 9px;
+  padding: 0 var(--sp-2);
+}
+
+/* —— 笔记本树（原型 .tree / .tree-row；间距同样按 §4.3 刻度收敛） —— */
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree__children {
+  padding-left: var(--sp-4);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  text-align: left;
+}
+
+.tree-row:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tree-row[aria-current="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+/* 新建文件夹的内联命名行（Enter 确认 / Esc 取消，Esc 或空名不创建） */
+.tree__new {
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.tree__input {
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--sp-2);
+  background: var(--panel);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: var(--fs-small);
 }
 
 /* —— 浏览三段：下划线页签（与盒式分段控件刻意区分，DESIGN.md §2.5-4） —— */

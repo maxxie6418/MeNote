@@ -7,6 +7,7 @@
 import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
+import { DropdownMenu } from "../../../app/ui/Menu";
 import { ItemListHead } from "../../../app/workarea/ItemListHead";
 
 const PENDING_LABEL: Record<string, string> = {
@@ -31,8 +32,15 @@ export interface NoteListProps {
   title: string;
   selectedId: string | null;
   loading: boolean;
+  /** 行内摘要（已缓存正文的第一行，可缺省） */
+  summaries?: Record<string, string>;
+  /** 文件夹列表：给"移动到…"用（两层，扁平列出即可） */
+  folders?: ReadonlyArray<{ id: string; name: string }>;
   onSelect: (id: string) => void;
   onNewNote: () => void;
+  onMove?: (id: string, folderId: string | null) => void;
+  onTogglePinned?: (id: string) => void;
+  onToggleStarred?: (id: string) => void;
 }
 
 /** 空状态的文案随视图不同——收藏空与笔记空的原因不一样，出口也不一样 */
@@ -52,7 +60,19 @@ function emptyCopy(title: string): { title: string; hint: string } {
   };
 }
 
-export function NoteList({ items, title, selectedId, loading, onSelect, onNewNote }: NoteListProps) {
+export function NoteList({
+  items,
+  title,
+  selectedId,
+  loading,
+  summaries = {},
+  folders = [],
+  onSelect,
+  onNewNote,
+  onMove,
+  onTogglePinned,
+  onToggleStarred,
+}: NoteListProps) {
   const empty = emptyCopy(title);
 
   return (
@@ -82,19 +102,73 @@ export function NoteList({ items, title, selectedId, loading, onSelect, onNewNot
         ) : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {items.map((item) => (
-              <li key={item.id}>
+              <li key={item.id} className="itemrow__wrap">
                 <button
                   type="button"
                   className="itemrow"
                   aria-current={item.id === selectedId}
                   onClick={() => onSelect(item.id)}
                 >
-                  <span className="itemrow__title">{summaryOf(item)}</span>
+                  <span className="itemrow__title">
+                    {item.pinned === 1 ? (
+                      <span className="itemrow__mark" title="已置顶">
+                        置顶
+                      </span>
+                    ) : null}
+                    {item.starred === 1 ? (
+                      <span className="itemrow__mark" title="已收藏">
+                        收藏
+                      </span>
+                    ) : null}
+                    {summaryOf(item)}
+                  </span>
                   <span className="itemrow__meta">
                     <span>{formatTime(item.updated_at)}</span>
                     {item.pending ? <span>{PENDING_LABEL[item.pending] ?? "待上传"}</span> : null}
                   </span>
+                  {summaries[item.id] ? (
+                    <span className="itemrow__excerpt">{summaries[item.id]}</span>
+                  ) : null}
                 </button>
+
+                <div className="itemrow__menu">
+                  <DropdownMenu
+                    label={`${summaryOf(item)} 的更多操作`}
+                    showChevron={false}
+                    trigger={<Icon name="chevron-down" size={13} />}
+                    items={[
+                      {
+                        id: "move-root",
+                        label: "移动到 根目录",
+                        icon: "note",
+                        disabled: (item.folder_id ?? null) === null,
+                        title: (item.folder_id ?? null) === null ? "已经在根目录" : "移到根目录",
+                        onSelect: () => onMove?.(item.id, null),
+                      },
+                      ...folders.map((folder) => ({
+                        id: `move-${folder.id}`,
+                        label: `移动到 ${folder.name}`,
+                        icon: "folder" as const,
+                        disabled: (item.folder_id ?? null) === folder.id,
+                        title:
+                          (item.folder_id ?? null) === folder.id ? "已经在这个文件夹里" : undefined,
+                        onSelect: () => onMove?.(item.id, folder.id),
+                      })),
+                      {
+                        id: "pin",
+                        label: item.pinned === 1 ? "取消置顶" : "置顶",
+                        icon: "note",
+                        onSelect: () => onTogglePinned?.(item.id),
+                      },
+                      {
+                        id: "star",
+                        label: item.starred === 1 ? "取消收藏" : "收藏",
+                        icon: "star",
+                        onSelect: () => onToggleStarred?.(item.id),
+                      },
+                    ]}
+                  />
+                </div>
               </li>
             ))}
           </ul>

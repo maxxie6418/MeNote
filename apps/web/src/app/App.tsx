@@ -14,6 +14,7 @@ import { RegisterPage } from "../features/auth/ui/RegisterPage";
 import { useAuth } from "../features/auth/model";
 import { NoteList } from "../features/notes/ui/NoteList";
 import { NoteWorkspace } from "../features/notes/ui/NoteWorkspace";
+import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
 import { useNotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { changeLoginPassword } from "../features/settings/model";
 import { SettingsPanel } from "../features/settings/ui/SettingsPanel";
@@ -209,8 +210,16 @@ export default function App() {
             }}
             view={workspace.view}
             onViewChange={workspace.setView}
-            counts={{ notebook: workspace.allItems.length }}
             tags={workspace.tags}
+            notebookPanel={
+              <NotebookPanel
+                view={workspace.view}
+                onViewChange={workspace.setView}
+                folders={workspace.folders}
+                counts={workspace.folderCounts}
+                onCreateFolder={workspace.createFolder}
+              />
+            }
           />
         }
       >
@@ -248,11 +257,22 @@ export default function App() {
                 title={workspace.viewTitle}
                 selectedId={workspace.selectedId}
                 loading={workspace.loading}
+                summaries={workspace.summaries}
+                folders={workspace.folders}
                 onSelect={(id) => {
                   void workspace.open(id);
                 }}
                 onNewNote={() => {
                   void workspace.createNote();
+                }}
+                onMove={(id, folderId) => {
+                  void workspace.moveItemToFolder(id, folderId);
+                }}
+                onTogglePinned={(id) => {
+                  void workspace.togglePinned(id);
+                }}
+                onToggleStarred={(id) => {
+                  void workspace.toggleStarred(id);
                 }}
               />
             }

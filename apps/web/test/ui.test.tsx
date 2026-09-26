@@ -131,7 +131,7 @@ describe("功能栏与录入框占位", () => {
         onPublishNote={vi.fn()}
         view={{ kind: "notebook" }}
         onViewChange={vi.fn()}
-        counts={{ notebook: 0 }}
+        notebookPanel={null}
         tags={[]}
       />,
     );
@@ -370,7 +370,7 @@ describe("非安全连接的常驻警告", () => {
 describe("可点元素键盘可达", () => {
   it("列表行是原生 button（可用 Enter 触发）", () => {
     const onSelect = vi.fn();
-    render(
+    const { container } = render(
       <NoteList
         items={[note("a")]}
         title="全部笔记"
@@ -381,7 +381,8 @@ describe("可点元素键盘可达", () => {
       />,
     );
 
-    const row = screen.getByRole("button", { name: /标题 a/ });
+    // 行本身是 button（行内还有"更多操作"按钮，所以按 class 取行）
+    const row = container.querySelector(".itemrow") as HTMLElement;
     expect(row.tagName).toBe("BUTTON");
     fireEvent.click(row);
     expect(onSelect).toHaveBeenCalledWith("a");

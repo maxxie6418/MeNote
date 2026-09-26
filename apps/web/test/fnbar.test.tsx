@@ -23,7 +23,7 @@ function renderFnBar(overrides: Partial<Parameters<typeof FnBar>[0]> = {}) {
       onPublishNote={vi.fn()}
       view={{ kind: "notebook" }}
       onViewChange={vi.fn()}
-      counts={{ notebook: 3 }}
+      notebookPanel={<div data-testid="notebook-panel" />}
       tags={[
         { tag: "工作", count: 2 },
         { tag: "dev", count: 1 },
@@ -76,16 +76,15 @@ describe("功能栏结构", () => {
     expect((screen.getByRole("tab", { name: /待办/ }) as HTMLButtonElement).title).toContain("M2-5");
   });
 
-  it("导航与分组：最近编辑/收藏、笔记本带计数、标签云来自条目", async () => {
+  it("导航与分组：最近编辑/收藏可切换、笔记本分组是插槽、标签云来自条目", async () => {
     const user = userEvent.setup();
     const onViewChange = vi.fn();
     renderFnBar({ onViewChange });
 
     expect(screen.getByRole("button", { name: /最近编辑/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /收藏/ })).toBeTruthy();
-
-    const notebook = screen.getByRole("button", { name: /笔记本/ });
-    expect(notebook.textContent).toContain("3");
+    // 笔记本分组由 App 插槽传入（功能栏不依赖 notes feature）
+    expect(screen.getByTestId("notebook-panel")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /收藏/ }));
     expect(onViewChange).toHaveBeenCalledWith({ kind: "starred" });

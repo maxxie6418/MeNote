@@ -11,6 +11,9 @@ export interface MenuItemSpec {
   label: string;
   icon?: IconName;
   onSelect: () => void;
+  /** 禁用时**必须**给 `title` 说明原因（DESIGN.md §6.1） */
+  disabled?: boolean;
+  title?: string;
 }
 
 export interface DropdownMenuProps {
@@ -20,9 +23,18 @@ export interface DropdownMenuProps {
   header?: ReactNode;
   items: MenuItemSpec[];
   align?: "left" | "right";
+  /** 触发元素本身已是图标按钮时（如笔记本的 `+`）不需要再挂箭头 */
+  showChevron?: boolean;
 }
 
-export function DropdownMenu({ label, trigger, header, items, align = "right" }: DropdownMenuProps) {
+export function DropdownMenu({
+  label,
+  trigger,
+  header,
+  items,
+  align = "right",
+  showChevron = true,
+}: DropdownMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -78,7 +90,7 @@ export function DropdownMenu({ label, trigger, header, items, align = "right" }:
         style={{ display: "flex", alignItems: "center", gap: 2, padding: 0 }}
       >
         {trigger}
-        <Icon name="chevron-down" size={13} />
+        {showChevron ? <Icon name="chevron-down" size={13} /> : null}
       </button>
 
       {open ? (
@@ -108,6 +120,8 @@ export function DropdownMenu({ label, trigger, header, items, align = "right" }:
               type="button"
               role="menuitem"
               className="menu__item"
+              disabled={item.disabled}
+              title={item.title}
               onClick={() => {
                 setOpen(false);
                 item.onSelect();

@@ -11,10 +11,12 @@ export interface ViewableItem {
   starred: number;
   tags: string[];
   updated_at: number;
+  /** 所属文件夹（`null`/缺省 = 根目录） */
+  folder_id?: string | null;
 }
 
 export type NotesView =
-  | { kind: "notebook" }
+  | { kind: "notebook"; folderId?: string | null }
   | { kind: "recent" }
   | { kind: "starred" }
   | { kind: "tag"; tag: string };
@@ -22,7 +24,9 @@ export type NotesView =
 export const DEFAULT_VIEW: NotesView = { kind: "notebook" };
 
 export function viewKey(view: NotesView): string {
-  return view.kind === "tag" ? `tag:${view.tag}` : view.kind;
+  if (view.kind === "tag") return `tag:${view.tag}`;
+  if (view.kind === "notebook" && view.folderId) return `folder:${view.folderId}`;
+  return view.kind;
 }
 
 export function viewTitle(view: NotesView): string {
@@ -45,8 +49,12 @@ export function filterByView<T extends ViewableItem>(items: readonly T[], view: 
       return items.filter((item) => item.starred === 1);
     case "tag":
       return items.filter((item) => item.tags.includes(view.tag));
-    case "recent":
     case "notebook":
+      // 选中某个文件夹时只显示它直接包含的条目；未选中（根目录/全部）显示全部
+      return view.folderId
+        ? items.filter((item) => (item.folder_id ?? null) === view.folderId)
+        : [...items];
+    case "recent":
     default:
       return [...items];
   }
@@ -66,3 +74,24 @@ export function collectTags(
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag, "zh-Hans-CN"));
 }
+
+// ——————————————————————————— 文件夹的两层限制（需求 §4.5） ———————————————————————————
+
+/** 需求 §4.5：最多两层嵌套（加密空间的 depth 0 属 M3） */
+export const MAX_FOLDER_DEPTH = 2;
+
+/** 在某个父文件夹下新建时的深度；父不存在则为第 1 层 */
+export function folderDepthFor(parent: { depth: number } | null | undefined): number {
+  return parent ? parent.depth + 1 : 1;
+}
+
+/**
+ * 能否在某个文件夹下继续新建子文件夹。
+ *
+ * 第 2 层返回 false —— 界面上**不渲染**"新建子文件夹"入口（不是禁用：那个位置永远没有合法动作），
+ * 服务端也会再校验一遍（`depthUnder`）。
+ */
+export function canCreateChildFolder(parent: { depth: number } | null | undefined): boolean {
+  return folderDepthFor(parent) <= MAX_FOLDER_DEPTH;
+}
+

@@ -13,7 +13,6 @@ import { Icon } from "../ui/Icon";
 import { Composer } from "./Composer";
 import { NavList } from "./NavList";
 import { NavSegmented, type BrowsableView } from "./NavSegmented";
-import { NotebookGroup } from "./NotebookGroup";
 import { TagGroup } from "./TagGroup";
 import { VaultNode } from "./VaultNode";
 import type { NotesView } from "../../features/notes/views";
@@ -24,9 +23,12 @@ export interface FnBarProps {
   onPublishNote: (title: string, body: string) => void;
   view: NotesView;
   onViewChange: (view: NotesView) => void;
-  /** 只有笔记本项带计数（原型如此） */
-  counts: { notebook: number };
   tags: ReadonlyArray<{ tag: string; count: number }>;
+  /**
+   * 笔记本分组（树 + `+` 菜单）由 `App` 作为插槽传入：功能栏是通用容器，
+   * 不该反向依赖 notes 这个 feature（架构 §2.3.3 的依赖方向）。
+   */
+  notebookPanel: React.ReactNode;
   /** 浏览三段的当前项（M2-4/M2-5/M2-8 接入前恒为空） */
   browseView?: BrowsableView;
   onBrowseChange?: (view: BrowsableView) => void;
@@ -37,8 +39,8 @@ export function FnBar({
   onPublishNote,
   view,
   onViewChange,
-  counts,
   tags,
+  notebookPanel,
   browseView,
   onBrowseChange,
 }: FnBarProps) {
@@ -55,7 +57,7 @@ export function FnBar({
       <div className="fnbar__scroll">
         <NavSegmented active={browseView} onSelect={onBrowseChange} />
         <NavList view={view} onViewChange={onViewChange} />
-        <NotebookGroup view={view} onViewChange={onViewChange} count={counts.notebook} />
+        {notebookPanel}
         <TagGroup view={view} onViewChange={onViewChange} tags={tags} />
       </div>
 

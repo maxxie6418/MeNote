@@ -116,6 +116,159 @@ export async function listLocalFolders(): Promise<LocalFolder[]> {
   return rows.filter((row) => row.deleted_at === null);
 }
 
+// ——————————————————————————— 文件夹本地写（M2-3） ———————————————————————————
+
+/**
+ * 本地新建文件夹：写入 folders 并入队一条 `create_folder`。
+ *
+ * `depth` 由调用方按"父不存在 → 1；父存在 → 父深度 + 1"算出，且**不得超过 2**（需求 §4.5）。
+ * 服务端会再校验一遍（客户端校验只是提前给用户反馈，不是权威）。
+ */
+export async function createLocalFolder(
+  id: string,
+  name: string,
+  parentId: string | null,
+  depth: number,
+  now: number,
+): Promise<LocalFolder> {
+  const folder: LocalFolder = {
+    id,
+    parent_id: parentId,
+    is_enc_space: 0,
+    in_enc_space: 0,
+    name,
+    depth,
+    position: 0,
+    meta_rev: 0,
+    sync_seq: 0,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+    deleted: false,
+    pending: "create_folder",
+  };
+
+  await db.transaction("rw", db.folders, db.outbox, async () => {
+    await db.folders.put(folder);
+    await enqueue({
+      entity: "folder",
+      entity_id: id,
+      op: "create_folder",
+      base_rev: 0,
+      base_meta_rev: 0,
+      now,
+    });
+  });
+
+  return folder;
+}
+
+/**
+ * 文件夹改名 / 移动入队：同一文件夹只保留一行，**保留最早的 `base_meta_rev`**
+ * （与条目的 `enqueueMetaPatch` 同一条合并规则，架构 §6.3）。
+ */
+export async function enqueueFolderPatch(
+  folderId: string,
+  baseMetaRev: number,
+  now: number,
+): Promise<void> {
+  await db.transaction("rw", db.outbox, db.folders, async () => {
+    const rows = await db
+      .outbox
+      .where("[entity+entity_id]")
+      .equals(["folder", folderId])
+      .toArray();
+
+    if (rows.some((row) => row.op === "create_folder")) {
+      // 还没上传过：改名随那条 create 一起走，不另排
+      await db.folders.update(folderId, { pending: "create_folder" });
+      return;
+    }
+    if (!rows.some((row) => row.op === "patch_folder")) {
+      await enqueue({
+        entity: "folder",
+        entity_id: folderId,
+        op: "patch_folder",
+        base_rev: 0,
+        base_meta_rev: baseMetaRev,
+        now,
+      });
+    }
+    await db.folders.update(folderId, { pending: "patch_folder" });
+  });
+}
+
+/** 本地改名（走 meta_rev：多设备并发改名以后写为准，不生成冲突副本 —— Q12） */
+export async function renameLocalFolder(
+  folderId: string,
+  name: string,
+  now: number,
+): Promise<void> {
+  const folder = await db.folders.get(folderId);
+  if (!folder) return;
+
+  await db.folders.update(folderId, { name, updated_at: now });
+  await enqueueFolderPatch(folderId, folder.meta_rev, now);
+}
+
+/**
+ * 本地移动文件夹。两层限制让这件事很简单：**深度 2 的文件夹不可能有子文件夹**，
+ * 所以移动只影响这一个节点自己的 `parent_id` 与 `depth`，不需要递归改子树。
+ */
+export async function moveLocalFolder(
+  folderId: string,
+  parentId: string | null,
+  depth: number,
+  now: number,
+): Promise<void> {
+  const folder = await db.folders.get(folderId);
+  if (!folder) return;
+
+  await db.folders.update(folderId, { parent_id: parentId, depth, updated_at: now });
+  await enqueueFolderPatch(folderId, folder.meta_rev, now);
+}
+
+/** 某个文件夹下直接包含的条目数（含未上传的）——删除确认框与树上的计数都用它 */
+export async function countItemsInFolder(folderId: string | null): Promise<number> {
+  const rows = await db.items.filter((row) => row.deleted_at === null).toArray();
+  return rows.filter((row) => (row.folder_id ?? null) === folderId).length;
+}
+
+/** 每个文件夹直接包含的条目数（一次算完，供笔记本树用） */
+export async function countItemsByFolder(): Promise<Record<string, number>> {
+  const rows = await db.items.filter((row) => row.deleted_at === null).toArray();
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    if (row.folder_id === null) continue;
+    counts[row.folder_id] = (counts[row.folder_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * 条目列表行的"摘要"：取已缓存正文的第一行非空内容（去掉 Markdown 标记与标题号），截断到 60 字。
+ *
+ * 为什么从正文取而不是加一个 DB 字段：摘要只是列表的展示细节，不值当为它引入派生列与同步字段
+ * （架构 §6.1 的派生列都服务于 MCP 筛选）；正文缓存本来就在本地，列表滚动量级下够用。
+ */
+export async function listItemSummaries(): Promise<Record<string, string>> {
+  const rows = await db.bodies.toArray();
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    for (const rawLine of row.body.split("\n")) {
+      const line = rawLine
+        .replace(/^#{1,6}\s*/, "")
+        .replace(/^[-*+]\s+(\[[ xX]\]\s*)?/, "")
+        .replace(/[`*_>]/g, "")
+        .trim();
+      if (line === "") continue;
+      out[row.item_id] = line.length > 60 ? `${line.slice(0, 60)}…` : line;
+      break;
+    }
+  }
+  return out;
+}
+
 export async function getCachedBody(id: string): Promise<BodyRow | undefined> {
   return db.bodies.get(id);
 }

@@ -27,7 +27,8 @@ export type IconName =
   | "star"
   | "folder"
   | "tag"
-  | "lock";
+  | "lock"
+  | "table";
 
 export function IconSprite() {
   return (
@@ -102,6 +103,10 @@ export function IconSprite() {
       <symbol id="i-lock" viewBox="0 0 16 16">
         <rect x="3.6" y="7" width="8.8" height="6.4" rx="1.4" />
         <path d="M5.8 7V5.4a2.2 2.2 0 0 1 4.4 0V7" />
+      </symbol>
+      <symbol id="i-table" viewBox="0 0 16 16">
+        <rect x="2.6" y="3.4" width="10.8" height="9.2" rx="1.4" />
+        <path d="M2.6 6.6h10.8M6.6 6.6v6M10.2 6.6v6" />
       </symbol>
     </svg>
   );

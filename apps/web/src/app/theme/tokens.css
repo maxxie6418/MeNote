@@ -1,75 +1,92 @@
 /*
- * 设计令牌（唯一视觉入口）。
+ * 设计令牌（唯一视觉入口）——**已定稿**（DESIGN.md v1.2，2026-09-26）。
  *
- * ⚠️ **临时值**：DESIGN.md §3「视觉语言」尚未定稿（配色 / 字体 / 字号刻度 / 圆角刻度 / 阴影全待定）。
- * 按 DESIGN.md §3.1，定稿前一律**从原型取值**（`prototype/menote-prototype.html` 的 `:root` / `[data-theme="dark"]`），
- * 待 DESIGN §3 补齐后**只替换本文件**，不动组件。组件里禁止出现十六进制 / rgb() / 颜色关键字（禁止项 #2）。
+ * 视觉方向：**Cloudflare 色系**（纯白/中性灰底 + Cloudflare 橙主色），锚点取自站点图标里的
+ * `#F6821F` / `#FBAD41` / `#F15A24` / `#FDBA74`。数值即规范（见 DESIGN.md §3.3、§4.3），
+ * 组件里禁止出现十六进制 / rgb() / 颜色关键字（由 `test/layout-invariants.test.ts` 拦截）。
  *
- * 间距与字号刻度：DESIGN.md §4.3 的刻度同样待定（§4.1 只定了「单一刻度」原则）。这里先取原型里的
- * 高频值收敛成有限档，作为临时刻度；定型时按 §3.4 的要求一并收敛（字号 ≈6 档、圆角 2–4 档）。
+ * 三条由对比度实测逼出的硬结论（改色前必读）：
+ * 1. 橙底按钮用**深墨**文字：`#1D1D1D` on `#F6821F` = 6.53:1；白字只有 2.58:1，禁止。
+ * 2. 橙色**不能当浅色主题下的文字色**（`#F6821F` on 白 = 2.58:1），文字一律走 `--primary-ink`。
+ * 3. 警告色与主色同属暖色，状态必须带图标或文字（DESIGN.md §3.2-4）。
+ *
+ * 原型（`prototype/menote-prototype.html`、`menote-framework.html`）的令牌块与本文件取值一致。
+ * 全部配对的实测对比度见 `docs/modules/Menote-视觉定型提案-v1.md`。
  */
 
 :root {
   color-scheme: light;
 
   /* —— 底色与面板 —— */
-  --bg: #faf9f5;
-  --bg-soft: #f4f2eb;
+  --bg: #ffffff;
+  --bg-soft: #f7f7f7;
   --panel: #ffffff;
-  --panel-2: #f7f5ef;
-  --panel-3: #eeece3;
-  --line: #e8e4d9;
-  --line-2: #d8d3c4;
+  --panel-2: #f2f2f2;
+  --panel-3: #e8e8e8;
+  --line: #e0e0e0;
+  --line-2: #c9c9c9;
 
-  /* —— 文字（暖黑，不用纯黑）—— */
-  --text: #1f1e1b;
-  --text-2: #5c5a53;
-  --muted: #8a877f;
+  /* —— 文字（正文 16.9:1）—— */
+  --text: #1d1d1d;
+  --text-2: #4a4a4a;
+  --muted: #6b6b6b;
 
-  /* —— 主色 —— */
-  --primary: #d97757;
-  --primary-2: #b4543a;
-  --primary-soft: rgba(217, 119, 87, 0.12);
-  --primary-line: rgba(217, 119, 87, 0.32);
-  --on-primary: #fff;
-  /* 渐变也必须由令牌拼装（DESIGN.md §3.2-2：渐变里的硬编码色值不会被回归脚本扫到） */
+  /* —— 主色：Cloudflare 橙 —— */
+  --primary: #f6821f;
+  --primary-2: #e8720d;
+  --primary-soft: rgba(246, 130, 31, 0.12);
+  --primary-line: rgba(246, 130, 31, 0.35);
+  /* 渐变也必须由令牌拼装（DESIGN.md §3.2-2；回归脚本会扫描） */
   --primary-grad: linear-gradient(140deg, var(--primary), var(--primary-2));
+  /* 橙色作文字色：#f6821f 压白只有 2.58:1，文字必须走这一档（5.02:1） */
+  --primary-ink: #b45309;
+  /* 橙底上的文字：深墨 6.53:1；白字压橙仅 2.58:1，禁止 */
+  --on-primary: #1d1d1d;
 
-  /* —— 语义色（降饱和，双主题各自核对）—— */
-  --amber: #a9741c;
-  --amber-soft: rgba(169, 116, 28, 0.11);
-  --amber-line: rgba(169, 116, 28, 0.26);
-  --green: #3f7d58;
-  --green-soft: rgba(63, 125, 88, 0.11);
-  --green-line: rgba(63, 125, 88, 0.26);
-  --red: #b8443c;
-  --red-soft: rgba(184, 68, 60, 0.1);
-  --red-line: rgba(184, 68, 60, 0.26);
+  /* —— 语义色（两主题各自核对，不做机械反转）—— */
+  --amber: #8a5a00;
+  --amber-soft: rgba(138, 90, 0, 0.11);
+  --amber-line: rgba(138, 90, 0, 0.26);
+  --green: #1f7a4d;
+  --green-soft: rgba(31, 122, 77, 0.11);
+  --green-line: rgba(31, 122, 77, 0.26);
+  --red: #c0392b;
+  --red-soft: rgba(192, 57, 43, 0.1);
+  --red-line: rgba(192, 57, 43, 0.26);
+  --purple: #6d47a8;
+  --purple-soft: rgba(109, 71, 168, 0.12);
 
   /* —— 结构色与阴影 —— */
-  --hairline: rgba(31, 30, 27, 0.022);
-  --topbar-bg: rgba(250, 249, 245, 0.86);
-  --scrim: rgba(31, 30, 27, 0.42);
-  --shadow-1: 0 4px 14px rgba(31, 30, 27, 0.07);
-  --shadow-2: 0 16px 40px rgba(31, 30, 27, 0.13);
+  --hairline: rgba(29, 29, 29, 0.022);
+  --ph-stripe: rgba(29, 29, 29, 0.05);
+  --topbar-bg: rgba(255, 255, 255, 0.86);
+  --lock-veil: rgba(255, 255, 255, 0.95);
+  --scrim: rgba(29, 29, 29, 0.42);
+  --shadow-1: 0 4px 14px rgba(29, 29, 29, 0.07);
+  --shadow-2: 0 16px 40px rgba(29, 29, 29, 0.13);
+  --shadow-3: 0 28px 70px rgba(29, 29, 29, 0.2);
 
   /* —— 结构尺寸（DESIGN.md §2.2【已定】，换视觉方向也不变）—— */
   --topbar-h: 54px;
   --fnbar-w: 294px;
   --list-w: 330px;
   --settings-nav-w: 184px;
+  --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
+  /* 形态值（不算刻度）：胶囊与圆形（DESIGN.md §3.3） */
+  --radius-pill: 99px;
+  --radius-circle: 50%;
 
-  /* —— 字号刻度（临时：原型高频值收敛为 6 档）—— */
-  --fs-micro: 11px;
-  --fs-small: 12px;
-  --fs-body: 13px;
-  --fs-body-lg: 14px;
-  --fs-title: 17px;
+  /* —— 字号刻度（6 档，DESIGN.md §3.3）—— */
   --fs-display: 20px;
+  --fs-title: 17px;
+  --fs-body-lg: 14px;
+  --fs-body: 13px;
+  --fs-small: 12px;
+  --fs-micro: 11px;
 
-  /* —— 间距刻度（临时：4px 基数的 6 档）—— */
+  /* —— 间距刻度（4px 基数 6 档，DESIGN.md §4.3）—— */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -77,7 +94,7 @@
   --sp-5: 20px;
   --sp-6: 24px;
 
-  /* —— 字族 —— */
+  /* —— 字族（不引 Web 字体）—— */
   --mono: "JetBrains Mono", "Cascadia Code", Consolas, "SF Mono", monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", sans-serif;
@@ -86,38 +103,46 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #262624;
-  --bg-soft: #1f1e1d;
-  --panel: #30302e;
-  --panel-2: #3a3935;
-  --panel-3: #45443f;
-  --line: #3e3e38;
-  --line-2: #514f48;
+  --bg: #161616;
+  --bg-soft: #1e1e1e;
+  --panel: #242424;
+  --panel-2: #2d2d2d;
+  --panel-3: #383838;
+  --line: #333333;
+  --line-2: #4a4a4a;
 
-  --text: #faf9f5;
-  --text-2: #b8b5ac;
-  --muted: #8e8b82;
+  --text: #f2f2f2;
+  --text-2: #bdbdbd;
+  --muted: #8f8f8f;
 
-  --primary: #d97757;
-  --primary-2: #e79372;
-  --primary-soft: rgba(217, 119, 87, 0.16);
-  --primary-line: rgba(217, 119, 87, 0.34);
-  --on-primary: #fff;
+  --primary: #f6821f;
+  /* 深色下悬停**变亮**（不是变暗） */
+  --primary-2: #fbad41;
+  --primary-soft: rgba(246, 130, 31, 0.16);
+  --primary-line: rgba(246, 130, 31, 0.34);
   --primary-grad: linear-gradient(140deg, var(--primary), var(--primary-2));
+  /* 深色下橙色直接可作文字色（7.01:1） */
+  --primary-ink: #f6821f;
+  --on-primary: #161616;
 
   --amber: #e0a458;
   --amber-soft: rgba(224, 164, 88, 0.14);
   --amber-line: rgba(224, 164, 88, 0.3);
-  --green: #7fb98a;
-  --green-soft: rgba(127, 185, 138, 0.14);
-  --green-line: rgba(127, 185, 138, 0.28);
-  --red: #e2726b;
-  --red-soft: rgba(226, 114, 107, 0.14);
-  --red-line: rgba(226, 114, 107, 0.3);
+  --green: #5cbf8a;
+  --green-soft: rgba(92, 191, 138, 0.14);
+  --green-line: rgba(92, 191, 138, 0.28);
+  --red: #f07167;
+  --red-soft: rgba(240, 113, 103, 0.14);
+  --red-line: rgba(240, 113, 103, 0.3);
+  --purple: #b5a2e0;
+  --purple-soft: rgba(181, 162, 224, 0.16);
 
   --hairline: rgba(255, 255, 255, 0.02);
-  --topbar-bg: rgba(38, 38, 36, 0.86);
-  --scrim: rgba(0, 0, 0, 0.5);
-  --shadow-1: 0 4px 14px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 16px 40px rgba(0, 0, 0, 0.42);
+  --ph-stripe: rgba(255, 255, 255, 0.035);
+  --topbar-bg: rgba(22, 22, 22, 0.86);
+  --lock-veil: rgba(22, 22, 22, 0.95);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-1: 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 28px 70px rgba(0, 0, 0, 0.55);
 }

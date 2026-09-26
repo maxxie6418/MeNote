@@ -1,0 +1,6 @@
+{
+  "name": "menote-prototype-tools",
+  "private": true,
+  "type": "commonjs",
+  "//": "原型回归脚本（verify-prototype.js / verify-framework.js）是 CommonJS（用 require 加载 jsdom）。仓库根 package.json 是 \"type\": \"module\"，会让 .js 被当成 ESM 而报 \"require is not defined\"。这个目录级标记把 prototype/ 下恢复为 CommonJS——不改文件名、不动任何文档引用。本目录不是 pnpm workspace 成员（见根 pnpm-workspace.yaml 只含 apps/* 与 packages/*）。"
+}

@@ -472,24 +472,54 @@ step('主题：默认浅色，设置里可切深色 / 跟随系统（§7.5 界�
   if (!set.querySelector('.radio-opt[data-th="light"]').classList.contains('on')) throw new Error('浅色选项未高亮');
 });
 
-step('主题令牌：浅色与深色两套变量都已定义', () => {
+step('主题令牌：浅色与深色两套变量都已定义且成对', () => {
   const css = $$('style').map(s => s.textContent).join('\n');
   const rootBlk = css.match(/:root\{[\s\S]*?\n\}/);
   if (!rootBlk) throw new Error('未找到 :root 令牌块');
-  if (!/--bg:#faf9f5/.test(rootBlk[0])) throw new Error('浅色底色不是奶油白');
+  // 2026-09-26 换色（Cloudflare 色系）：底色由奶油白 #faf9f5 改为纯白，主色由陶土橙改为 Cloudflare 橙
+  if (!/--bg:\s*#ffffff/.test(rootBlk[0])) throw new Error('浅色底色不是 #ffffff');
   const dark = css.match(/\[data-theme="dark"\]\{[\s\S]*?\n\}/);
   if (!dark) throw new Error('缺深色令牌块');
-  ['--bg', '--panel', '--text', '--primary', '--primary-line', '--shadow-1'].forEach(v => {
-    if (!dark[0].includes(v + ':')) throw new Error('深色块缺变量 ' + v);
-  });
+
+  // DESIGN.md §3.2-3：**颜色类**令牌必须成对提供（深色不是浅色的机械反转，但键必须齐全）。
+  // 尺寸/字族类令牌只在浅色块定义，不参与成对性判定——否则 --radius / --topbar-h 会被误报。
+  const pairs = blk => [...blk.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/g)]
+    .filter(m => /#|rgba?\(|linear-gradient/.test(m[2]))
+    .map(m => m[1]);
+  const lightColors = pairs(rootBlk[0]);
+  const darkColors = new Set(pairs(dark[0]));
+  const missing = lightColors.filter(n => !darkColors.has(n));
+  if (missing.length) throw new Error('深色块缺颜色令牌：' + missing.join('、'));
+  if (lightColors.length < 30) throw new Error('浅色颜色令牌数量异常（' + lightColors.length + ' 个），像是令牌块被截断');
 });
 
-step('主色为 Claude 陶土橙，无蓝色系残留', () => {
+step('主色为 Cloudflare 橙，旧 Claude 暖色已清干净', () => {
   const css = $$('style').map(s => s.textContent).join('\n');
   const rootBlk = css.match(/:root\{[\s\S]*?\n\}/)[0];
-  if (!/--primary:#d97757/.test(rootBlk)) throw new Error('浅色主色不是陶土橙');
+  if (!/--primary:\s*#f6821f/.test(rootBlk)) throw new Error('浅色主色不是 Cloudflare 橙 #f6821f');
+  // 新增：橙色作文字色的专用令牌（浅色下 #f6821f 压白只有 2.58:1，读不清）
+  if (!/--primary-ink:\s*#b45309/.test(rootBlk)) throw new Error('缺 --primary-ink（橙色文字色，须 #b45309）');
+  if (!/--on-primary:\s*#1d1d1d/.test(rootBlk)) throw new Error('--on-primary 必须是深墨 #1d1d1d（白字压橙仅 2.58:1）');
+  const stale = css.match(/#d97757|#b4543a|#faf9f5|#f4f2eb|#eeece3|#e8e4d9/);
+  if (stale) throw new Error('仍有旧 Claude 暖色残留：' + stale[0]);
   const blue = css.match(/#5b8cff|#7ba3ff|#8fa6c9|#cfe0f7|#4f7ff0|#6d5ce8/);
   if (blue) throw new Error('仍有蓝色系硬编码残留：' + blue[0]);
+});
+
+step('渐变内不得有硬编码色值（DESIGN.md §3.4 问题 4）', () => {
+  // linear-gradient() 里的色值不会被"颜色令牌"那道检查扫到，是本项目已发生过的漏网点。
+  // 这条检查要求**使用处**的渐变一律由 var(--token) 拼装；
+  // 令牌定义本身（:root / [data-theme="dark"] 两个块）当然要写具体色值，故先剔除。
+  const css = $$('style').map(s => s.textContent).join('\n');
+  const outsideTokens = css
+    .replace(/:root\{[\s\S]*?\n\}/, '')
+    .replace(/\[data-theme="dark"\]\{[\s\S]*?\n\}/, '');
+  const gradients = outsideTokens.match(/linear-gradient\([^)]*\)/g) || [];
+  if (!gradients.length) throw new Error('令牌块之外一个渐变都没找到，检查本身可能失效');
+  const offenders = gradients.filter(g => /#[0-9a-fA-F]{3,8}\b|\brgba?\(/.test(g));
+  if (offenders.length) {
+    throw new Error('渐变内有硬编码色值（' + offenders.length + ' 处）：' + offenders.slice(0, 3).join(' | '));
+  }
 });
 
 /* ---------- 笔记本 / 正文 ---------- */

@@ -15,62 +15,63 @@
    ============================================================ */
 :root{
   color-scheme:light;
-  --bg:#faf9f5;
-  --bg-2:#f4f2eb;
+  /* 2026-09-26 换色：与 menote-prototype.html 同步换成 Cloudflare 色系（原 Claude 暖色） */
+  --bg:#ffffff;
+  --bg-2:#f7f7f7;
   --panel:#ffffff;
-  --line:#e8e4d9;
-  --line-2:#d8d3c4;
-  --text:#1f1e1b;
-  --text-2:#5c5a53;
-  --muted:#8a877f;
+  --line:#e0e0e0;
+  --line-2:#c9c9c9;
+  --text:#1d1d1d;
+  --text-2:#4a4a4a;
+  --muted:#6b6b6b;
 
   /* 线框专用色阶（浅底上虚线要比底色更深） */
-  --wf-bg:#fbfaf6;
-  --wf-fill:#f4f2eb;
-  --wf-fill-2:#efece2;
-  --wf-line:#cfc9b8;
-  --wf-line-2:#b8b1a0;
-  --wf-text:#3a3832;
-  --wf-muted:#8a877f;
-  --wf-sel:#c2603f;
-  --wf-sel-soft:rgba(194,96,63,.12);
+  --wf-bg:#ffffff;
+  --wf-fill:#f2f2f2;
+  --wf-fill-2:#e8e8e8;
+  --wf-line:#c9c9c9;
+  --wf-line-2:#a8a8a8;
+  --wf-text:#3a3a3a;
+  --wf-muted:#6b6b6b;
+  --wf-sel:#f6821f;
+  --wf-sel-soft:rgba(246,130,31,.12);
 
   /* 线框结构性色 */
-  --ph-stripe:rgba(31,30,27,.05);
-  --ph-line:rgba(31,30,27,.09);
-  --grid-line:rgba(31,30,27,.028);
-  --overlay-fill:rgba(194,96,63,.05);
-  --sel-ring:rgba(194,96,63,.16);
+  --ph-stripe:rgba(29,29,29,.05);
+  --ph-line:rgba(29,29,29,.09);
+  --grid-line:rgba(29,29,29,.028);
+  --overlay-fill:rgba(246,130,31,.05);
+  --sel-ring:rgba(246,130,31,.16);
 
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
 }
 [data-theme="dark"]{
   color-scheme:dark;
-  --bg:#262624;
-  --bg-2:#1f1e1d;
-  --panel:#30302e;
-  --line:#3e3e38;
-  --line-2:#514f48;
-  --text:#faf9f5;
-  --text-2:#b8b5ac;
-  --muted:#8e8b82;
+  --bg:#161616;
+  --bg-2:#1e1e1e;
+  --panel:#242424;
+  --line:#333333;
+  --line-2:#4a4a4a;
+  --text:#f2f2f2;
+  --text-2:#bdbdbd;
+  --muted:#8f8f8f;
 
-  --wf-bg:#2a2a28;
-  --wf-fill:#33332f;
-  --wf-fill-2:#3d3c37;
-  --wf-line:#5c5a52;
-  --wf-line-2:#6f6d64;
-  --wf-text:#d8d5cc;
-  --wf-muted:#98958c;
-  --wf-sel:#e79372;
-  --wf-sel-soft:rgba(231,147,114,.16);
+  --wf-bg:#1a1a1a;
+  --wf-fill:#242424;
+  --wf-fill-2:#2d2d2d;
+  --wf-line:#4a4a4a;
+  --wf-line-2:#5c5c5c;
+  --wf-text:#e0e0e0;
+  --wf-muted:#9a9a9a;
+  --wf-sel:#fbad41;
+  --wf-sel-soft:rgba(251,173,65,.16);
 
   --ph-stripe:rgba(255,255,255,.035);
   --ph-line:rgba(255,255,255,.07);
   --grid-line:rgba(255,255,255,.028);
-  --overlay-fill:rgba(231,147,114,.06);
-  --sel-ring:rgba(231,147,114,.18);
+  --overlay-fill:rgba(251,173,65,.06);
+  --sel-ring:rgba(251,173,65,.18);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}

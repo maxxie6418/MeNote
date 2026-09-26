@@ -194,7 +194,7 @@ button {
   align-items: center;
   gap: var(--sp-2);
   padding: 0 var(--sp-3);
-  border-radius: 9px;
+  border-radius: var(--radius);
   background: var(--primary-grad);
   color: var(--on-primary);
   font-weight: 600;
@@ -270,7 +270,7 @@ button {
   padding: 2px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: var(--sp-2);
+  border-radius: var(--radius);
 }
 
 .segmented__item {
@@ -280,7 +280,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: var(--sp-1);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-micro);
   color: var(--muted);
   white-space: nowrap;
@@ -303,7 +303,7 @@ button {
   align-items: center;
   gap: 9px;
   padding: 7px 9px;
-  border-radius: var(--sp-2);
+  border-radius: var(--radius);
   color: var(--text-2);
   font-size: var(--fs-body);
   text-align: left;
@@ -317,7 +317,7 @@ button {
 
 .nav-item[aria-current="true"] {
   background: var(--primary-soft);
-  color: var(--primary-2);
+  color: var(--primary-ink);
   font-weight: 600;
 }
 
@@ -493,7 +493,7 @@ button {
   font-family: var(--mono);
   background: var(--panel-2);
   padding: 1px 5px;
-  border-radius: var(--sp-1);
+  border-radius: var(--radius-sm);
 }
 
 .markdown-body pre {
@@ -504,7 +504,7 @@ button {
 }
 
 .markdown-body a {
-  color: var(--primary-2);
+  color: var(--primary-ink);
 }
 
 /* 正文底部状态栏（DESIGN.md §2.7：固定在正文区底部） */
@@ -572,7 +572,7 @@ button {
   gap: var(--sp-2);
   height: 31px;
   padding: 0 12px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   font-size: var(--fs-body);
   font-weight: 600;
   white-space: nowrap;
@@ -620,7 +620,7 @@ button {
   height: 24px;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-2);
 }
 
@@ -665,7 +665,7 @@ button {
   gap: var(--sp-1);
   height: 30px;
   padding: 0 var(--sp-3);
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--line-2);
   font-size: var(--fs-small);
   color: var(--text-2);
@@ -695,10 +695,10 @@ button {
   height: 30px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--primary-soft);
   border: 1px solid var(--primary-line);
-  color: var(--primary-2);
+  color: var(--primary-ink);
   font-size: var(--fs-small);
   font-weight: 600;
   text-transform: uppercase;
@@ -736,7 +736,7 @@ button {
   gap: 9px;
   width: 100%;
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-small);
   color: var(--text-2);
   text-align: left;
@@ -818,7 +818,7 @@ button {
 
 .skeleton {
   height: 14px;
-  border-radius: var(--sp-1);
+  border-radius: var(--radius-sm);
   background: var(--panel-3);
 }
 
@@ -830,7 +830,7 @@ button {
   height: 20px;
   padding: 0 7px;
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-micro);
   color: var(--muted);
   white-space: nowrap;
@@ -839,7 +839,7 @@ button {
 .brandmark {
   width: 22px;
   height: 22px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--primary-grad);
 }
 
@@ -973,13 +973,13 @@ button {
   padding: 2px;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: var(--sp-2);
+  border-radius: var(--radius);
 }
 
 .radioset__item {
   height: 25px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-micro);
   color: var(--muted);
 }
@@ -995,7 +995,7 @@ button {
   width: 38px;
   height: 21px;
   flex: none;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background: var(--panel-3);
   border: 1px solid var(--line-2);
   transition: background 0.14s;
@@ -1013,7 +1013,7 @@ button {
   left: 2px;
   width: 15px;
   height: 15px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--panel);
   transition: transform 0.14s;
 }

@@ -9,52 +9,68 @@
    Menote 原型 · 设计令牌（深色）
    ============================================================ */
 /* ============================================================
-   主题令牌（Claude 橙白风格）
-   浅色 = 默认（奶油白底 + 陶土橙主色）；深色 = [data-theme="dark"]
+   主题令牌（Cloudflare 色系）
+   浅色 = 默认（纯白底 + Cloudflare 橙主色）；深色 = [data-theme="dark"]
    由 设置 › 通用 › 界面偏好 › 主题 切换（浅色 / 深色 / 跟随系统）
+   2026-09-26 换色：原「Claude 暖色橙白」整体替换为 Cloudflare 色系，
+   锚点取站点图标里的 #F6821F / #FBAD41 / #F15A24 / #FDBA74。
+   取值与全部配对的实测对比度见 docs/modules/Menote-视觉定型提案-v1.md §二/§三。
    ============================================================ */
 :root{
   color-scheme:light;
-  /* 底色：Claude 奶油白与暖灰 */
-  --bg:#faf9f5;
-  --bg-soft:#f4f2eb;
+  /* 底色：纯白 + 中性灰层级 */
+  --bg:#ffffff;
+  --bg-soft:#f7f7f7;
   --panel:#ffffff;
-  --panel-2:#f7f5ef;
-  --panel-3:#eeece3;
-  --line:#e8e4d9;
-  --line-2:#d8d3c4;
-  /* 文字：暖黑，不用纯黑 */
-  --text:#1f1e1b;
-  --text-2:#5c5a53;
-  --muted:#8a877f;
-  /* 主色：Claude 陶土橙 */
-  --primary:#d97757;
-  --primary-2:#b4543a;
-  --primary-soft:rgba(217,119,87,.12);
-  --primary-line:rgba(217,119,87,.32);
-  --on-primary:#fff;
-  /* 语义色：降饱和，避免跳出暖色调 */
-  --amber:#a9741c;
-  --amber-soft:rgba(169,116,28,.11);
-  --amber-line:rgba(169,116,28,.26);
-  --green:#3f7d58;
-  --green-soft:rgba(63,125,88,.11);
-  --green-line:rgba(63,125,88,.26);
-  --red:#b8443c;
-  --red-soft:rgba(184,68,60,.1);
-  --red-line:rgba(184,68,60,.26);
-  --purple:#7a6aa8;
-  --purple-soft:rgba(122,106,168,.12);
+  --panel-2:#f2f2f2;
+  --panel-3:#e8e8e8;
+  --line:#e0e0e0;
+  --line-2:#c9c9c9;
+  /* 文字：近黑（正文 16.9:1） */
+  --text:#1d1d1d;
+  --text-2:#4a4a4a;
+  --muted:#6b6b6b;
+  /* 主色：Cloudflare 橙 */
+  --primary:#f6821f;
+  --primary-2:#e8720d;
+  --primary-soft:rgba(246,130,31,.12);
+  --primary-line:rgba(246,130,31,.35);
+  --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+  /* 橙色作文字色：#f6821f 压白只有 2.58:1，文字必须走这一档（5.02:1） */
+  --primary-ink:#b45309;
+  /* 橙底上的文字：深墨 6.53:1；白字压橙仅 2.58:1，禁止 */
+  --on-primary:#1d1d1d;
+  /* 语义色：两主题各自核对，不做机械反转。暖色系与主色邻近，状态必须配图标或文字 */
+  --amber:#8a5a00;
+  --amber-soft:rgba(138,90,0,.11);
+  --amber-line:rgba(138,90,0,.26);
+  --green:#1f7a4d;
+  --green-soft:rgba(31,122,77,.11);
+  --green-line:rgba(31,122,77,.26);
+  --red:#c0392b;
+  --red-soft:rgba(192,57,43,.1);
+  --red-line:rgba(192,57,43,.26);
+  --purple:#6d47a8;
+  --purple-soft:rgba(109,71,168,.12);
   /* 结构色 */
-  --hairline:rgba(31,30,27,.022);
-  --ph-stripe:rgba(31,30,27,.05);
-  --topbar-bg:rgba(250,249,245,.86);
-  --lock-veil:rgba(250,249,245,.95);
-  --scrim:rgba(31,30,27,.42);
-  --shadow-1:0 4px 14px rgba(31,30,27,.07);
-  --shadow-2:0 16px 40px rgba(31,30,27,.13);
-  --shadow-3:0 28px 70px rgba(31,30,27,.2);
-  /* 尺寸与字体 */
+  --hairline:rgba(29,29,29,.022);
+  --ph-stripe:rgba(29,29,29,.05);
+  --topbar-bg:rgba(255,255,255,.86);
+  --lock-veil:rgba(255,255,255,.95);
+  --scrim:rgba(29,29,29,.42);
+  --shadow-1:0 4px 14px rgba(29,29,29,.07);
+  --shadow-2:0 16px 40px rgba(29,29,29,.13);
+  --shadow-3:0 28px 70px rgba(29,29,29,.2);
+  /* 封面与缩略图渐变：内容美术，两主题共用同一套（渐变也必须由令牌拼装） */
+  --cover-1:linear-gradient(150deg,#3d2416,#f6821f);
+  --cover-2:linear-gradient(150deg,#22262e,#6b7a90);
+  --cover-3:linear-gradient(150deg,#2b2320,#c2600f);
+  --cover-4:linear-gradient(150deg,#1f2422,#55635c);
+  --cover-5:linear-gradient(150deg,#2a2433,#7a6aa8);
+  --cover-6:linear-gradient(150deg,#332117,#e0884a);
+  --cover-7:linear-gradient(150deg,#202830,#4a6a86);
+  /* 尺寸与字体（不随主题变，故只在浅色块定义） */
+  --radius-sm:6px;
   --radius:10px;
   --radius-lg:14px;
   --fnbar-w:294px;
@@ -65,40 +81,49 @@
 }
 [data-theme="dark"]{
   color-scheme:dark;
-  --bg:#262624;
-  --bg-soft:#1f1e1d;
-  --panel:#30302e;
-  --panel-2:#3a3935;
-  --panel-3:#45443f;
-  --line:#3e3e38;
-  --line-2:#514f48;
-  --text:#faf9f5;
-  --text-2:#b8b5ac;
-  --muted:#8e8b82;
-  --primary:#d97757;
-  --primary-2:#e79372;
-  --primary-soft:rgba(217,119,87,.16);
-  --primary-line:rgba(217,119,87,.34);
-  --on-primary:#fff;
+  --bg:#161616;
+  --bg-soft:#1e1e1e;
+  --panel:#242424;
+  --panel-2:#2d2d2d;
+  --panel-3:#383838;
+  --line:#333333;
+  --line-2:#4a4a4a;
+  --text:#f2f2f2;
+  --text-2:#bdbdbd;
+  --muted:#8f8f8f;
+  --primary:#f6821f;
+  --primary-2:#fbad41;
+  --primary-soft:rgba(246,130,31,.16);
+  --primary-line:rgba(246,130,31,.34);
+  --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+  --primary-ink:#f6821f;
+  --on-primary:#161616;
   --amber:#e0a458;
   --amber-soft:rgba(224,164,88,.14);
   --amber-line:rgba(224,164,88,.3);
-  --green:#7fb98a;
-  --green-soft:rgba(127,185,138,.14);
-  --green-line:rgba(127,185,138,.28);
-  --red:#e2726b;
-  --red-soft:rgba(226,114,107,.14);
-  --red-line:rgba(226,114,107,.3);
+  --green:#5cbf8a;
+  --green-soft:rgba(92,191,138,.14);
+  --green-line:rgba(92,191,138,.28);
+  --red:#f07167;
+  --red-soft:rgba(240,113,103,.14);
+  --red-line:rgba(240,113,103,.3);
   --purple:#b5a2e0;
   --purple-soft:rgba(181,162,224,.16);
   --hairline:rgba(255,255,255,.02);
   --ph-stripe:rgba(255,255,255,.035);
-  --topbar-bg:rgba(38,38,36,.87);
-  --lock-veil:rgba(38,38,36,.95);
-  --scrim:rgba(6,8,11,.7);
-  --shadow-1:0 4px 14px rgba(0,0,0,.32);
-  --shadow-2:0 16px 40px rgba(0,0,0,.5);
-  --shadow-3:0 28px 70px rgba(0,0,0,.68);
+  --topbar-bg:rgba(22,22,22,.86);
+  --lock-veil:rgba(22,22,22,.95);
+  --scrim:rgba(0,0,0,.55);
+  --shadow-1:0 4px 14px rgba(0,0,0,.35);
+  --shadow-2:0 16px 40px rgba(0,0,0,.45);
+  --shadow-3:0 28px 70px rgba(0,0,0,.55);
+  --cover-1:linear-gradient(150deg,#3d2416,#f6821f);
+  --cover-2:linear-gradient(150deg,#22262e,#6b7a90);
+  --cover-3:linear-gradient(150deg,#2b2320,#c2600f);
+  --cover-4:linear-gradient(150deg,#1f2422,#55635c);
+  --cover-5:linear-gradient(150deg,#2a2433,#7a6aa8);
+  --cover-6:linear-gradient(150deg,#332117,#e0884a);
+  --cover-7:linear-gradient(150deg,#202830,#4a6a86);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -131,7 +156,7 @@ a{color:inherit;text-decoration:none}
 .brand{display:flex;align-items:center;gap:9px;flex:none;padding-right:14px;border-right:1px solid var(--line)}
 .logo{
   width:28px;height:28px;border-radius:8px;flex:none;
-  background:linear-gradient(140deg,#e08a63,#c2603f);
+  background:var(--primary-grad);
   display:grid;place-items:center;font-weight:700;font-size:14px;color:var(--on-primary);
   box-shadow:var(--shadow-1);
 }
@@ -169,7 +194,7 @@ a{color:inherit;text-decoration:none}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
 
 .avatar{width:29px;height:29px;border-radius:50%;flex:none;cursor:pointer;display:grid;place-items:center;
-  font-size:12px;font-weight:700;color:var(--on-primary);background:linear-gradient(140deg,#e08a63,#c2603f);border:1px solid var(--primary-line)}
+  font-size:12px;font-weight:700;color:var(--on-primary);background:var(--primary-grad);border:1px solid var(--primary-line)}
 
 /* ---------- 下拉菜单 ---------- */
 .menu{position:absolute;z-index:120;min-width:196px;background:var(--panel-2);border:1px solid var(--line-2);
@@ -215,7 +240,7 @@ a{color:inherit;text-decoration:none}
 
 .btn-new{
   width:100%;height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;
-  border-radius:9px;background:linear-gradient(140deg,#e08a63,#c2603f);color:var(--on-primary);
+  border-radius:9px;background:var(--primary-grad);color:var(--on-primary);
   font-weight:600;font-size:13px;box-shadow:var(--shadow-1);transition:.16s;
 }
 .btn-new:hover{filter:brightness(1.07)}
@@ -1039,13 +1064,13 @@ const TASKS = [
 ];
 
 const BOOKS = [
-  { id:'r7k2qa', name:'三体', author:'刘慈欣', score:9, status:'已读', tags:['科幻','长篇'], cover:'linear-gradient(150deg,#3e2b23,#b5714f)' },
-  { id:'r7k2qb', name:'活着', author:'余华', score:8, status:'在读', tags:['小说'], cover:'linear-gradient(150deg,#3a2a2e,#9c5f63)' },
-  { id:'r7k2qc', name:'置身事内', author:'兰小欢', score:9, status:'已读', tags:['经济'], cover:'linear-gradient(150deg,#26302b,#5e7f6a)' },
-  { id:'r7k2qd', name:'人类简史', author:'赫拉利', score:7, status:'待读', tags:['历史'], cover:'linear-gradient(150deg,#382c1f,#a07c46)' },
-  { id:'r7k2qe', name:'深度工作', author:'纽波特', score:6, status:'待读', tags:['方法'], cover:'linear-gradient(150deg,#2b2b38,#6e6a8e)' },
-  { id:'r7k2qf', name:'枪炮、病菌与钢铁', author:'戴蒙德', score:8, status:'在读', tags:['历史','长篇'], cover:'linear-gradient(150deg,#33291f,#8a7358)' },
-  { id:'r7k2qg', name:'纳瓦尔宝典', author:'乔根森', score:7, status:'已读', tags:['方法'], cover:'linear-gradient(150deg,#233034,#4e7c82)' }
+  { id:'r7k2qa', name:'三体', author:'刘慈欣', score:9, status:'已读', tags:['科幻','长篇'], cover:'var(--cover-1)' },
+  { id:'r7k2qb', name:'活着', author:'余华', score:8, status:'在读', tags:['小说'], cover:'var(--cover-2)' },
+  { id:'r7k2qc', name:'置身事内', author:'兰小欢', score:9, status:'已读', tags:['经济'], cover:'var(--cover-3)' },
+  { id:'r7k2qd', name:'人类简史', author:'赫拉利', score:7, status:'待读', tags:['历史'], cover:'var(--cover-4)' },
+  { id:'r7k2qe', name:'深度工作', author:'纽波特', score:6, status:'待读', tags:['方法'], cover:'var(--cover-5)' },
+  { id:'r7k2qf', name:'枪炮、病菌与钢铁', author:'戴蒙德', score:8, status:'在读', tags:['历史','长篇'], cover:'var(--cover-6)' },
+  { id:'r7k2qg', name:'纳瓦尔宝典', author:'乔根森', score:7, status:'已读', tags:['方法'], cover:'var(--cover-7)' }
 ];
 
 const TRASH = [
@@ -1873,7 +1898,7 @@ function memoPanel(){
 
   let inner;
   if(state.memoView === 'waterfall'){
-    const grads = ['linear-gradient(150deg,#3e2b23,#b5714f)','linear-gradient(150deg,#3a2a2e,#9c5f63)','linear-gradient(150deg,#26302b,#5e7f6a)'];
+    const grads = ['var(--cover-1)','var(--cover-2)','var(--cover-3)'];
     const cards = MEMOS.slice(0,8).map((m, i) =>
       '<div class="wf-card"><div class="wf-img" style="background:' + (m.imgs ? grads[i % grads.length] : 'var(--panel-3)') + '"></div>'
       + '<div class="wf-txt">' + esc(m.text.slice(0, 30)) + '…</div></div>').join('');
@@ -1920,7 +1945,7 @@ function memoItemHtml(m, isNew){
     + '<div class="memo-time">' + m.time + '</div>'
     + '<div class="memo-cnt">'
     +   '<div class="memo-text">' + esc(m.text) + '</div>'
-    +   (m.imgs ? '<div class="memo-imgs">' + Array.from({length:m.imgs}).map(()=>'<div class="thumb" style="background:linear-gradient(150deg,#3e2b23,#b5714f)"></div>').join('') + '</div>' : '')
+    +   (m.imgs ? '<div class="memo-imgs">' + Array.from({length:m.imgs}).map(()=>'<div class="thumb" style="background:var(--cover-1)"></div>').join('') + '</div>' : '')
     +   '<div class="memo-foot">' + m.tags.map(t => '<span class="chip tag" data-tag="' + t + '"># ' + t + '</span>').join('') + taskChip + dueChip + priChip + badge + '</div>'
     + '</div></div>';
 }

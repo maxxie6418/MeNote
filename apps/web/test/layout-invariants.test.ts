@@ -29,6 +29,46 @@ const tokenPx = (name: string): number =>
 const rulePx = (css: string, selector: string, prop: string): number =>
   value(css, new RegExp(`${selector}\\s*\\{[^}]*${prop}:\\s*(\\d+)px`));
 
+describe("配色令牌（DESIGN.md §3.2-3 / §3.3【已定】）", () => {
+  /** 取令牌块里的 `--name:value` 对（只看颜色类：值里带 # / rgb / linear-gradient） */
+  const colorPairs = (block: string): Map<string, string> =>
+    new Map(
+      [...block.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/g)]
+        .filter((match) => /#|rgba?\(|linear-gradient/.test(match[2] ?? ""))
+        .map((match) => [match[1] ?? "", (match[2] ?? "").trim()]),
+    );
+
+  const lightBlock = tokens.match(/:root\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+  const darkBlock = tokens.match(/:root\[data-theme="dark"\]\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  it("浅色与深色的颜色令牌成对（尺寸/字族类不参与）", () => {
+    expect(lightBlock).not.toBe("");
+    expect(darkBlock).not.toBe("");
+
+    const light = colorPairs(lightBlock);
+    const dark = colorPairs(darkBlock);
+    expect(light.size).toBeGreaterThanOrEqual(30);
+
+    const missing = [...light.keys()].filter((name) => !dark.has(name));
+    expect(missing, `深色块缺颜色令牌：${missing.join("、")}`).toEqual([]);
+  });
+
+  it("主色是 Cloudflare 橙，且橙底文字为深墨（白字压橙只有 2.58:1）", () => {
+    const light = colorPairs(lightBlock);
+    expect(light.get("primary")).toBe("#f6821f");
+    expect(light.get("on-primary")).toBe("#1d1d1d");
+    // 橙色作文字色必须走专门令牌（#f6821f 压白只有 2.58:1）
+    expect(light.get("primary-ink")).toBe("#b45309");
+  });
+
+  it("旧的 Claude 暖色不得残留", () => {
+    for (const stale of ["#d97757", "#b4543a", "#faf9f5", "#f4f2eb", "#eeece3", "#e8e4d9"]) {
+      expect(tokens.toLowerCase()).not.toContain(stale);
+      expect(app.toLowerCase()).not.toContain(stale);
+    }
+  });
+});
+
 describe("结构尺寸令牌（DESIGN.md §2.2【已定】）", () => {
   it("顶栏 54、功能栏 294、列表 330、设置导航 184、圆角 10/14", () => {
     expect(tokenPx("topbar-h")).toBe(54);

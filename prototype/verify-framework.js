@@ -336,7 +336,11 @@ step('主题：默认浅色，可切到深色并写回 data-theme（Claude 橙�
 
 step('主题令牌：浅色与深色两套变量都已定义', () => {
   const css = $$('style').map(s => s.textContent).join('\n');
-  if (!/[^-]:root\{[\s\S]*?--bg:#faf9f5/.test(css)) throw new Error('缺浅色令牌（--bg:#faf9f5）');
+  // 2026-09-26 换色：Cloudflare 色系，浅色底由奶油白 #faf9f5 改为纯白
+  if (!/[^-]:root\{[\s\S]*?--bg:#ffffff/.test(css)) throw new Error('缺浅色令牌（--bg:#ffffff）');
+  if (!/--wf-sel:#f6821f/.test(css)) throw new Error('线框选中色不是 Cloudflare 橙 #f6821f');
+  const stale = css.match(/#faf9f5|#f4f2eb|#d97757|#c2603f|#1f1e1b/);
+  if (stale) throw new Error('仍有旧 Claude 暖色残留：' + stale[0]);
   const dark = css.match(/\[data-theme="dark"\]\{[\s\S]*?\}/);
   if (!dark) throw new Error('缺深色令牌块');
   ['--bg', '--text', '--wf-sel'].forEach(v => {

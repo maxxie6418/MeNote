@@ -16,6 +16,7 @@
 | v1.1 | v0.1.3 | 2026-09-26 | 状态改「生效」；据实测与独立复核修正（改密请求体不再要求浏览器产出 `newVerifier`、注册需捕获唯一约束异常、prelogin 的 CSRF 口径统一、设置壳补「通用」默认分类）；应用已批准决定：登出不清除本机缓存、`site_settings` 暂不建表 | deepseek-v4.1-flash |
 | v1.2 | v0.1.5 | 2026-09-26 | M1-3 落地回写：§4.1 的 CSRF 口径修正为「`Origin` 缺失放行、在场必须匹配」并说明理由（主防线是 `X-Menote` 自定义头）；标注 dev 浏览器验证仍待 M1-10 补做；§5.3 的设置壳分类与实现一致 | deepseek-v4.1-flash |
 | v1.3 | v0.1.10 | 2026-09-26 | dev 链路实测回写：§4.1 记录 17 项断言结果（Cookie 属性、CSRF 两路、注册登录、隔离），并如实标注"真实浏览器 Cookie 存储仍未验、留到 M1-11"与 miniflare 的 `Request.cf` 告警 | deepseek-v4.1-flash |
+| v1.4 | v0.1.11 | 2026-09-26 | 修掉会导致锁死账号的落地缺陷：注册与改密改用**与 prelogin 同源的确定盐**（§3.3 记录理由与附带防枚举收益）；§3 接口表补公开接口 `GET /api/auth/registration-state` | deepseek-v4.1-flash |
 
 ---
 
@@ -69,6 +70,7 @@
 | `POST /api/auth/password` | `{ loginKey, newLoginKey, newKdf? }`：先用 `loginKey` 校验旧密码，服务端**自己生成新盐**并算 `newVerifier = HMAC-SHA256(AUTH_PEPPER, newLoginKey)`，再写新三元组；**保留当前设备会话，其他设备会话全部失效**（拆解 M01-05 的建议） | `unauthenticated`、`invalid` |
 | `GET /api/admin/registration`（仅 owner） | 读注册开关与到期时间 | `forbidden` |
 | `PUT /api/admin/registration`（仅 owner） | `{ open, closeAt? }`；写 `app_meta` | `forbidden` |
+| `GET /api/auth/registration-state` | **公开、无需登录**：`{ open, has_users }`，登录页据此决定是否显示注册入口；`has_users=false` 时前端直接进注册页（拆解 M01-01） | — |
 
 **路径与落点不一致的说明**：架构 §2.3.2 没有 `admin.ts` 这一行，而"设置与隐私标记"已指派到 `routes/settings.ts` + `services/settings.ts`。M1 把这两个 admin 接口放进 `routes/settings.ts`（路径保持 `/api/admin/registration`，与需求 §5.4 一致），并在 §2.3.2 补一行落点（wiki 改动，待点头）。
 
@@ -105,6 +107,10 @@ SELECT :id, :username,
 - 注册成功后自动登录（同 `login` 的会话下发路径）→ 进启动视图。
 - `registration_close_at = 0` 表示"不自动到期"；到期自动关闭由 Cron 承担（M6，M1 只在读取时判到期即可，**不需要 Cron**）。
 - 用户名规则：长度 1–32、`COLLATE NOCASE` 唯一、只允许字母数字与 `_-.`（`packages/shared` 用 Valibot 定义，两端复用）。
+- **盐必须与 prelogin 完全一致（v1.4 修正的落地缺陷）**：客户端只能拿到 prelogin 给的盐来派生登录密钥，因此**注册与改密都不能另取随机盐**，一律用与假盐同源的确定盐
+  `HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:" + 用户名小写)[0..16]`。否则用户注册成功或改密成功后，下一次登录会用新盐派生出**不同**的登录密钥，直接锁死账号。
+  - 附带收益：注册前后 prelogin 返回的盐**不变**，攻击者无法靠"盐变了"判断用户名是否已存在，正好满足 §2.2 的防枚举目标。
+  - 安全上无损失：盐本就是公开数据（与校验值同库存储），其作用是不复用而非保密；每个用户名一个不同盐，跨账号彩虹表依然无效。
 
 ---
 

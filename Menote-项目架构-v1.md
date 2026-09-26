@@ -2,11 +2,18 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1（草案，待用户审核） |
-| 日期 | 2026-09-25 |
+| 文档版本 | v1.1（草案修订，待用户审核） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1 修订） |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
+
+### 修订记录
+
+| 版本 | 日期 | 内容 |
+|---|---|---|
+| v1 | 2026-09-25 | 初稿 |
+| v1.1 | 2026-09-26 | ①隐私模型修订【已定·用户确认】：服务端明文存储 + 前端门禁 + 备份导出加密，删除非对称密钥对、数据密钥层级、正文密文信封、批量转换任务与恢复码（第七章重写）；②登录与隐私密码 KDF 统一为 PBKDF2-SHA-256，前端零 wasm；③评审报告（deliverables/gstack/architecture-review-menote-v1-2026-09-26.md）阻塞项 #1、#2 随之失效 |
 
 ### 标注约定
 
@@ -40,7 +47,7 @@
 
 ### 1.2 架构原则
 
-1. **胖客户端、瘦服务端**【依需求】：浏览器承担渲染、加解密、KDF、哈希、压缩、diff、搜索、ZIP；Worker 是“带鉴权的条件存储网关”。
+1. **胖客户端、瘦服务端**【依需求】：浏览器承担渲染、KDF、哈希、压缩、diff、搜索、ZIP 与备份导出加密；Worker 是“带鉴权的条件存储网关”。
 2. **本地优先**【依需求】：界面只读本地数据（IndexedDB）；网络只用于同步。所有写入先进 outbox。
 3. **服务端不解析大正文**【依需求】：正文作为不透明字节在 D1 与 R2 之间搬运；需要处理正文的服务端路径（MCP 按小节读写、表格按行操作）设大小门槛。
 4. **一份格式代码，前后端共享**【依需求】：Markdown 快照格式、YAML front matter 解析、表格编解码、标签与任务字段派生、接口校验规则写在共享包里，浏览器与 Worker 使用同一份实现。
@@ -62,8 +69,6 @@ flowchart LR
         UI["主线程：界面与编辑器"]
         SW["Service Worker：外壳与附件缓存"]
         WK["Web Worker：搜索、哈希、缩略图、压缩"]
-        CW["加密 Worker：KDF 与加解密"]
-        SHW["SharedWorker：会话级解锁密钥"]
         IDB[("IndexedDB")]
     end
     subgraph CF["Cloudflare（单个 Worker）"]
@@ -82,8 +87,6 @@ flowchart LR
 
     UI --> IDB
     UI --> WK
-    UI --> CW
-    CW -.-> SHW
     UI -->|"HTTPS 同源"| RT
     SW -.->|"预缓存"| AS
     RT --> API
@@ -118,7 +121,7 @@ flowchart LR
 | 表格虚拟滚动 | TanStack Virtual | 需求 10.10-4 要求虚拟滚动；框架无关 | 【架构定】 |
 | 本地数据库 | Dexie（IndexedDB 封装） | 事务、索引、批量写，比 idb-keyval 适合结构化数据 | 【架构定】 |
 | 本地搜索 | MiniSearch + `Intl.Segmenter` + 二元组兜底 | 需求 13.1 已定 | 【依需求】 |
-| 加密 | WebCrypto（AES-256-GCM、AES-KW、HKDF）+ hash-wasm（Argon2id） | 原生 API 性能好；hash-wasm 的 Argon2id 体积小、可在 Worker 中运行 | 【架构定】 |
+| 加密 | WebCrypto（PBKDF2-SHA-256、AES-256-GCM） | 仅用于隐私密码派生与备份导出信封（见 7.2 / 7.3）；不再引入 hash-wasm / Argon2id，前端零 wasm | 【架构定·v1.1 简化】 |
 | 压缩 / ZIP | 原生 `CompressionStream`；fflate 打 ZIP | 需求 12.4、16.2 | 【依需求】 |
 | PWA | vite-plugin-pwa（Workbox，injectManifest 模式，自写缓存策略） | 预缓存外壳，附件缓存规则需自定义 | 【架构定】 |
 | 服务端路由 | Hono | 体积小、启动快，Inkstone 同款 | 【架构定】 |
@@ -198,8 +201,6 @@ flowchart TB
         T1["API 客户端：超时、退避、错误码映射"]
     end
     subgraph WK["独立线程"]
-        W1["crypto.worker：KDF、加解密"]
-        W2["session.sharedworker：会话级密钥"]
         W3["search.worker：MiniSearch 索引"]
         W4["media.worker：哈希、缩略图、压缩"]
         W5["Service Worker：外壳与附件缓存"]
@@ -214,28 +215,25 @@ flowchart TB
 规则【架构定】：
 - 界面层只调用应用服务层，不直接访问 Dexie 或网络。
 - 数据的唯一真相是 IndexedDB；界面通过 Dexie 的 `liveQuery` 订阅变化，Zustand 只放纯界面状态（当前视图、面板开合、选中项）。
-- 所有 CPU 密集型工作（KDF、加解密 2MB 正文、SHA-256、缩略图、gzip、建索引）放在独立 Worker，主线程保持输入流畅。
+- 所有 CPU 密集型工作（SHA-256、缩略图、gzip、建索引、备份导出加密）放在独立 Worker，主线程保持输入流畅。
 
 ### 3.2 本地数据库（IndexedDB，Dexie）【架构定】
 
 | 表 | 主键 / 索引 | 内容 |
 |---|---|---|
 | `items` | `id`；`[folderId+updatedAt]`、`memoAt`、`syncSeq`、`isTask` | 条目元数据（与服务端 `items` 同构；加密空间内标题存密文） |
-| `bodies` | `itemId` | 正文缓存：明文字符串或密文 `ArrayBuffer`；带 `rev`、`contentHash` |
-| `drafts` | `itemId` | 未上传的编辑稿（每 2 秒写一次；加密条目先加密再写） |
+| `bodies` | `itemId` | 正文缓存：明文字符串；带 `rev`、`contentHash` |
+| `drafts` | `itemId` | 未上传的编辑稿（每 2 秒写一次） |
 | `folders` | `id`；`parentId`、`syncSeq` | 文件夹树 |
-| `dataKeys` | `id`；`ownerId` | 包裹后的数据密钥（密文，可离线解锁） |
-| `userCrypto` | 单行 | KDF 参数、盐、包裹的主钥 |
+| `privacyState` | 单行 | 门禁状态：解锁档位与到期时间；KDF 参数缓存（verifier 与 K 的包裹块存服务端，见 7.2） |
 | `settings` | 单行 | 用户设置与其 `rev` |
 | `outbox` | 自增 `seq`；`[entity+entityId]` | 待上传操作（见 6.3） |
-| `convertJobs` | `id` | 批量加密/解密任务进度（需求 6.4） |
 | `attachmentsMeta` | `id`；`sha256` | 附件元数据；上传中的附件带本地 Blob |
 | `searchIndex` | 单行 | 明文 MiniSearch 索引的序列化结果 |
 | `syncState` | 单行 | `cursor`（最近的 `sync_seq`）、上次同步时间、设备 ID |
-| `deviceKey` | 单行 | “当前设备长期”档位下不可导出的主钥 CryptoKey（需求 6.8） |
 
 - Dexie 的模式版本随客户端发布递增；本地库只是缓存，遇到无法迁移的情况可以清空后从服务端重建（outbox 中未上传的数据先导出为本地备份文件再清空）。
-- 解密后的明文不写入以上任何表（需求 6.8）。
+- 【v1.1 模型修订】隐私条目内容明文落库（用户确认的边界）：锁定只由界面门禁过滤显示，不改变存储；登出清除本机缓存仍按需求 15.1 执行。
 
 ### 3.3 编辑器【依需求 7.1，实现细节为架构定】
 
@@ -243,14 +241,14 @@ flowchart TB
   - 双栏：CodeMirror + 预览面板（markdown-it 渲染，按滚动位置同步）。
   - 仅编辑 / 仅预览：隐藏其一。
   - 即时渲染：基于 Lezer 语法树的装饰（`Decoration.replace` / `widget`），只对视口内的节点计算装饰，光标所在行显示源码。
-- 大小计量：编辑器维护当前正文的 UTF-8 字节数（增量计算：只对变更区间重新计数），状态栏常驻“x MB / 2 MB”，软上限 1MB 变色提示，硬上限 1,900,000 字节阻止保存（需求 10.10）。加密条目在计量上加上密文信封开销（固定 45 字节，见 7.3）。
+- 大小计量：编辑器维护当前正文的 UTF-8 字节数（增量计算：只对变更区间重新计数），状态栏常驻“x MB / 2 MB”，软上限 1MB 变色提示，硬上限 1,900,000 字节阻止保存（需求 10.10）。
 - 补丁生成：从上次成功保存起累积 `ChangeSet`，保存时合并为“按码点计的替换区间”列表（需求 15.7）；码点换算在 `packages/mdcore` 中实现并有专门测试。
 - 大文档：正文超过 256 KB 时防抖放宽到 5 秒、最长 60 秒上传一次（需求 15.7）；表格编辑器超过一定行数启用 TanStack Virtual。
 
 ### 3.4 Markdown 渲染与安全【架构定】
 
 - 预览、Memo 时间轴、分享查看器共用一个渲染模块：markdown-it（关闭原生 HTML 或只放行白名单标签）+ DOMPurify 清洗输出。
-- 附件引用（`_attachments/<hash>.jpg` 或附件 ID）在渲染时改写为受控地址：明文附件指向 `/api/attachments/...`，加密附件在解锁后解密为 `blob:` 地址，锁定时统一撤销（需求 6.8）。
+- 附件引用（`_attachments/<hash>.jpg` 或附件 ID）在渲染时改写为受控地址 `/api/attachments/...`；隐私条目的附件在锁定时不渲染（门禁），无解密路径（v1.1）。
 - 大文档预览按块增量渲染（按顶级块切分，只重新渲染变化的块），避免 2MB 文档每次按键全量渲染。
 
 ### 3.5 搜索【依需求 13】
@@ -267,8 +265,7 @@ flowchart TB
 | 资源 | 策略 |
 |---|---|
 | 应用外壳（HTML、JS、CSS、字体、wasm） | 构建时预缓存；新版本后台下载，提示“有新版本”后下次打开生效（需求 15.6） |
-| 明文附件与缩略图（`/api/attachments/h/<sha256>`） | Cache First，永久缓存（内容哈希不变） |
-| 加密附件（密文） | 只用浏览器 HTTP 缓存（`Cache-Control: private`），Service Worker 不缓存 |
+| 附件与缩略图（`/api/attachments/h/<sha256>`） | Cache First，永久缓存（内容哈希不变） |
 | `/api/*` 其他接口 | 不缓存，直接走网络（离线数据来自 IndexedDB） |
 | 分享查看器 `/s/*` | 预缓存查看器外壳；分享内容不缓存 |
 
@@ -327,14 +324,14 @@ flowchart LR
 
 ### 5.1 D1 表结构
 
-以需求 18.2 的 DDL 草案为准。实现时需要以下技术补充【待确认】，均不改变产品行为，只补足需求中已描述的机制所需的存储：
+以需求 18.2 的 DDL 草案为准（v1.1 注：DDL 中的正文密文列、`data_keys`、`user_crypto` 的密钥列在本模型下不再使用，待需求文档 v7.5 同步时清理）。实现时需要以下技术补充【待确认】，均不改变产品行为，只补足需求中已描述的机制所需的存储：
 
 | 补充 | 原因（对应需求） | 草案 |
 |---|---|---|
 | 新增 `tombstones` 表 | 需求 15.2 用 `deleted_at` 表示删除，但永久删除（14.4）会删掉 `items` 行，其他设备的增量同步收不到“已删除”信号，本地会残留条目 | `(user_id, entity, entity_id, sync_seq, deleted_at)`，索引 `(user_id, sync_seq)`；保留 180 天，过期清理 |
 | `users` 增加 `tombstone_floor` | 墓碑清理后，游标早于清理点的设备必须全量重同步 | 整数：已清理墓碑中最大的 `sync_seq`；客户端游标小于它时触发全量重建 |
 | 新增 `r2_gc_queue` 表 | 需求 14.4“登记待清理的 R2 对象，由 Cron 分批删除”，DDL 中没有这张表 | `(r2_key PRIMARY KEY, reason, due_at)`；也用作上传意图登记（见 5.3） |
-| `data_keys`、`user_crypto`、`user_settings`、`attachments` 增加 `sync_seq` | 需求 15.2 只列了条目和文件夹的增量同步；数据密钥、设置、附件元数据也需要在多设备间同步，否则新设备无法离线解锁、看不到设置变化 | 各加 `sync_seq` 列与 `(user_id, sync_seq)` 索引；`data_keys` 另加 `deleted_at` |
+| `user_crypto`、`user_settings`、`attachments` 增加 `sync_seq` | 需求 15.2 只列了条目和文件夹的增量同步；设置与附件元数据也需要在多设备间同步（v1.1：`data_keys` 表废弃，`user_crypto` 改存 verifier 与 K 的两份包裹，见 7.2） | 各加 `sync_seq` 列与 `(user_id, sync_seq)` 索引 |
 | `attachment_refs` 增加版本引用 | 需求 14.3 规定“保留中的历史版本”引用的附件不算孤儿，但 `attachment_refs` 只记录条目引用 | 增加 `version_id` 列（NULL 表示当前稿引用），主键改为 `(item_id, version_id, attachment_id)` 的等价唯一约束 |
 | 新增 `rate_counters` 表（条件启用） | 需求 17.3：Rate Limiting 绑定在免费版不可用时，用 D1 按分钟计数 | `(key, window_start, count)`；可用绑定时不建 |
 | `items` 增加 `last_edit_at`、`last_device` | 需求 12.2-3 的“跨会话”判断需要知道上次编辑时间与设备 | 两列，随正文保存写入（同一条 UPDATE，不增加行写入） |
@@ -348,6 +345,8 @@ flowchart LR
 | `e/{uid}/{id}` | 加密附件或缩略图（密文） | 同上 | `private, max-age=31536000` |
 | `v/{uid}/{item_id}/{version_id}` | 版本正文（gzip 或原样；加密条目为密文） | 客户端或 Worker | 不缓存 |
 | `snap/{uid}/...` | md 快照目录（需求 3.2 的结构） | Cron | 不缓存 |
+
+【v1.1 注】`e/` 前缀（静态密文附件）不再使用——所有附件明文存储，隐私条目仅在出站备份时加密（7.3、7.4）。
 
 【待核实】需求 14.1 中缩略图的对象键没有单独约定；上表用 `.t` 后缀是架构草案。
 
@@ -372,7 +371,7 @@ D1 以元数据和当前稿为主，个人使用多年仍在百 MB 以内；R2 �
 | 方向 | 接口 | 说明 |
 |---|---|---|
 | 拉取 | `GET /api/sync?cursor=N` | 返回 `sync_seq > N` 的元数据变化：条目、文件夹、数据密钥、设置、附件元数据、墓碑；每类合计最多 200 行，带 `next_cursor`、`has_more`；游标小于 `tombstone_floor` 时返回 `full_resync: true`。**不含正文** |
-| 取正文 | `GET /api/items/:id/body` | 响应体为原文（`text/markdown`）或密文（`application/octet-stream`），`ETag` 为 `content_hash`，支持 `If-None-Match` 返回 304 |
+| 取正文 | `GET /api/items/:id/body` | 响应体为原文（`text/markdown`），`ETag` 为 `content_hash`，支持 `If-None-Match` 返回 304；隐私条目同样返回原文，由前端门禁控制显示（v1.1） |
 | 新建 | `PUT /api/items/:id`（客户端生成 ID） | 请求体为正文原文；元数据放在 `X-Menote-Meta` 请求头（base64url 编码的 JSON：类型、标题、文件夹、标签、任务字段、`content_hash`、附件引用）。重复提交幂等（需求 15.3） |
 | 全文保存 | `PUT /api/items/:id/body` | 请求头 `If-Match: <base_rev>`、`X-Menote-Hash`、`X-Menote-Refs`（附件引用有变化时才带） |
 | 补丁保存 | `PATCH /api/items/:id/body` | JSON：`{ base_rev, ops: [[start, end, text]...], hash, bytes, chars }`，位置按码点计（需求 15.7） |
@@ -437,63 +436,61 @@ sequenceDiagram
 
 ## 七、隐私锁的实现
 
-### 7.1 密钥保管组件【架构定】
+> **v1.1 模型修订【已定·用户确认 2026-09-26】**：隐私保护采用“服务端明文存储 + 前端门禁 + 备份导出加密”。
+> 保护边界（用户确认）：隐私密码用于前端显示门禁与备份导出加密，达到“锁定时前端页面不显示、第三方备份中不直接可见”；不防爆破与专业解密，不防已登录账号、服务端数据库（Cloudflare D1/R2 为明文）与本机缓存。
+> 由此，v1 中的非对称密钥对、DEK/DEK_s 数据密钥层级、正文密文信封、批量加解密转换任务与恢复码全部取消。
 
-所有密钥操作集中在一个“密钥库”接口后面，界面与应用服务只提交密文、拿回明文，从不接触密钥对象：
+### 7.1 门禁模型【已定·用户确认 2026-09-26】
 
-```mermaid
-flowchart LR
-    UI["界面与应用服务"] -->|"decrypt / encrypt 请求"| KV{"当前解锁档位"}
-    KV -->|"仅本次查看、N 分钟"| DW["crypto.worker：本标签页内的专用 Worker，内存持有主钥或数据密钥"]
-    KV -->|"本次浏览器会话"| SH["session.sharedworker：所有标签页共享，内存持有主钥"]
-    KV -->|"当前设备长期"| IDB["IndexedDB 中不可导出的主钥 CryptoKey，由 crypto.worker 读取使用"]
-    DW --> WC["WebCrypto：AES-256-GCM、AES-KW、HKDF"]
-    SH --> WC
-    IDB --> WC
-```
+- 隐私空间条目与单篇“设为隐私”的条目在存储、传输、同步、版本、回收站全链路均为**明文**，仅携带标记：`in_enc_space = 1` 或 `enc_self = 1`（字段名沿用需求 DDL，不改名）。
+- 标记的变更（移入 / 移出 / 开启 / 取消）是普通元数据操作，**不需要任何密钥**：锁定时移入隐私空间（M08-09）由此天然成立，一条 `PATCH /api/items/:id/meta` 即可，条件写与冲突处理沿用第六章。
+- 门禁是纯前端行为，规则沿用需求 6.9 / 8.9：锁定时占位、不计入统计、搜索过滤、禁止分享。Memo 隐私浏览与本模型同构。
+- 解锁档位（仅本次查看 / N 分钟 / 本次浏览器会话 / 当前设备长期）只是“门禁保持打开时长”的四种选择，实现为本地状态（含“当前设备长期”的持久标志），不再涉及密钥保管，也不依赖 SharedWorker（v1 附录 #4、#7 作废）。
+- 解锁 = 输入隐私密码，浏览器本地校验（对照服务端存的 verifier）通过后打开门禁；输入错误的代价只是进不了门禁。
 
-- 所有 CryptoKey 均以 `extractable: false` 创建或解包（需求 6.6）。
-- KDF（Argon2id 64 MiB / 3 / 1，兜底 PBKDF2 600,000 次）在 `crypto.worker` 中运行；hash-wasm 在第一次需要时才加载。
-- “N 分钟”计时由主线程统计用户操作，定时通知 Worker 丢弃密钥；锁定清理步骤（需求 6.8）由 LockService 统一编排：先把未保存改动加密写入 outbox，再通知密钥库清除密钥、撤销 `blob:` 地址、丢弃内存搜索索引、关闭明文视图。
-- 【待核实】SharedWorker 在部分移动浏览器上的支持情况。【待确认】不支持时，“本次浏览器会话”档位按“每个标签页各自解锁、各自计时”处理，并在设置页说明。
+### 7.2 隐私密码与密钥材料【已定·用户确认 2026-09-26】
 
-### 7.2 数据密钥的使用【依需求 6.6】
-
-| 对象 | 用哪把密钥加密 | AAD |
+| 材料 | 生成与存放 | 用途 |
 |---|---|---|
-| 单篇加密或加密空间内文章的正文 | 该文章的 DEK | `item:<id>` + `key_id` + 格式版本 |
-| 上述文章的附件与缩略图 | 该文章的 DEK | `att:<attachment_id>` + `key_id` + 格式版本 |
-| 上述文章的版本正文（先 gzip 再加密） | 该文章的 DEK | `ver:<version_id>` + `key_id` + 格式版本 |
-| 加密空间内的标题、文件夹名 | 空间密钥 DEK_s | `title:<item_id>` 或 `folder:<folder_id>` + `key_id` + 格式版本 |
-| DEK、DEK_s | 主钥 MK（AES-KW 包裹） | — |
-| MK | 隐私密码派生的 KEK、恢复码派生的包裹钥 | — |
+| KEK | `PBKDF2-SHA-256(隐私密码, 盐, 600,000)`，浏览器内即时派生，不落盘、不上传 | 包裹 / 解包内容密钥 K |
+| verifier | KEK 对固定常量的 AES-GCM 校验块，存 D1 `user_crypto` | 多设备门禁校验 |
+| 内容密钥 K | 首次设置密码时随机生成 32 字节（普通字节，非 CryptoKey）；D1 存两份包裹：`AES-GCM(KEK, K)`（供外部解密工具）与 `AES-GCM(BACKUP_CRED_KEY, K)`（供 Worker，见 12.4） | 备份导出加密 |
 
-AAD 中包含对象 ID，因此把一段密文挪到另一条目上会解密失败，服务端无法调换密文。
+- KDF 统一为 PBKDF2-SHA-256 600,000 次：登录密钥派生（需求 5.4 的 Argon2id 首选改为 PBKDF2，需求文档待同步）与隐私密码共用一套实现，前端不再引入 wasm（hash-wasm 取消，CSP 去掉 `wasm-unsafe-eval`）。
+- 修改隐私密码 = 浏览器用旧密码解包 K → 新密码重包裹，同步更新 verifier；K 本身不变，历史备份文件仍可用**当时的口令**解开（文件头自带当时的 KDF 参数与 K 包裹块）。
+- 忘记隐私密码：已登录状态下可重置——Worker 用 `BACKUP_CRED_KEY` 解出 K 交浏览器按新密码重包裹，并更新 verifier。界面明示“该重置说明隐私密码不防御账号持有者”（与保护边界一致）【架构定】。
+- 恢复码机制取消（其原本服务的是主钥恢复场景，本模型不存在主钥）。
 
-### 7.3 密文信封格式【架构定】
+### 7.3 备份导出信封格式【已定·用户确认 2026-09-26】
 
-`packages/crypto-format` 定义，前后端共用解析代码（服务端只读取头部，不解密）：
+每个**隐私条目**的文件（正文、附件、缩略图、版本、快照）在离开系统前套一层信封；普通内容默认明文出站：
 
 | 偏移 | 长度 | 字段 |
 |---|---|---|
-| 0 | 1 字节 | 格式版本（当前为 1） |
-| 1 | 16 字节 | `key_id`（UUID 的二进制形式） |
-| 17 | 12 字节 | IV（每次加密新随机生成） |
-| 29 | 可变 | 密文 |
-| 末尾 | 16 字节 | GCM 认证标签 |
+| 0 | 8 字节 | 魔数 `MENOTE1\0` |
+| 8 | 1 字节 | 格式版本（当前 1） |
+| 9 | 2 字节 | KDF 迭代数（千次为单位，600 = 600,000） |
+| 11 | 16 字节 | KDF 盐 |
+| 27 | 12 字节 | K 包裹块 IV |
+| 39 | 48 字节 | `AES-GCM(KEK, K)`：32 字节密文 + 16 字节标签 |
+| 87 | 12 字节 | 内容 IV |
+| 99 | 可变 | `AES-GCM(K, 明文)` 密文 |
+| 末尾 | 16 字节 | 内容 GCM 标签 |
 
-固定开销 45 字节。当前稿的正文不压缩直接加密，使“硬上限 1,900,000 字节”对明文和密文的含义几乎一致（需求 18.1）；版本正文先压缩再加密（需求 6.11）。
+固定开销 103 字节。算法只用 WebCrypto 标准件（PBKDF2-SHA-256 + AES-256-GCM）。格式连同外部解密工具一并公开：仓库 `tools/menote-decrypt.html`（单文件、零依赖、离线可用），且每份全量备份包内附一份与格式说明，保证“应用没了也能解”。
 
-### 7.4 批量转换任务【依需求 6.4】
+### 7.4 加密的发生位置【已定·用户确认 2026-09-26】
 
-- 任务存 IndexedDB `convertJobs`：目标（加密 / 解密、移入 / 移出加密空间）、条目列表、每篇的阶段。
-- 每篇的阶段：①封存 `pre_convert` 版本；②转换正文并以 `base_rev` 条件上传（正文、`enc_self` / `in_enc_space`、`key_id`、标题字段在同一个请求中提交，服务端在一个 batch 中完成，保证“要么完整明文、要么完整密文”）；③处理附件（生成加密或明文副本并替换引用）；④处理旧版本（下载、转换、替换，或按用户选择删除）；⑤撤销相关分享（在第 ② 步的同一个 batch 中完成）。
-- 移动操作最后提交；中断后在下次解锁时从记录的阶段继续。
-- 服务端对 MCP 的可见性由 `enc_self` / `in_enc_space` 决定；为满足“转换期间立即对 MCP 不可见”（需求 6.4），任务开始时先提交一个只改标记的请求（`items.enc_pending = 1`）【待确认：需要在 `items` 增加 `enc_pending` 列】，MCP 的查询条件同时排除该标记。
+- **手动导出 / 全量 ZIP**：浏览器端加密（本就是浏览器驱动的流程），默认加密导出，界面提供“解密导出”勾选（需处于解锁态）。
+- **Cron 增量备份到 WebDAV / S3 / Git**：Worker 从 D1 取明文 → 用 K 加密（信封）→ 推送。文本快照单文件几 KB，AES-GCM 开销可忽略；**附件按“每轮加密字节配额”分轮**（草案 4 MB/轮 ≈ 2–4 ms CPU，开发早期实测校准，见 14.2），96 轮/天 ≈ 最多约 380 MB/天的加密出站吞吐，个人用量充裕。
+- Worker 首次需要 K 时用 `BACKUP_CRED_KEY` 解包一次，缓存在 isolate 内存（isolate 回收后重新解包，成本一次 AES-GCM）。
+- 隐私条目**禁止分享**（沿用第十章校验），不出现在任何公开端点。
 
-### 7.5 Memo 隐私浏览【依需求 8.9】
+### 7.5 门禁的界面落点【依需求 6.8 / 6.9 / 8.9】
 
-纯界面门禁：LockService 暴露 `memoGateOpen` 状态，时间轴、瀑布流、清单视图和搜索结果据此决定显示内容或占位。不涉及密钥，也不影响存储与同步。
+- 锁定清理大幅简化：无密钥可清除、无 `blob:` 地址需撤销；锁定 = 门禁状态切换 + 关闭明文视图，未保存改动照常写入 outbox（需求 6.8 的清理清单缩减为界面项）。
+- 本地搜索索引包含隐私条目明文（与 Memo 同级，属已确认边界）；锁定时查询结果过滤 `in_enc_space = 1 OR enc_self = 1` 的条目与 Memo（需求 6.10、8.9）。
+- 原 v1 的 7.1–7.4（密钥库组件、数据密钥 AAD、批量转换阶段）作废；`convertJobs`、`deviceKey`、`dataKeys` 相关存储删除（见 3.2）。
 
 ---
 
@@ -507,7 +504,7 @@ sequenceDiagram
     participant R as R2
     participant D as D1
     U->>M: 文件（粘贴或选择）
-    M->>M: SHA-256、缩略图（最长边约 400 px，WebP）、加密条目则加密原图与缩略图
+    M->>M: SHA-256、缩略图（最长边约 400 px，WebP）
     M-->>U: 本地 blob 地址先显示
     U->>W: POST /api/attachments/check（一批哈希）
     W->>D: 查已存在的哈希
@@ -521,7 +518,7 @@ sequenceDiagram
 ```
 
 - 引用上报：服务端用两条语句完成集合更新，与引用数量无关：删除“当前稿引用中不在新列表里的”，再 `INSERT OR IGNORE ... SELECT FROM json_each(?)` 插入新增的；避免每条查询最多 100 个参数的限制。
-- 读取：`GET /api/attachments/h/:sha256`（明文，`immutable`）、`GET /api/attachments/e/:id`（密文，`private`）；两者都先校验会话用户与附件归属，再从 R2 流式返回，支持 `Range`。
+- 读取：`GET /api/attachments/h/:sha256`（明文，`immutable`）；先校验会话用户与附件归属，再从 R2 流式返回，支持 `Range`。隐私条目的附件在锁定时由前端门禁不渲染（v1.1：无密文附件路径）。
 - 孤儿标记：由每日维护任务按游标分批处理（见 12.2），保存路径上不做孤儿判断，保持保存请求轻量。
 
 ---
@@ -530,14 +527,14 @@ sequenceDiagram
 
 | 操作 | 接口 | 服务端处理 |
 |---|---|---|
-| 客户端封存 | `POST /api/items/:id/versions`（请求体为已压缩、必要时已加密的正文；请求头带 `rev`、`reason`、`content_hash`、`codec`） | 与最近一个版本哈希相同则直接返回（去重）；否则登记 pending、流式写 R2、插入元数据、更新 `sealed_rev`；随后对该条目做一次稀疏化（只读该条目的版本元数据），多余版本登记到 `r2_gc_queue` |
+| 客户端封存 | `POST /api/items/:id/versions`（请求体为已压缩的正文；请求头带 `rev`、`reason`、`content_hash`、`codec`） | 与最近一个版本哈希相同则直接返回（去重）；否则登记 pending、流式写 R2、插入元数据、更新 `sealed_rev`；随后对该条目做一次稀疏化（只读该条目的版本元数据），多余版本登记到 `r2_gc_queue` |
 | 服务端封存 | MCP 写入前、冲突前、恢复前 | 从 D1 读正文转存 R2；不超过 256 KB 时 `CompressionStream` 压缩，否则 `codec = 'none'`（需求 12.4） |
 | 列表 | `GET /api/items/:id/versions` | 只返回元数据 |
-| 读取 | `GET /api/versions/:vid` | 从 R2 流式返回原始字节，客户端解压、解密 |
+| 读取 | `GET /api/versions/:vid` | 从 R2 流式返回原始字节，客户端解压 |
 | 恢复 | `POST /api/items/:id/restore` | 先封存 `pre_restore`，再按普通全文保存写入 |
 | 保留 / 备注 | `PATCH /api/versions/:vid` | 修改 `keep`、`label` |
 
-**idle 封存的兜底**【待确认】：需求 12.2-1 规定“最后一次改动后 10 分钟无新改动即封存”，由在线的客户端执行（标签页隐藏或关闭时立即封存）。客户端离线、崩溃或直接关机时，这一步可能漏掉。建议 Cron 每轮扫描少量 `sealed_rev < rev` 且 `updated_at` 早于 10 分钟前的条目，由服务端转存封存；加密条目的密文原样转存（`encrypted = 1`，服务端不解密）。
+**idle 封存的兜底**【待确认】：需求 12.2-1 规定“最后一次改动后 10 分钟无新改动即封存”，由在线的客户端执行（标签页隐藏或关闭时立即封存）。客户端离线、崩溃或直接关机时，这一步可能漏掉。建议 Cron 每轮扫描少量 `sealed_rev < rev` 且 `updated_at` 早于 10 分钟前的条目，由服务端转存封存。
 
 ---
 
@@ -545,7 +542,7 @@ sequenceDiagram
 
 | 接口 | 说明 |
 |---|---|
-| `POST /api/shares` | 创建：单篇或 Memo 合集。服务端在同一语句中校验条目“非加密、不在加密空间、未删除”，不满足则拒绝 |
+| `POST /api/shares` | 创建：单篇或 Memo 合集。服务端在同一语句中校验条目“非隐私条目（无 `in_enc_space` / `enc_self` 标记）、未删除”，不满足则拒绝 |
 | `GET /api/shares`、`PATCH /api/shares/:id`、`DELETE /api/shares/:id` | 我的分享：修改密码或过期时间、撤销 |
 | `GET /api/public/shares/:sid` | 访客读取分享状态：是否有效、是否需要密码（附盐与 KDF 参数）、形态与标题 |
 | `POST /api/public/shares/:sid/unlock` | 访客浏览器派生校验值后提交；服务端 HMAC 比对，成功后返回有效期 1 小时的访问令牌（HMAC 签名，无状态，不写库）；失败按 `share:<sid>:<ip>` 计次限速 |
@@ -608,7 +605,8 @@ sequenceDiagram
   - S3：aws4fetch 签名，`UNSIGNED-PAYLOAD`。
   - Git：托管平台的 git data API，一批文件为 N 次 blob 创建 + 1 次 tree + 1 次 commit + 1 次 ref 更新，一批最多约 40 个文件，受 50 个子请求限制；不使用 contents API（每个文件一次提交）。
 - “立即备份”和首次全量备份由浏览器循环调用 `POST /api/backup/:target/run`，每次一批，显示进度（需求 16.3）。
-- 备份凭据用 `BACKUP_CRED_KEY` 以 AES-GCM 加密存 D1，只在 Worker 内存中解密使用。
+- **出站加密【v1.1 新增，已定·用户确认】**：隐私条目的所有文件出站前按 7.3 信封加密——快照生成时即加密写入 `snap/`；附件与版本在推送时加密。每轮加密字节配额 ≤ 4 MB（实测校准），超出部分留到下一轮；普通内容明文出站。
+- 备份凭据与内容密钥 K 用 `BACKUP_CRED_KEY` 以 AES-GCM 加密存 D1，只在 Worker 内存中解密使用。
 
 ---
 
@@ -628,10 +626,10 @@ sequenceDiagram
 ### 13.2 Web 安全【架构定】
 
 - **CSRF**：Cookie 为 `SameSite=Lax`；所有非 GET 请求要求自定义请求头 `X-Menote: 1`，并校验 `Origin` 与部署域名一致。
-- **CSP**（通过 Static Assets 的 `_headers` 文件下发）：`default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`。`style-src` 需要 `'unsafe-inline'` 是因为 CodeMirror 6 运行时注入样式；脚本不允许内联。
+- **CSP**（通过 Static Assets 的 `_headers` 文件下发）：`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`。`style-src` 需要 `'unsafe-inline'` 是因为 CodeMirror 6 运行时注入样式；脚本不允许内联。v1.1 后前端无 wasm，`wasm-unsafe-eval` 移除。
 - **XSS**：所有用户内容渲染经 DOMPurify；markdown-it 不直接放行原始 HTML；链接统一加 `rel="noopener noreferrer"`。
 - **其他响应头**：`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`（分享页为 `no-referrer`）、`Permissions-Policy` 关闭不需要的能力。
-- **Secrets**：`AUTH_PEPPER`、`BACKUP_CRED_KEY`（需求 18.2）；分享访问令牌签名密钥由 `AUTH_PEPPER` 派生。
+- **Secrets**：`AUTH_PEPPER`、`BACKUP_CRED_KEY`（需求 18.2；`BACKUP_CRED_KEY` 另用于包裹备份内容密钥 K，见 7.2）；分享访问令牌签名密钥由 `AUTH_PEPPER` 派生。
 - **多用户隔离**：仓储层的每条 SQL 都必须包含 `user_id` 条件（需求 18.1），并在测试中用“两个用户互相访问对方 ID”的用例覆盖所有接口。
 
 ---
@@ -646,7 +644,7 @@ sequenceDiagram
 | 按需加载的模块 | 编辑器、表格编辑器、Markdown 渲染、搜索 Worker、加密 Worker（含 Argon2 wasm）、设置页、分享查看器各自独立分包 |
 | 冷启动到可操作（已缓存外壳） | 中端手机 1.5 秒内显示本地列表，不等待网络 |
 | 输入延迟 | 2MB 文档中连续输入无可感知卡顿：大小计量与补丁生成增量计算，预览按块增量渲染 |
-| 加解密 2MB 正文 | 在 Worker 中执行，不阻塞主线程 |
+| 备份导出加密（单文件 ≤ 数 MB） | 浏览器端执行，不阻塞主线程 |
 
 CI 中加入包体积检查，首屏包超预算即构建失败。
 
@@ -662,6 +660,7 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 | MCP 区间读取、搜索片段 | SQL 截取 | < 2 ms | 结果条数与字符数上限 |
 | MCP 小节解析（≤ 512 KB） | 标题扫描 | 待实测 | 超过门槛返回“条目过大” |
 | 服务端版本压缩（≤ 256 KB） | `CompressionStream` | 待实测 | 超过 256 KB 不压缩 |
+| Cron 备份出站加密（≤ 4 MB/轮） | AES-GCM（WebCrypto） | ≈ 2–4 ms（待实测校准） | 每轮加密字节配额，超出留到下一轮 |
 | Cron 每轮 | 多个小任务 | 按配额控制 | 配额可调，每轮可中断 |
 
 实测方法：部署测试环境，用脚本构造 64 KB、512 KB、1 MB、1.9 MB 的明文与密文，逐个接口压测，从 Workers 日志读取每次调用的 CPU 时间；结论写回本节，并据此确认需求 19.6 的备选方案是否需要启用。
@@ -674,10 +673,10 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 
 | 层 | 工具 | 必测内容 |
 |---|---|---|
-| 共享包单元测试 | Vitest | 码点换算（emoji、代理对、组合字符）；表格编解码往返与容错（随机生成的表格做往返测试）；front matter 与标签、任务字段派生；快照格式；密文信封解析 |
-| Worker 集成测试 | Vitest + `@cloudflare/vitest-pool-workers`（本地 D1 / R2） | 条件 batch 与冲突判定；补丁在 D1 中拼接的结果与客户端一致；1,900,000 字节 `CHECK`；永久删除的完整范围；多用户隔离；MCP 权限、范围与加密内容不可见；幂等 `operation_id` |
-| 加密测试 | Vitest（浏览器环境） | 包裹与解包、AAD 篡改检测、改隐私密码后恢复码仍可用、锁定后内存中无密钥 |
-| 端到端测试 | Playwright | 离线编辑后恢复网络、两端同时编辑产生冲突副本、多标签页选主与接任、锁定时明文视图关闭、分享链接在条目加密后立即失效 |
+| 共享包单元测试 | Vitest | 码点换算（emoji、代理对、组合字符）；表格编解码往返与容错（随机生成的表格做往返测试）；front matter 与标签、任务字段派生；快照格式；备份信封格式解析 |
+| Worker 集成测试 | Vitest + `@cloudflare/vitest-pool-workers`（本地 D1 / R2） | 条件 batch 与冲突判定；补丁在 D1 中拼接的结果与客户端一致；1,900,000 字节 `CHECK`；永久删除的完整范围；多用户隔离；MCP 权限、范围与隐私条目不可见；备份出站中隐私条目只以密文出现；幂等 `operation_id` |
+| 信封与门禁测试 | Vitest（浏览器环境） | 信封格式往返与篡改检测；改隐私密码后新备份用新口令、旧备份仍可用旧口令解开；外部解密工具对样例包的解密；门禁过滤（列表 / 统计 / 搜索 / Memo） |
+| 端到端测试 | Playwright | 离线编辑后恢复网络、两端同时编辑产生冲突副本、多标签页选主与接任、锁定时隐私视图关闭、分享链接在条目设为隐私后立即失效 |
 | 性能测试 | 自写脚本 + 测试环境 | 14.2 的 CPU 实测 |
 
 ### 15.2 CI（GitHub Actions）
@@ -707,9 +706,10 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 | 1 | 前端框架 | 2.2 | React 19（与 Inkstone 同栈）；备选 Preact |
 | 2 | 代码是否放在 MeNote 仓库，以及目录结构 | 2.3 | 同一仓库，pnpm workspace |
 | 3 | D1 表结构的技术补充（墓碑、R2 待删队列、更多表进入增量同步、附件的版本引用、限速计数、跨会话字段） | 5.1 | 按 5.1 补充 |
-| 4 | 不支持 SharedWorker 时“本次浏览器会话”档位的退化方式 | 7.1 | 每个标签页各自解锁、各自计时 |
-| 5 | 转换开始时先打 `enc_pending` 标记，保证转换期间对 MCP 不可见 | 7.4 | 增加该列 |
+| 4 | ~~SharedWorker 的移动端支持与会话档退化方式~~ | 7.1 | v1.1 作废：门禁无密钥保管，不依赖 SharedWorker |
+| 5 | ~~转换开始时先打 `enc_pending` 标记~~ | 7.4 | v1.1 作废：无转换任务，标记变更即时生效 |
 | 6 | idle 封存由服务端兜底 | 9 | 启用 |
-| 7 | SharedWorker 的移动端支持 | 7.1 | 待核实 |
-| 8 | 缩略图的 R2 对象键 | 5.2 | 待核实 |
-| 9 | MCP 小节解析门槛、服务端压缩门槛、2MB 全文读写的 CPU 实测 | 11、14.2 | 待实测 |
+| 7 | 缩略图的 R2 对象键 | 5.2 | 待核实（沿用 v1） |
+| 8 | MCP 小节解析门槛、服务端压缩门槛、2MB 全文读写的 CPU 实测 | 11、14.2 | 待实测 |
+| 9 | Cron 备份出站加密的每轮字节配额实测 | 7.4、14.2 | 草案 4 MB/轮，实测校准 |
+| 10 | 需求文档 §6 / §18.2 / §5.4 的模型同步 | 修订记录 | 升版 v7.5，按 v2 第十一章待同步清单执行 |

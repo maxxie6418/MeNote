@@ -32,6 +32,10 @@ import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { TwoPane } from "./workarea/TwoPane";
 import { MemoPanel } from "../features/memos/ui/MemoPanel";
 import { convertMemoToNote } from "../features/memos/actions";
+import { TaskPanel } from "../features/tasks/ui/TaskPanel";
+import { clearTaskMarker, setTaskStatus } from "../features/tasks/actions";
+import { taskTitle } from "../features/tasks/model";
+import { dayKeyInZone } from "../features/memos/model";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -95,6 +99,9 @@ export default function App() {
     input?.focus();
     input?.scrollIntoView({ block: "nearest" });
   }, []);
+
+  /** 待办视图的"今天"：按设置时区算，且只在挂载时取一次（渲染期调 Date.now() 不纯） */
+  const [today] = useState(() => dayKeyInZone(Date.now()));
 
   /**
    * 同步引擎必须**只随登录状态**创建/销毁。
@@ -244,6 +251,10 @@ export default function App() {
               void workspace.publishMemo(text, options);
               pushToast("已记录", "success");
             }}
+            onPublishTask={(text, options) => {
+              void workspace.publishMemo(text, { asTask: true, ...options });
+              pushToast("已加入待办", "success");
+            }}
             view={workspace.view}
             onViewChange={showNotesView}
             tags={workspace.tags}
@@ -288,6 +299,30 @@ export default function App() {
             onLogout={() => {
               void auth.logout().then(() => navigate({ name: "login" }));
             }}
+          />
+        ) : browse === "task" ? (
+          /* 待办视图：单栏占满（列表 / 看板由面板内部切换） */
+          <TwoPane
+            listHidden={true}
+            list={null}
+            doc={
+              <TaskPanel
+                tasks={workspace.memos.filter((memo) => memo.is_task === 1)}
+                titles={Object.fromEntries(
+                  Object.entries(workspace.memoContents).map(([id, entry]) => [
+                    id,
+                    taskTitle(entry.content),
+                  ]),
+                )}
+                today={today}
+                onStatusChange={(id, status) => {
+                  void setTaskStatus(id, status).then(() => workspace.refresh());
+                }}
+                onClearMarker={(id) => {
+                  void clearTaskMarker(id).then(() => workspace.refresh());
+                }}
+              />
+            }
           />
         ) : browse === "memo" ? (
           /* Memo 视图：单栏占满（时间轴），列表让位 */

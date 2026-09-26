@@ -10,8 +10,8 @@
  * **功能栏内不出现账户区**——账户入口只在顶栏（DESIGN.md §2.5-1）。
  */
 import { Icon } from "../ui/Icon";
-import { Composer } from "./Composer";
-import { NavList } from "./NavList";
+import type { TaskPriority } from "@menote/mdcore";
+import { Composer } from "./Composer";import { NavList } from "./NavList";
 import { NavSegmented, type BrowsableView } from "./NavSegmented";
 import { TagGroup } from "./TagGroup";
 import { VaultNode } from "./VaultNode";
@@ -23,6 +23,8 @@ export interface FnBarProps {
   onPublishNote: (title: string, body: string) => void;
   /** Memo 模式发布：`asTask` = 用户确认了"设为清单？" */
   onPublishMemo: (text: string, options: { asTask: boolean }) => void;
+  /** 待办模式发布（M2-5） */
+  onPublishTask: (text: string, options: { due: string | null; priority: TaskPriority }) => void;
   view: NotesView;
   onViewChange: (view: NotesView) => void;
   tags: ReadonlyArray<{ tag: string; count: number }>;
@@ -40,6 +42,7 @@ export function FnBar({
   onNewNote,
   onPublishNote,
   onPublishMemo,
+  onPublishTask,
   view,
   onViewChange,
   tags,
@@ -54,7 +57,11 @@ export function FnBar({
           <Icon name="plus" size={16} />
           新建笔记
         </button>
-        <Composer onPublishNote={onPublishNote} onPublishMemo={onPublishMemo} />
+        <Composer
+          onPublishNote={onPublishNote}
+          onPublishMemo={onPublishMemo}
+          onPublishTask={onPublishTask}
+        />
       </div>
 
       <div className="fnbar__scroll">

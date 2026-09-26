@@ -130,6 +130,7 @@ describe("功能栏与录入框占位", () => {
         onNewNote={vi.fn()}
         onPublishNote={vi.fn()}
         onPublishMemo={vi.fn()}
+        onPublishTask={vi.fn()}
         view={{ kind: "notebook" }}
         onViewChange={vi.fn()}
         notebookPanel={null}
@@ -173,10 +174,12 @@ describe("功能栏与录入框占位", () => {
     expect(memoPublish.disabled).toBe(true);
     expect(memoPublish.title).toContain("先写点内容");
 
-    // 未接入的档位必须说明原因（DESIGN.md §6.1：禁用要给理由）
+    // 三档都已可用（Memo M2-4 / 待办 M2-5）：空内容时的禁用原因都是"还没写内容"
     await user.click(screen.getByRole("button", { name: "待办" }));
     const taskPublish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
-    expect(taskPublish.title).toContain("M2-5");
+    expect(taskPublish.disabled).toBe(true);
+    expect(taskPublish.title).toContain("先写点内容");
+    expect(screen.getByLabelText("截止日期")).toBeTruthy();
   });
 });
 

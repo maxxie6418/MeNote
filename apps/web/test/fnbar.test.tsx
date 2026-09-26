@@ -22,6 +22,7 @@ function renderFnBar(overrides: Partial<Parameters<typeof FnBar>[0]> = {}) {
       onNewNote={vi.fn()}
       onPublishNote={vi.fn()}
       onPublishMemo={vi.fn()}
+      onPublishTask={vi.fn()}
       view={{ kind: "notebook" }}
       onViewChange={vi.fn()}
       notebookPanel={<div data-testid="notebook-panel" />}
@@ -68,7 +69,7 @@ describe("功能栏结构", () => {
     expect(segmented?.querySelectorAll(".segmented__item")).toHaveLength(3);
   });
 
-  it("未接入的浏览三段禁用并说明原因（Memo 已接入，故不再禁用）", async () => {
+  it("浏览三段：Memo 与待办已可用，只剩首页禁用并说明原因", async () => {
     const user = userEvent.setup();
     const onBrowseChange = vi.fn();
     renderFnBar({ onBrowseChange });
@@ -76,13 +77,17 @@ describe("功能栏结构", () => {
     const home = screen.getByRole("tab", { name: /首页/ }) as HTMLButtonElement;
     expect(home.disabled).toBe(true);
     expect(home.title).toContain("M2-8");
-    expect((screen.getByRole("tab", { name: /待办/ }) as HTMLButtonElement).title).toContain("M2-5");
 
-    // Memo 已可用（M2-4）：可点、可选中
+    // Memo（M2-4）与待办（M2-5）都已可用
     const memo = screen.getByRole("tab", { name: /Memo/ }) as HTMLButtonElement;
     expect(memo.disabled).toBe(false);
     await user.click(memo);
     expect(onBrowseChange).toHaveBeenCalledWith("memo");
+
+    const task = screen.getByRole("tab", { name: /待办/ }) as HTMLButtonElement;
+    expect(task.disabled).toBe(false);
+    await user.click(task);
+    expect(onBrowseChange).toHaveBeenCalledWith("task");
   });
 
   it("导航与分组：最近编辑/收藏可切换、笔记本分组是插槽、标签云来自条目", async () => {
@@ -120,8 +125,12 @@ describe("录入框三档附加项", () => {
     expect(extras.textContent).toBe(""); // memo：空容器，不塌陷（容器仍在）
 
     await user.click(screen.getByRole("button", { name: "待办" }));
+    // task 档是真实控件（M2-5）：原生日期输入 + 优先级三段
+    expect(screen.getByLabelText("截止日期")).toBeTruthy();
     expect(extras.textContent).toContain("截止");
-    expect(extras.textContent).toContain("优先级");
+    for (const label of ["高", "中", "低"]) {
+      expect(screen.getByRole("button", { name: label })).toBeTruthy();
+    }
 
     await user.click(screen.getByRole("button", { name: "笔记" }));
     expect(extras.textContent).toContain("首行作标题");

@@ -1644,3 +1644,152 @@ button.chip--tag:hover {
   color: var(--muted);
   font-size: var(--fs-small);
 }
+
+/* 录入框里的原生日期控件（待办档）：外观压在 20px 的胶囊高度里 */
+.composer__field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+.composer__date {
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  font-family: inherit;
+}
+
+/* ============================================================
+   待办视图（需求 §9.4；列表 / 看板共用同一张卡）
+   ============================================================ */
+.taskpanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.taskpanel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.taskfilter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.tasklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.tasklist__head,
+.kanban__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.tasklist__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.tasklist__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.taskcard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.taskcard__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.taskcard__title {
+  font-size: var(--fs-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskcard__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.taskcard__status {
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+.taskcard__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+}
+
+.kanban {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+
+.kanban__col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.kanban__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-height: 80px;
+  padding: var(--sp-2);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius);
+}
+
+.kanban__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  text-align: center;
+}

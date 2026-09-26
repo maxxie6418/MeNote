@@ -9,6 +9,11 @@
  * M2-4/M2-5 落地，在此之前按钮**禁用并说明原因**（DESIGN.md §6.1），不做"点了没反应"的空按钮。
  */
 import { splitFirstLineAsTitle } from "@menote/mdcore";
+import {
+  TASK_PRIORITIES,
+  TASK_PRIORITY_LABELS,
+  type TaskPriority,
+} from "@menote/mdcore";
 import { useState } from "react";
 import { Button } from "../ui/Controls";
 import { Chip } from "../ui/Chip";
@@ -25,13 +30,13 @@ export type ComposerMode = (typeof COMPOSER_MODES)[number]["value"];
 /** 各模式「发布」的接入状态（未接入的给出可见原因） */
 const PUBLISH_READY: Record<ComposerMode, boolean> = {
   memo: true,
-  task: false,
+  task: true,
   note: true,
 };
 
 const MODE_DISABLED_REASON: Record<ComposerMode, string> = {
   memo: "",
-  task: "待办发布将在 M2-5 提供",
+  task: "",
   note: "",
 };
 
@@ -44,21 +49,41 @@ function ModeExtras({
   showTaskPrompt,
   asTask,
   onSetTask,
+  taskDue,
+  onTaskDue,
+  taskPriority,
+  onTaskPriority,
 }: {
   mode: ComposerMode;
   showTaskPrompt: boolean;
   asTask: boolean;
   onSetTask: (value: boolean) => void;
+  taskDue: string;
+  onTaskDue: (value: string) => void;
+  taskPriority: TaskPriority;
+  onTaskPriority: (value: TaskPriority) => void;
 }) {
   if (mode === "task") {
+    // 真实控件：截止用原生 date（可键盘输入、有系统选择器），优先级用盒式分段控件
     return (
       <>
-        <Chip variant="compact" tone="amber" title="截止日期选择将在 M2-5 提供">
-          截止 未设置
-        </Chip>
-        <Chip variant="compact" title="优先级选择将在 M2-5 提供">
-          优先级 中
-        </Chip>
+        <label className="composer__field" title="截止日期（可留空）">
+          截止
+          <input
+            type="date"
+            className="composer__date"
+            aria-label="截止日期"
+            value={taskDue}
+            onChange={(event) => onTaskDue(event.target.value)}
+          />
+        </label>
+        <SegmentedControl
+          ariaLabel="优先级"
+          size="compact"
+          value={taskPriority}
+          onChange={onTaskPriority}
+          options={TASK_PRIORITY_OPTIONS}
+        />
       </>
     );
   }
@@ -108,12 +133,20 @@ export interface ComposerProps {
   onPublishNote?: (title: string, body: string) => void;
   /** Memo 模式发布：`asTask` = 用户确认了"设为清单？" */
   onPublishMemo?: (text: string, options: { asTask: boolean }) => void;
+  /** 待办模式发布（M2-5）：新建清单默认状态"待办" */
+  onPublishTask?: (text: string, options: { due: string | null; priority: TaskPriority }) => void;
 }
 
-export function Composer({ onPublishNote, onPublishMemo }: ComposerProps) {
+const TASK_PRIORITY_OPTIONS: ReadonlyArray<{ value: TaskPriority; label: string }> =
+  TASK_PRIORITIES.map((priority) => ({ value: priority, label: TASK_PRIORITY_LABELS[priority] }));
+
+export function Composer({ onPublishNote, onPublishMemo, onPublishTask }: ComposerProps) {
   const [mode, setMode] = useState<ComposerMode>("memo");
   const [text, setText] = useState("");
   const [taskRequested, setTaskRequested] = useState(false);
+  const [taskDue, setTaskDue] = useState("");
+  // M07-03 的默认优先级为"中"（原型里也是这么显示的）
+  const [taskPriority, setTaskPriority] = useState<TaskPriority>("medium");
 
   const hasTaskItem = TASK_ITEM_PATTERN.test(text);
   // 用户把 `- [ ]` 删掉后，清单标记自动作废（不靠 effect 同步状态）
@@ -139,6 +172,13 @@ export function Composer({ onPublishNote, onPublishMemo }: ComposerProps) {
       onPublishMemo?.(text, { asTask });
       setText("");
       setTaskRequested(false);
+      return;
+    }
+    if (mode === "task") {
+      onPublishTask?.(text, { due: taskDue === "" ? null : taskDue, priority: taskPriority });
+      setText("");
+      setTaskDue("");
+      setTaskPriority("medium");
     }
   }
 
@@ -164,6 +204,10 @@ export function Composer({ onPublishNote, onPublishMemo }: ComposerProps) {
           showTaskPrompt={hasTaskItem}
           asTask={asTask}
           onSetTask={setTaskRequested}
+          taskDue={taskDue}
+          onTaskDue={setTaskDue}
+          taskPriority={taskPriority}
+          onTaskPriority={setTaskPriority}
         />
       </div>
 

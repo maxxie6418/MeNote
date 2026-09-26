@@ -92,9 +92,13 @@ export interface NotesWorkspace {
   memoContents: Record<string, MemoContent>;
   /**
    * 发布 Memo（乐观：先落本地并标"待上传"，出队由 outbox 后台上传；写入**永远免密**）。
-   * `asTask` = 用户在录入框确认了"设为清单？"，正文会带上 `menote.task` 标记。
+   * `asTask` = 用户在录入框确认了"设为清单？"或走的是待办档；正文会带上 `menote.task` 标记，
+   * 新建清单**默认状态"待办"**（M2-5）。
    */
-  publishMemo: (text: string, options?: { asTask?: boolean }) => Promise<void>;
+  publishMemo: (
+    text: string,
+    options?: { asTask?: boolean; due?: string | null; priority?: string | null },
+  ) => Promise<void>;
   /** 编辑 Memo 正文（Q19：`memo_at` 不变，只改正文与派生标签） */
   updateMemo: (itemId: string, text: string) => Promise<void>;
   /** 新建文件夹（深度超限时抛错，界面本该不给出入口） */
@@ -243,20 +247,23 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
    * 原位编辑时不会看到 YAML。
    */
   const publishMemo = useCallback(
-    async (text: string, options?: { asTask?: boolean }) => {
+    async (
+      text: string,
+      options?: { asTask?: boolean; due?: string | null; priority?: string | null },
+    ) => {
       const tags = deriveTags(text);
       const asTask = options?.asTask ?? false;
+      const task = asTask
+        ? {
+            // M2-5：新建清单默认"待办"；优先级默认"中"，截止可空（M07-03）
+            status: "todo",
+            due: options?.due ?? null,
+            priority: options?.priority ?? "medium",
+          }
+        : null;
       const body =
         tags.length > 0 || asTask
-          ? buildDocument(
-              {
-                type: "memo",
-                tags,
-                task: asTask ? { status: null, due: null, priority: null } : null,
-                preservedLines: [],
-              },
-              text,
-            )
+          ? buildDocument({ type: "memo", tags, task, preservedLines: [] }, text)
           : text;
 
       const id = newUlid();

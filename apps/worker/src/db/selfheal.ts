@@ -11,9 +11,10 @@
  */
 import { MIGRATION_LOCK_TTL_MS } from "@menote/shared";
 import { migration0001, type MigrationScript } from "./migrations/0001_init";
+import { migration0002, TASK_TRIGGER_NAMES } from "./migrations/0002_task_literals";
 
 /** 全部迁移脚本，按 version 升序 */
-export const MIGRATIONS: readonly MigrationScript[] = [migration0001];
+export const MIGRATIONS: readonly MigrationScript[] = [migration0001, migration0002];
 
 /** 代码期望的表结构版本 */
 export const EXPECTED_SCHEMA_VERSION = MIGRATIONS.reduce(
@@ -47,6 +48,8 @@ const REQUIRED_INDEXES = [
   "idx_items_memo",
   "idx_items_task",
   "idx_items_trash",
+  // 触发器（0002 的任务字段字面量约束）也纳入完整性检查：迁移半途失败时要能发现
+  ...TASK_TRIGGER_NAMES,
 ] as const;
 
 export type EnsureSchemaResult =
@@ -106,7 +109,7 @@ async function applyMigrations(db: D1Database, currentVersion: number): Promise<
  */
 export async function verifySchema(db: D1Database): Promise<void> {
   const rows = await db
-    .prepare("SELECT name FROM sqlite_master WHERE type IN ('table','index') AND name NOT LIKE 'sqlite_%'")
+    .prepare("SELECT name FROM sqlite_master WHERE type IN ('table','index','trigger') AND name NOT LIKE 'sqlite_%'")
     .all<{ name: string }>();
   const present = new Set(rows.results.map((row) => row.name));
   const missing = [...REQUIRED_TABLES, ...REQUIRED_INDEXES].filter((name) => !present.has(name));

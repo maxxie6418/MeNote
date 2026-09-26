@@ -8,7 +8,7 @@
 - 名称：`MeNote`
 - 一句话：面向个人与家人的轻量多端笔记应用（浏览器 PWA + Cloudflare 自托管），支持 Markdown 笔记、表格、Memo、待办、版本历史与隐私锁。
 - 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared`（`mdcore` / `crypto-format` 待 M2/M5 建），见架构文档 §2.3）
-- 当前版本：v0.2.9（**M1 已收口**；**M2 进行中**——M2-1 `packages/mdcore`、M2-2 界面框架、M2-3 笔记本与文件夹已完成，M2-4 Memo 主体完成，M2-5~M2-8 待做）
+- 当前版本：v0.2.11（**M1 已收口**；**M2 进行中**——M2-1 `packages/mdcore`、M2-2 界面框架、M2-3 笔记本与文件夹、M2-4 Memo、M2-5 待办已完成，M2-6 搜索 / M2-7 设置 / M2-8 首页待做）
 - 技术栈：
   - 前端：`React PWA（Vite + CodeMirror 6，编辑器已接入）`
   - 后端：`Cloudflare Workers（Hono）`
@@ -17,7 +17,7 @@
 - 源码位置：`apps/web`（PWA 客户端）、`apps/worker`（Cloudflare Worker，唯一入口 `src/index.ts` 只装配）、`packages/shared`（两端共享类型与纯函数）
 - 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 结构章已定稿、**视觉章（§3）待定**，实现界面时按 `DESIGN.md` §3.1 从原型取值并标注临时值
 - 怎么跑：`pnpm install` → `pnpm dev`（前端 + Worker + 本地 D1 一体）；常用命令与部署流程见 `wiki/guides/local-dev.md`；本地数据在 `apps/web/.wrangler/state`（删掉即可重置）
-- 现在做到哪：**M1 已收口；M2 进行中（v0.2.9）**——M2-1 `packages/mdcore`（front matter / 标签 / 任务字段派生）、M2-2 界面框架、M2-3 笔记本与文件夹已完成，M2-4 Memo 主体完成（发布、时间轴、筛选、原位编辑、置顶、转笔记），M2-5 待办 / M2-6 搜索 / M2-7 设置 / M2-8 首页待做；进度与遗留项见 `docs/todo/Menote-M2-实施计划-v1.md`
+- 现在做到哪：**M1 已收口；M2 进行中（v0.2.11）**——M2-1 `packages/mdcore`（front matter / 标签 / 任务字段派生）、M2-2 界面框架、M2-3 笔记本与文件夹、M2-4 Memo（发布 / 时间轴 / 筛选 / 原位编辑 / 置顶 / 转笔记）、M2-5 待办（列表 / 看板 / 筛选 / 任务字段约束）已完成；M2-6 搜索 / M2-7 设置 / M2-8 首页待做；进度与遗留项见 `docs/todo/Menote-M2-实施计划-v1.md`
 
 ## 工作原则
 
@@ -159,3 +159,5 @@ Git：
   规定：源码、文档、配置一律用编辑/写入工具改；需要写 JSON 时用 `node -e` 配 `JSON.stringify(obj, null, 2)`（无 BOM、带换行）；shell 只用于只读探查、构建、测试、git。
 
 - **提交信息不要塞进命令行（用户要求 2026-09-26）**：here-string（`@'...'@`）或 `-m` 里一旦出现 ASCII 双引号就会被截断，后果不是报错而是"更糟"——`git commit` 失败、改动留在暂存区，被随后的提交一并带走（曾把整轮功能代码混进一个 `docs:` 提交，`--amend` 之前那轮历史就名不副实了）。统一写法：信息先写进 `.git/COMMIT_MSG.txt`，再 `git commit -F <文件>`；暂存也要点名文件，别用 `git add <目录>` 一把梭，否则代码与文档又混在一起。
+
+- **提交后、推送前先核对消息（用户要求 2026-09-26）**：消息文件可能因编辑工具的文件版本守卫而**根本没写进去**，此时 `git commit -F` 会静默沿用上一次的消息，于是提交内容与消息对不上（本仓库已发生两次：一次把整轮功能代码混进 `docs:` 提交，一次把 v0.2.11 的文档提交标成 v0.2.10 且已推送）。规定：`git commit` 之后**先** `git log -1 --format="%s"` 核对首行与预期一致，**不一致且尚未推送**就 `git commit --amend -F <文件>`；确认一致再 `git push`。已推送的历史不追改（不做 force-push）。

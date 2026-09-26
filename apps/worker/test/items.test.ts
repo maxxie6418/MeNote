@@ -214,6 +214,16 @@ describe("条目：新建与取正文", () => {
     expect(badNote.status).toBe(422);
   });
 
+  it("新建后行上的 sync_seq 必须大于 0 且与用户计数器一致（否则拉取永远看不到它）", async () => {
+    const user = await registerUser("Alice", 1);
+    const id = newUlid();
+    await createNote(user.cookie, id, "正文");
+
+    const row = await readItemRow(id);
+    expect(row.sync_seq).toBeGreaterThan(0);
+    expect(row.sync_seq).toBe(await readUserSyncSeq(user.id));
+  });
+
   it("超过硬上限返回 413 too_large", async () => {
     const user = await registerUser("Alice", 1);
     const huge = "a".repeat(BODY_HARD_LIMIT_BYTES + 1);

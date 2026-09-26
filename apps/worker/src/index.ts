@@ -12,6 +12,7 @@ import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
 import settings from "./routes/settings";
+import sync from "./routes/sync";
 import type { AppEnv, EnvBindings } from "./types";
 
 const app = new Hono<AppEnv>();
@@ -25,6 +26,7 @@ app.route("/api", health);
 app.route("/api", auth);
 app.route("/api", items);
 app.route("/api", folders);
+app.route("/api", sync);
 app.route("/api", settings);
 
 app.notFound((c) => {

@@ -87,10 +87,10 @@ export const SQL_SELECT_ITEM_HASH = "SELECT content_hash FROM items WHERE id = ?
 
 /** 新建：`NOT EXISTS` 只判 id（id 是全局主键；带 user_id 会在他人占用时撞主键异常） */
 export const SQL_INSERT_ITEM = `INSERT INTO items (id, user_id, type, folder_id, title, enc_self, in_enc_space, size_bytes, content_hash, tags, memo_at, is_task, task_status, task_due, task_priority, pinned, starred, rev, meta_rev, sealed_rev, sync_seq, created_at, updated_at, last_edit_at, last_device, deleted_at)
-SELECT ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, NULL, (SELECT sync_seq FROM users WHERE id = ?), ?, ?, ?, ?, NULL
+SELECT ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, NULL, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, ?, ?, NULL
  WHERE NOT EXISTS (SELECT 1 FROM items WHERE id = ?)`;
 
-/** 新建路径的计数器推进：以"本次创建的那一行"为条件 */
+/** 新建路径的计数器推进：以"本次创建的那一行"为条件（读的是 +1，推进后与行上写的值一致） */
 export const SQL_BUMP_SYNC_SEQ_ON_ITEM_CREATE = `UPDATE users SET sync_seq = sync_seq + 1
  WHERE id = ? AND EXISTS (SELECT 1 FROM items WHERE id = ? AND rev = 1 AND created_at = ?)`;
 
@@ -163,3 +163,25 @@ export function buildUpdateFolder(fields: readonly FolderField[]): string {
 
 export const SQL_BUMP_SYNC_SEQ_ON_FOLDER_META = `UPDATE users SET sync_seq = sync_seq + 1
  WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND meta_rev = ? AND updated_at = ?)`;
+
+// —— 增量拉取（架构 §6.1、设计稿《同步引擎设计》§3.2/§3.3）——
+//
+// 只回元数据、不含正文；按 sync_seq 升序；每类多取 1 行用于判断 has_more（LIMIT = 上限 + 1）。
+
+export const SQL_SELECT_USER_TOMBSTONE_FLOOR =
+  "SELECT tombstone_floor FROM users WHERE id = ?";
+
+export const SQL_SELECT_ITEMS_SINCE = `SELECT id, type, folder_id, title, enc_self, in_enc_space, size_bytes,
+       content_hash, tags, memo_at, is_task, task_status, task_due, task_priority, pinned, starred,
+       rev, meta_rev, sealed_rev, sync_seq, created_at, updated_at, last_edit_at, last_device, deleted_at
+  FROM items
+ WHERE user_id = ? AND sync_seq > ?
+ ORDER BY sync_seq
+ LIMIT ?`;
+
+export const SQL_SELECT_FOLDERS_SINCE = `SELECT id, parent_id, is_enc_space, in_enc_space, name, depth,
+       position, meta_rev, sync_seq, created_at, updated_at, deleted_at
+  FROM folders
+ WHERE user_id = ? AND sync_seq > ?
+ ORDER BY sync_seq
+ LIMIT ?`;

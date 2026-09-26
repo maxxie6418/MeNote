@@ -44,6 +44,7 @@ export function NoteWorkspace({
   onTitleChange,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>("split");
+  // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
   const [previewSource, setPreviewSource] = useState(initialBody);
 
   if (!item) {
@@ -93,9 +94,14 @@ export function NoteWorkspace({
           {mode === "split" ? (
             <div className="doc-split">
               <div className="doc-split__pane">
+                {/*
+                  用 `previewSource`（实时文本）而不是 `initialBody`（打开时的快照）：
+                  切模式会让编辑器重新挂载，用快照初始化会把中间敲的内容显示回旧版本，
+                  用户再敲一个字就把旧内容写进草稿（M1-11 QA 实测）。
+                */}
                 <Editor
                   key={item.id}
-                  initialValue={initialBody}
+                  initialValue={previewSource}
                   onChange={handleInput}
                   ariaLabel="正文"
                 />
@@ -108,7 +114,7 @@ export function NoteWorkspace({
             <div className="doc-split__pane">
               <Editor
                 key={item.id}
-                initialValue={initialBody}
+                initialValue={previewSource}
                 onChange={handleInput}
                 ariaLabel="正文"
               />

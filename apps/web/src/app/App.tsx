@@ -234,7 +234,9 @@ export default function App() {
                 void workspace.createNote();
               }}
             />
+            {/* key 用条目 id：切换条目必须重挂载正文区，否则新条目会沿用上一篇的文本 */}
             <NoteWorkspace
+              key={workspace.selectedId ?? "none"}
               item={workspace.selected}
               initialBody={workspace.initialBody}
               snapshot={workspace.snapshot}

@@ -224,6 +224,13 @@ M1 已收口（`docs/archive/Menote-M1-实施计划-v1.md`），但有几项当�
 
 ### M2-9 同步补全
 
+> **状态：🟡 部分完成（v0.2.17）**。逐项：
+> - **BroadcastChannel（跨标签页）**：✅ 广播层与引擎接线已完成（事件只放"哪条变了/游标到哪"，无 `BroadcastChannel` 时降级为空实现；收到事件**只重读本地库**不跑同步，并用 in-flight 标记合并连发事件）。**仍缺**：同条目并发编辑的**事前界面提示**（"已在其他标签页修改"）——静默覆盖本身已被保存时的 `rev_conflict` 路径挡住。
+> - **`user_settings` 进同步**：🟡 已随同步响应整份带回（**不参与游标**，见 §M2-7 的说明；schema 用 optional 兜住部署窗口）。与本节"含 `sync_seq`、客户端游标仍是单一序列"的写法不同，属**已知偏离**。
+> - **`POST /api/batch`**（单批 ≤45 条语句、逐操作判定冲突）：⬜ 未做。
+> - **trash / restore**：⬜ **已决定并入 M4**（与回收站一起做，避免不可逆删除）。
+> - **冲突通知栏「对比两者 / 保留某一份」**：⬜ 未做（M1 只做了副本 + Toast）。
+
 > 归属说明（与《同步引擎设计》§5 一致）：增量补丁、`POST /api/batch`、trash/restore、BroadcastChannel 这四项**同时列在 M1-12 与本节**，做在哪一步由当时排期决定；若 M1 已做完，本节只做验收复核，不重复实现。
 
 **涉及文件**：`apps/worker/src/services/sync.ts`（增加 `user_settings` 实体）、`apps/worker/src/routes/items.ts`（`POST /api/batch`、trash/restore）、`apps/web/src/data/sync/`（BroadcastChannel）、`apps/web/src/features/notes/ui/`（上传失败列表）。

@@ -95,3 +95,14 @@ export const RegistrationUpdateSchema = v.object({
   open: v.boolean(),
   close_at: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 });
+
+/**
+ * `GET /api/auth/registration-state`（**公开、无需登录**）：登录页据此决定是否显示注册入口；
+ * 库中无任何用户时（`has_users: false`）必须直接进注册页（拆解 M01-01）。
+ * 只回两个布尔量，不泄露账号列表等任何用户数据。
+ */
+export const PublicRegistrationStateSchema = v.object({
+  open: v.boolean(),
+  has_users: v.boolean(),
+});
+export type PublicRegistrationState = v.InferOutput<typeof PublicRegistrationStateSchema>;

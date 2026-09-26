@@ -17,6 +17,7 @@ import { DomainError } from "../errors";
 import { clearSessionCookie, requireSession, setSessionCookie } from "../middleware/session";
 import { changePassword, login, prelogin, register } from "../services/auth";
 import { deleteSession } from "../services/sessions";
+import { getPublicRegistrationState } from "../services/settings";
 import type { AppEnv } from "../types";
 import { readJsonBody } from "../validation";
 
@@ -35,6 +36,14 @@ app.post("/auth/prelogin", async (c) => {
   const parsed = v.safeParse(PreloginRequestSchema, await readJsonBody(c));
   if (!parsed.success) throw invalid();
   return c.json(await prelogin(c.env.DB, c.env.AUTH_PEPPER, parsed.output.username));
+});
+
+/**
+ * 公开的注册状态（无需登录）：登录页据此决定是否显示注册入口；
+ * 库中无用户时前端直接进注册页（拆解 M01-01）。
+ */
+app.get("/auth/registration-state", async (c) => {
+  return c.json(await getPublicRegistrationState(c.env.DB, Date.now()));
 });
 
 app.post("/auth/register", async (c) => {

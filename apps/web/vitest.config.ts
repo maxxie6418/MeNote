@@ -5,6 +5,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["test/**/*.test.ts"],
+    // 组件测试用 .tsx（文件头 `@vitest-environment jsdom` 单独切换环境）
+    include: ["test/**/*.test.{ts,tsx}"],
   },
 });

@@ -26,7 +26,6 @@ import { createSession, invalidateOtherSessions } from "./sessions";
 import {
   deriveAuthVerifier,
   deriveFakeSalt,
-  generateSalt,
   timingSafeEqual,
   toBase64Url,
 } from "./tokens";
@@ -159,17 +158,25 @@ export async function register(
   input: { username: string; loginKey: string },
   now: number,
 ): Promise<AuthResult> {
-  const salt = generateSalt(LOGIN_KDF_DEFAULT.saltBytes);
+  /**
+   * 盐必须与 prelogin 给客户端的那一个**完全一致**：客户端只能拿到 prelogin 的盐来派生登录密钥，
+   * 若这里另取随机盐，用户注册后再次登录时用新盐派生的密钥就对不上校验值（注册即锁死）。
+   *
+   * 用「用户名派生的确定盐」而不是随机盐还有两个好处：
+   * 1. 注册前后 prelogin 返回同一个盐 —— 攻击者无法靠"盐变了"判断用户名是否已存在（满足 §2.2 的防枚举目标）；
+   * 2. 每个用户名一个不同盐，跨账号彩虹表依然无效。
+   * 盐本身是公开数据（就存在库里），其作用是不复用而非保密。
+   */
+  const salt = await deriveFakeSalt(pepper, input.username, LOGIN_KDF_DEFAULT.saltBytes);
   const verifier = await deriveAuthVerifier(pepper, input.loginKey);
   const kdfJson = JSON.stringify(LOGIN_KDF_DEFAULT);
   const id = newUlid(now);
 
-  // catch 分支一律抛错，因此这里不需要初始化值
   let changes: number;
   try {
     const result = await db
       .prepare(SQL_INSERT_USER)
-      .bind(id, input.username, salt.raw, kdfJson, verifier, now, now, now)
+      .bind(id, input.username, salt, kdfJson, verifier, now, now, now)
       .run();
     changes = result.meta.changes ?? 0;
   } catch (error) {
@@ -252,12 +259,16 @@ export async function changePassword(
   }
 
   const kdf = input.newKdf ?? { ...LOGIN_KDF_DEFAULT };
-  const salt = generateSalt(kdf.saltBytes);
+  /**
+   * 改密也必须沿用**与 prelogin 同源的确定盐**：客户端只能拿 prelogin 的盐派生新登录密钥，
+   * 这里若另取随机盐，用户改密后立即无法用新密码登录（与注册同一个坑）。
+   */
+  const salt = await deriveFakeSalt(pepper, row.username, kdf.saltBytes);
   const newVerifier = await deriveAuthVerifier(pepper, input.newLoginKey);
 
   await db
     .prepare(SQL_UPDATE_USER_PASSWORD)
-    .bind(salt.raw, JSON.stringify(kdf), newVerifier, now, user.id)
+    .bind(salt, JSON.stringify(kdf), newVerifier, now, user.id)
     .run();
 
   const invalidatedSessions = await invalidateOtherSessions(db, user.id, tokenHash);

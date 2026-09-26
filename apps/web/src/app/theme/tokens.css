@@ -1,0 +1,123 @@
+/*
+ * 设计令牌（唯一视觉入口）。
+ *
+ * ⚠️ **临时值**：DESIGN.md §3「视觉语言」尚未定稿（配色 / 字体 / 字号刻度 / 圆角刻度 / 阴影全待定）。
+ * 按 DESIGN.md §3.1，定稿前一律**从原型取值**（`prototype/menote-prototype.html` 的 `:root` / `[data-theme="dark"]`），
+ * 待 DESIGN §3 补齐后**只替换本文件**，不动组件。组件里禁止出现十六进制 / rgb() / 颜色关键字（禁止项 #2）。
+ *
+ * 间距与字号刻度：DESIGN.md §4.3 的刻度同样待定（§4.1 只定了「单一刻度」原则）。这里先取原型里的
+ * 高频值收敛成有限档，作为临时刻度；定型时按 §3.4 的要求一并收敛（字号 ≈6 档、圆角 2–4 档）。
+ */
+
+:root {
+  color-scheme: light;
+
+  /* —— 底色与面板 —— */
+  --bg: #faf9f5;
+  --bg-soft: #f4f2eb;
+  --panel: #ffffff;
+  --panel-2: #f7f5ef;
+  --panel-3: #eeece3;
+  --line: #e8e4d9;
+  --line-2: #d8d3c4;
+
+  /* —— 文字（暖黑，不用纯黑）—— */
+  --text: #1f1e1b;
+  --text-2: #5c5a53;
+  --muted: #8a877f;
+
+  /* —— 主色 —— */
+  --primary: #d97757;
+  --primary-2: #b4543a;
+  --primary-soft: rgba(217, 119, 87, 0.12);
+  --primary-line: rgba(217, 119, 87, 0.32);
+  --on-primary: #fff;
+  /* 渐变也必须由令牌拼装（DESIGN.md §3.2-2：渐变里的硬编码色值不会被回归脚本扫到） */
+  --primary-grad: linear-gradient(140deg, var(--primary), var(--primary-2));
+
+  /* —— 语义色（降饱和，双主题各自核对）—— */
+  --amber: #a9741c;
+  --amber-soft: rgba(169, 116, 28, 0.11);
+  --amber-line: rgba(169, 116, 28, 0.26);
+  --green: #3f7d58;
+  --green-soft: rgba(63, 125, 88, 0.11);
+  --green-line: rgba(63, 125, 88, 0.26);
+  --red: #b8443c;
+  --red-soft: rgba(184, 68, 60, 0.1);
+  --red-line: rgba(184, 68, 60, 0.26);
+
+  /* —— 结构色与阴影 —— */
+  --hairline: rgba(31, 30, 27, 0.022);
+  --topbar-bg: rgba(250, 249, 245, 0.86);
+  --scrim: rgba(31, 30, 27, 0.42);
+  --shadow-1: 0 4px 14px rgba(31, 30, 27, 0.07);
+  --shadow-2: 0 16px 40px rgba(31, 30, 27, 0.13);
+
+  /* —— 结构尺寸（DESIGN.md §2.2【已定】，换视觉方向也不变）—— */
+  --topbar-h: 54px;
+  --fnbar-w: 294px;
+  --list-w: 330px;
+  --settings-nav-w: 184px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  /* —— 字号刻度（临时：原型高频值收敛为 6 档）—— */
+  --fs-micro: 11px;
+  --fs-small: 12px;
+  --fs-body: 13px;
+  --fs-body-lg: 14px;
+  --fs-title: 17px;
+  --fs-display: 20px;
+
+  /* —— 间距刻度（临时：4px 基数的 6 档）—— */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  /* —— 字族 —— */
+  --mono: "JetBrains Mono", "Cascadia Code", Consolas, "SF Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #262624;
+  --bg-soft: #1f1e1d;
+  --panel: #30302e;
+  --panel-2: #3a3935;
+  --panel-3: #45443f;
+  --line: #3e3e38;
+  --line-2: #514f48;
+
+  --text: #faf9f5;
+  --text-2: #b8b5ac;
+  --muted: #8e8b82;
+
+  --primary: #d97757;
+  --primary-2: #e79372;
+  --primary-soft: rgba(217, 119, 87, 0.16);
+  --primary-line: rgba(217, 119, 87, 0.34);
+  --on-primary: #fff;
+  --primary-grad: linear-gradient(140deg, var(--primary), var(--primary-2));
+
+  --amber: #e0a458;
+  --amber-soft: rgba(224, 164, 88, 0.14);
+  --amber-line: rgba(224, 164, 88, 0.3);
+  --green: #7fb98a;
+  --green-soft: rgba(127, 185, 138, 0.14);
+  --green-line: rgba(127, 185, 138, 0.28);
+  --red: #e2726b;
+  --red-soft: rgba(226, 114, 107, 0.14);
+  --red-line: rgba(226, 114, 107, 0.3);
+
+  --hairline: rgba(255, 255, 255, 0.02);
+  --topbar-bg: rgba(38, 38, 36, 0.86);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --shadow-1: 0 4px 14px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 16px 40px rgba(0, 0, 0, 0.42);
+}

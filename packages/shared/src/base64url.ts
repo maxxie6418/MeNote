@@ -34,8 +34,9 @@ export function base64UrlEncode(bytes: Uint8Array): string {
   return out;
 }
 
-/** base64url → 字节；含非法字符时抛错（不静默丢弃） */
-export function base64UrlDecode(text: string): Uint8Array {
+/** base64url → 字节；含非法字符时抛错（不静默丢弃）。
+ *  返回类型显式写成 `Uint8Array<ArrayBuffer>`：WebCrypto 的 `BufferSource` 不接受 `ArrayBufferLike` 版本。 */
+export function base64UrlDecode(text: string): Uint8Array<ArrayBuffer> {
   const clean = text.endsWith("=") ? text.replace(/=+$/, "") : text;
   const out: number[] = [];
   let buffer = 0;

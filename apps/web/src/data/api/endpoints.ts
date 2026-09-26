@@ -21,6 +21,7 @@ import {
   type ItemWriteMeta,
   type MeResponse,
   type PreloginResponse,
+  type PublicRegistrationState,
   type RegistrationState,
   type SyncResponse,
 } from "@menote/shared";
@@ -52,6 +53,9 @@ export const authApi = {
       method: "POST",
       body: { login_key: loginKey, new_login_key: newLoginKey, new_kdf: newKdf },
     }),
+
+  /** 公开状态：登录页据此决定是否显示注册入口 */
+  registrationState: () => apiRequest<PublicRegistrationState>("/api/auth/registration-state"),
 };
 
 export const itemsApi = {

@@ -1793,3 +1793,104 @@ button.chip--tag:hover {
   font-size: var(--fs-micro);
   text-align: center;
 }
+
+/* ============================================================
+   搜索（M2-6）
+   ============================================================ */
+.searchbox__input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-family: inherit;
+}
+
+.searchbox__kbd {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-family: var(--mono);
+}
+
+.searchpanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchpanel__notice {
+  padding: var(--sp-2) var(--sp-5);
+  border-bottom: 1px solid var(--amber-line);
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: var(--fs-small);
+}
+
+.searchpanel__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.searchpanel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-5);
+}
+
+.searchlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.searchrow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+}
+
+.searchrow:hover {
+  border-color: var(--line-2);
+  background: var(--panel-2);
+}
+
+.searchrow__title {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.searchrow__snippet {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchrow__snippet mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}

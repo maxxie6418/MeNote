@@ -72,6 +72,26 @@ export interface SyncStateRow {
 
 export const SYNC_STATE_KEY = "state";
 
+/**
+ * 本地搜索索引（M2-6）：一个条目一行。
+ *
+ * - `sync_seq` 取自建索引时的**条目**，是增量更新的依据：同步后只重建 `sync_seq` 变了的条目；
+ * - `text` 存原文（标题 + 标签 + 正文），`haystack` 存小写副本——匹配与高亮片段都从这两列来，
+ *   这样片段里的偏移与原文一致（不会出现"高亮错位"）；
+ * - `tokens` 是分词结果的空格串，只用于加分排序（命中判定用子串，中文更稳）。
+ *
+ * 只在本地，不进同步、不进服务端（服务端兜底走 `GET /api/search`）。
+ */
+export interface SearchIndexRow {
+  item_id: string;
+  sync_seq: number;
+  text: string;
+  haystack: string;
+  tokens: string;
+  updated_at: number;
+  indexed_at: number;
+}
+
 export class MenoteDatabase extends Dexie {
   items!: EntityTable<LocalItem, "id">;
   bodies!: EntityTable<BodyRow, "item_id">;
@@ -79,6 +99,7 @@ export class MenoteDatabase extends Dexie {
   folders!: EntityTable<LocalFolder, "id">;
   outbox!: EntityTable<OutboxRow, "seq">;
   syncState!: EntityTable<SyncStateRow, "key">;
+  searchIndex!: EntityTable<SearchIndexRow, "item_id">;
 
   constructor(name = "menote") {
     super(name);
@@ -89,6 +110,16 @@ export class MenoteDatabase extends Dexie {
       folders: "id, parent_id, sync_seq",
       outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
       syncState: "key",
+    });
+    // 2：新增本地搜索索引（M2-6）。纯本地表，不涉及迁移数据——空的索引由首次刷新重建。
+    this.version(2).stores({
+      items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+      bodies: "item_id",
+      drafts: "item_id",
+      folders: "id, parent_id, sync_seq",
+      outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+      syncState: "key",
+      searchIndex: "item_id, sync_seq, updated_at",
     });
   }
 }

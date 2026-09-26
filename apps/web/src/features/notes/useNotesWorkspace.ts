@@ -22,6 +22,7 @@ import {
   listLocalMemos,
   listMemoContents,
   moveLocalFolder,
+  refreshSearchIndex,
   renameLocalFolder,
   saveDraft,
   type LocalFolder,
@@ -146,6 +147,8 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
       listLocalMemos(),
       listMemoContents(),
     ]);
+    // 搜索索引按 sync_seq 增量重建（同步后 / 本地写入后各跑一次，代价只落在变了的条目上）
+    await refreshSearchIndex();
     setAllItems((previous) => (sameItems(previous, rows) ? previous : rows));
     setFolders(folderRows);
     setFolderCounts(counts);

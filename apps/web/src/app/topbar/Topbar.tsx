@@ -8,8 +8,8 @@
  */
 import type { ReactNode } from "react";
 import { Avatar, Pill } from "../ui/Controls";
-import { Icon } from "../ui/Icon";
 import { DropdownMenu } from "../ui/Menu";
+import { SearchBox } from "./SearchBox";
 import type { SyncIndicator } from "../useSyncStatus";
 
 export interface TopbarUser {
@@ -21,11 +21,22 @@ export interface TopbarProps {
   user: TopbarUser;
   breadcrumb: ReactNode;
   sync: SyncIndicator;
+  /** 搜索框的值（M2-6）；由 App 持有，清空即回到进入搜索前的视图 */
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
   onOpenSettings: () => void;
   onLogout: () => void;
 }
 
-export function Topbar({ user, breadcrumb, sync, onOpenSettings, onLogout }: TopbarProps) {
+export function Topbar({
+  user,
+  breadcrumb,
+  sync,
+  searchQuery,
+  onSearchChange,
+  onOpenSettings,
+  onLogout,
+}: TopbarProps) {
   return (
     <header className="topbar">
       {/* ① 品牌 */}
@@ -39,21 +50,8 @@ export function Topbar({ user, breadcrumb, sync, onOpenSettings, onLogout }: Top
         {breadcrumb}
       </nav>
 
-      {/* ③ 搜索框（M1 占位） */}
-      <div className="topbar__search">
-        <div className="searchbox">
-          <Icon name="search" size={13} />
-          <input
-            type="search"
-            value=""
-            readOnly
-            disabled
-            aria-label="搜索"
-            placeholder="搜索（M2 提供）"
-            title="搜索功能将在 M2 提供"
-          />
-        </div>
-      </div>
+      {/* ③ 搜索框（M2-6 启用） */}
+      <SearchBox value={searchQuery} onChange={onSearchChange} />
 
       <div className="topbar__actions">
         {/* ④ 同步胶囊 */}

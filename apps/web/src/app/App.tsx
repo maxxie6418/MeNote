@@ -36,6 +36,13 @@ import { TaskPanel } from "../features/tasks/ui/TaskPanel";
 import { clearTaskMarker, setTaskStatus } from "../features/tasks/actions";
 import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
+import {
+  EMPTY_SEARCH_STATE,
+  SearchPanel,
+  type SearchFiltersState,
+  type SearchResult,
+} from "../features/search/ui/SearchPanel";
+import { isSearchIndexComplete, searchLocal } from "../data/db";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -100,8 +107,65 @@ export default function App() {
     input?.scrollIntoView({ block: "nearest" });
   }, []);
 
+  /**
+   * 搜索（M2-6）：查询与筛选由 App 持有，**不改浏览视图状态**——所以清空搜索框就自然回到
+   * 进入搜索前的视图，不需要额外的"保存/恢复"逻辑。
+   */
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchFilters, setSearchFilters] = useState<SearchFiltersState>(EMPTY_SEARCH_STATE);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchStale, setSearchStale] = useState(false);
+
+  /** 搜索：本地索引检索（离线优先）；索引没建完时说明结果可能不完整（M2-6） */
+  useEffect(() => {
+    const query = searchQuery.trim();
+    let alive = true;
+
+    // setState 一律放在异步回调里（effect 体内同步 setState 会引发级联渲染，react-hooks/set-state-in-effect）
+    void (async () => {
+      if (query === "") {
+        if (!alive) return;
+        setSearchResults([]);
+        setSearchStale(false);
+        return;
+      }
+
+      const now = Date.now();
+      const days = searchFilters.range === "week" ? 7 : searchFilters.range === "month" ? 30 : 365;
+      const from = searchFilters.range === "all" ? null : now - days * 24 * 60 * 60 * 1000;
+
+      const complete = await isSearchIndexComplete();
+      const results = await searchLocal(query, {
+        type: searchFilters.type,
+        folderId: searchFilters.folderId,
+        tag: searchFilters.tag,
+        from,
+      });
+      if (!alive) return;
+      setSearchResults(results);
+      // 索引没建完时说明"结果可能不完整"（服务端兜底在下一步接入）
+      setSearchStale(!complete);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [searchFilters, searchQuery]);
+
   /** 待办视图的"今天"：按设置时区算，且只在挂载时取一次（渲染期调 Date.now() 不纯） */
   const [today] = useState(() => dayKeyInZone(Date.now()));
+
+  // Ctrl/Cmd+K 聚焦顶栏搜索（M2-6）；输入框用固定 id 定位，避免为一处焦点穿透多个组件
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        document.getElementById("search-input")?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   /**
    * 同步引擎必须**只随登录状态**创建/销毁。
@@ -163,6 +227,17 @@ export default function App() {
       .catch(() => setRegistration(null));
   }, [route, auth.snapshot.user?.role]);
 
+  /** 搜索筛选用的标签候选：笔记与 Memo 的标签并集（按出现次数倒序） */
+  const searchTags = (() => {
+    const counts = new Map<string, number>();
+    for (const item of [...workspace.allItems, ...workspace.memos]) {
+      for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hans-CN"))
+      .map(([tag]) => tag);
+  })();
+
   if (auth.snapshot.status === "loading") {
     return (
       <>
@@ -209,8 +284,7 @@ export default function App() {
 
   return (
     <>
-      <IconSprite />
-      <AppShell
+      <IconSprite />      <AppShell
         banner={
           insecureEnvironment ? (
             <InsecureContextBanner environment={insecureEnvironment} />
@@ -226,10 +300,16 @@ export default function App() {
             breadcrumb={
               route.name === "settings"
                 ? "设置"
-                : browse === "memo"
-                  ? "Memo"
-                  : workspace.viewTitle
+                : searchQuery.trim() !== ""
+                  ? "搜索结果"
+                  : browse === "memo"
+                    ? "Memo"
+                    : browse === "task"
+                      ? "待办"
+                      : workspace.viewTitle
             }
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
             sync={sync}
             onOpenSettings={() => navigate({ name: "settings", page: "general" })}
             onLogout={() => {
@@ -299,6 +379,32 @@ export default function App() {
             onLogout={() => {
               void auth.logout().then(() => navigate({ name: "login" }));
             }}
+          />
+        ) : searchQuery.trim() !== "" ? (
+          /* 搜索：结果在主操作区单栏占满（M2-6） */
+          <TwoPane
+            listHidden={true}
+            list={null}
+            doc={
+              <SearchPanel
+                query={searchQuery.trim()}
+                results={searchResults}
+                folderNames={Object.fromEntries(
+                  workspace.folders.map((folder) => [folder.id, folder.name]),
+                )}
+                filters={searchFilters}
+                onFiltersChange={setSearchFilters}
+                tags={searchTags}
+                staleNotice={
+                  searchStale ? "正在建立本地索引，当前结果可能不完整。" : undefined
+                }
+                onOpen={(id) => {
+                  setSearchQuery("");
+                  void workspace.open(id);
+                }}
+                onClose={() => setSearchQuery("")}
+              />
+            }
           />
         ) : browse === "task" ? (
           /* 待办视图：单栏占满（列表 / 看板由面板内部切换） */

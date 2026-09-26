@@ -59,6 +59,8 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
         user={{ username: "alice", role: "owner" }}
         breadcrumb="全部笔记"
         sync={toIndicator("idle", 0)}
+        searchQuery=""
+        onSearchChange={vi.fn()}
         onOpenSettings={vi.fn()}
         onLogout={vi.fn()}
       />,
@@ -68,10 +70,10 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
     expect(within(topbar).getByText("Menote")).toBeTruthy();
     expect(within(topbar).getByText("全部笔记")).toBeTruthy();
 
-    // 搜索框：M1 占位且禁用，并说明原因（DESIGN.md §6.1：禁用必须说明）
+    // 搜索框：M2-6 起可用（不再是禁用占位）
     const search = within(topbar).getByLabelText("搜索") as HTMLInputElement;
-    expect(search.disabled).toBe(true);
-    expect(search.title).toContain("M2");
+    expect(search.disabled).toBe(false);
+    expect(search.placeholder).toContain("搜索标题");
 
     expect(within(topbar).getByText("已同步")).toBeTruthy();
     expect(within(topbar).getByRole("button", { name: "账户与设置" })).toBeTruthy();
@@ -90,6 +92,8 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
         user={{ username: "alice", role: "owner" }}
         breadcrumb="全部笔记"
         sync={toIndicator("idle", 0)}
+        searchQuery=""
+        onSearchChange={vi.fn()}
         onOpenSettings={onOpenSettings}
         onLogout={onLogout}
       />,

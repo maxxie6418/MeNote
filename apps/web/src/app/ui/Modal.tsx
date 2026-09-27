@@ -17,9 +17,23 @@ export interface ModalProps {
   onClose: () => void;
   footer?: ReactNode;
   children: ReactNode;
+  /**
+   * 点遮罩能否关闭（默认可以）。`Esc` **始终**关闭——它等价于「取消」，那是明确动作，
+   * 而"点遮罩"是随手动作。新建流程（如定义列结构）要把这个随手动作关掉，
+   * 否则用户一点外面就把刚填的东西丢了（`DESIGN.md` §6.4-5 的例外）。
+   */
+  dismissable?: boolean;
 }
 
-export function Modal({ open, title, desc, onClose, footer, children }: ModalProps) {
+export function Modal({
+  open,
+  title,
+  desc,
+  onClose,
+  footer,
+  children,
+  dismissable = true,
+}: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -45,6 +59,7 @@ export function Modal({ open, title, desc, onClose, footer, children }: ModalPro
     <div
       className="overlay"
       onClick={(event) => {
+        if (!dismissable) return;
         if (event.target === event.currentTarget) onClose();
       }}
     >

@@ -12,10 +12,13 @@ import {
   blocksSave,
   cellValue,
   changeColumnType,
+  changeColumnTypeWithReport,
   checkDegrade,
+  duplicateColumnNames,
   filterRows,
   galleryAvailability,
   galleryCards,
+  hasDataColumn,
   insertRow,
   isProtectedColumn,
   matchesFilter,
@@ -33,6 +36,7 @@ import {
   tableHints,
   tableSize,
   toggleColumnHidden,
+  unparsableCount,
   visibleColumns,
   visibleRows,
   type TableViewState,
@@ -297,6 +301,41 @@ describe("图册", () => {
     const cards = galleryCards(withImage);
     expect(cards[0]).toMatchObject({ rowId: "aaa111", title: "甲", image: "a/u1/h1.t" });
     expect(cards[0]?.chips.map((chip) => chip.label)).toEqual(["数量", "状态"]);
+  });
+});
+
+describe("列定义面板要用的判定", () => {
+  it("unparsableCount：只对纯数字列算，其它类型一律 0（不为凑数字去猜）", () => {
+    const target = doc();
+    expect(unparsableCount(target, "c2", "number")).toBe(0); // 10 / 9 都能解析
+    expect(unparsableCount(target, "c1", "number")).toBe(2); // 甲 / 乙 解析不了
+    expect(unparsableCount(target, "c1", "text")).toBe(0);
+    expect(unparsableCount(target, "c1", "tags")).toBe(0);
+    // 空值不算解析失败
+    expect(unparsableCount(doc({ rows: [{ [ROW_ID_COLUMN]: "aaa111", c1: "" }] }), "c1", "number")).toBe(0);
+  });
+
+  it("changeColumnTypeWithReport 同时给新文档与失败格数", () => {
+    const result = changeColumnTypeWithReport(doc(), "c1", "number");
+    expect(result.unparsable).toBe(2);
+    expect(result.doc.columns[1]?.type).toBe("number");
+  });
+
+  it("duplicateColumnNames 列出重名（允许重名，只提示）", () => {
+    expect(duplicateColumnNames(doc())).toEqual([]);
+    const dup = doc({
+      columns: [
+        { id: ROW_ID_COLUMN, name: "ID", type: "text", hidden: true },
+        { id: "c1", name: "同名", type: "text" },
+        { id: "c2", name: "同名", type: "text" },
+      ],
+    });
+    expect(duplicateColumnNames(dup)).toEqual(["同名"]);
+  });
+
+  it("hasDataColumn：只剩 `_id` 时为假（面板据此禁用「确定」）", () => {
+    expect(hasDataColumn(doc())).toBe(true);
+    expect(hasDataColumn(doc({ columns: [{ id: ROW_ID_COLUMN, name: "ID", type: "text" }] }))).toBe(false);
   });
 });
 

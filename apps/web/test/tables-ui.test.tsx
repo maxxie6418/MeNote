@@ -37,19 +37,17 @@ function doc(overrides: Partial<TableDoc> = {}): TableDoc {
 
 function renderEditor(overrides: Partial<Parameters<typeof TableEditor>[0]> = {}) {
   const onDocChange = vi.fn();
-  const onOpenColumnPanel = vi.fn();
   const onRequestDegrade = vi.fn();
   render(
     <TableEditor
       title="我的表格"
       doc={doc()}
       onDocChange={onDocChange}
-      onOpenColumnPanel={onOpenColumnPanel}
       onRequestDegrade={onRequestDegrade}
       {...overrides}
     />,
   );
-  return { onDocChange, onOpenColumnPanel, onRequestDegrade };
+  return { onDocChange, onRequestDegrade };
 }
 
 describe("表格区", () => {
@@ -146,9 +144,9 @@ describe("表格区", () => {
 });
 
 describe("工具栏与筛选条", () => {
-  it("没有图片列时图册置灰、说明可见、并给出「添加图片列」出口", async () => {
+  it("没有图片列时图册置灰、说明可见、并给出「添加图片列」出口（打开列设置）", async () => {
     const user = userEvent.setup();
-    const { onOpenColumnPanel } = renderEditor();
+    renderEditor();
 
     const gallery = screen.getByRole("button", { name: /图册/ }) as HTMLButtonElement;
     expect(gallery.disabled).toBe(true);
@@ -156,7 +154,7 @@ describe("工具栏与筛选条", () => {
     expect(screen.getByText(/添加图片列后可使用图册/)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "添加图片列" }));
-    expect(onOpenColumnPanel).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: "列设置" })).toBeTruthy();
   });
 
   it("筛选条：加条件后实时计数可见；清除全部；收起即重置", async () => {
@@ -218,7 +216,6 @@ describe("图册档位", () => {
       <TableEditor
         doc={withImage()}
         onDocChange={onDocChange}
-        onOpenColumnPanel={vi.fn()}
         onRequestDegrade={vi.fn()}
       />,
     );
@@ -249,7 +246,6 @@ describe("图册档位", () => {
           rows: [{ [ROW_ID_COLUMN]: "aaa111", c1: "甲", c9: "" }],
         })}
         onDocChange={vi.fn()}
-        onOpenColumnPanel={vi.fn()}
         onRequestDegrade={vi.fn()}
       />,
     );
@@ -285,7 +281,6 @@ describe("大小与提示", () => {
       <TableEditor
         doc={many}
         onDocChange={vi.fn()}
-        onOpenColumnPanel={vi.fn()}
         onRequestDegrade={vi.fn()}
       />,
     );
@@ -301,7 +296,6 @@ describe("大小与提示", () => {
       <TableEditor
         doc={huge}
         onDocChange={vi.fn()}
-        onOpenColumnPanel={vi.fn()}
         onRequestDegrade={vi.fn()}
         onCopyRow={vi.fn()}
       />,
@@ -321,7 +315,6 @@ describe("大小与提示", () => {
       <TableEditor
         doc={huge}
         onDocChange={onDocChange}
-        onOpenColumnPanel={vi.fn()}
         onRequestDegrade={vi.fn()}
       />,
     );
@@ -335,12 +328,13 @@ describe("大小与提示", () => {
 describe("更多菜单", () => {
   it("有「列设置…」与「降级为普通笔记」两个入口", async () => {
     const user = userEvent.setup();
-    const { onOpenColumnPanel, onRequestDegrade } = renderEditor();
+    const { onRequestDegrade } = renderEditor();
 
     await user.click(screen.getByRole("button", { name: "表格的更多操作" }));
     await user.click(screen.getByRole("menuitem", { name: "列设置…" }));
-    expect(onOpenColumnPanel).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: "列设置" })).toBeTruthy();
 
+    await user.click(screen.getByRole("button", { name: "取消" }));
     await user.click(screen.getByRole("button", { name: "表格的更多操作" }));
     await user.click(screen.getByRole("menuitem", { name: "降级为普通笔记" }));
     expect(onRequestDegrade).toHaveBeenCalledTimes(1);

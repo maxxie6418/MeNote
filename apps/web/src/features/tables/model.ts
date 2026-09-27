@@ -404,8 +404,46 @@ export function tableHints(doc: TableDoc): TableHint[] {
   return hints;
 }
 
-/** 图册可用性：没有图片列时按钮置灰 + 说明 + 出口（界面稿 §2.5） */
-export function galleryAvailability(doc: TableDoc): { available: boolean; imageColumnId: string | null } {
+/**
+ * 改类型后**有多少格按新类型解析不了**（界面稿 §3.2：给一处可见汇总，逐格灰提示负责定位）。
+ *
+ * 只判断"能确定判不了"的类型：`number` 要求能解析成数字。其余类型（文字、标签、状态……）
+ * 什么字符串都能放，所以返回 0——**不要为了凑数字去猜**。
+ */
+export function unparsableCount(doc: TableDoc, columnId: string, type: TableColumnType): number {
+  if (type !== "number") return 0;
+  return doc.rows.filter((row) => {
+    const value = cellValue(row, columnId).trim();
+    return value !== "" && toNumber(value) === null;
+  }).length;
+}
+
+/** 改类型 + 解析失败计数（列定义面板要用它给可见汇总） */
+export function changeColumnTypeWithReport(
+  doc: TableDoc,
+  columnId: string,
+  type: TableColumnType,
+): { doc: TableDoc; unparsable: number } {
+  return { doc: changeColumnType(doc, columnId, type), unparsable: unparsableCount(doc, columnId, type) };
+}
+
+/** 列名重复（允许重名，但要在面板里提示"已有同名列，建议区分"） */
+export function duplicateColumnNames(doc: TableDoc): string[] {
+  const seen = new Map<string, number>();
+  for (const column of doc.columns) {
+    const key = column.name.trim();
+    if (key === "") continue;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  return [...seen.entries()].filter(([, count]) => count > 1).map(([name]) => name);
+}
+
+/** 至少一列数据列（界面稿 §3.2：不允许 0 列——面板据此禁用「确定」并说明原因） */
+export function hasDataColumn(doc: TableDoc): boolean {
+  return doc.columns.some((column) => !isProtectedColumn(doc, column.id));
+}
+
+/** 图册可用性：没有图片列时按钮置灰 + 说明 + 出口（界面稿 §2.5） */export function galleryAvailability(doc: TableDoc): { available: boolean; imageColumnId: string | null } {
   const imageColumn = doc.columns.find((column) => column.type === "image");
   return { available: imageColumn !== undefined, imageColumnId: imageColumn?.id ?? null };
 }

@@ -12,6 +12,7 @@ import { Icon } from "../../../app/ui/Icon";
 import { Button } from "../../../app/ui/Controls";
 import { DropdownMenu } from "../../../app/ui/Menu";
 import { TableFilterBar } from "./TableFilterBar";
+import { TableColumnManager } from "./TableColumnManager";
 import { TableGrid } from "./TableGrid";
 import { TableSizeBar } from "./TableSizeBar";
 import { TableToolbar } from "./TableToolbar";
@@ -38,8 +39,6 @@ export interface TableEditorProps {
   title?: string;
   doc: TableViewState["doc"];
   onDocChange: (doc: TableViewState["doc"]) => void;
-  /** 打开列定义面板（本批未含该面板，入口先接上） */
-  onOpenColumnPanel: () => void;
   /** 「更多」菜单里的降级入口（确认框由外层负责） */
   onRequestDegrade: () => void;
   /** 硬上限时的出口之一：把这一行内容复制走 */
@@ -52,7 +51,6 @@ export function TableEditor({
   title = "表格",
   doc,
   onDocChange,
-  onOpenColumnPanel,
   onRequestDegrade,
   onCopyRow,
   encrypted = false,
@@ -62,6 +60,10 @@ export function TableEditor({
   const [sort, setSort] = useState<TableSort | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // 列定义面板由本组件托管：两个入口（表头菜单「列设置…」、图册禁用时的「添加图片列」）都落在它上面。
+  // `panelSeq` 每次打开自增并作为面板的 `key`：**换 key 重新挂载**，草稿自然以最新文档为起点
+  // （比在面板里写"打开时重置草稿"的 effect 干净，也躲开 effect 里同步 setState 的级联渲染）
+  const [panelSeq, setPanelSeq] = useState<number | null>(null);
 
   const state: TableViewState = useMemo(
     () => ({ doc, filters, sort, view }),
@@ -83,6 +85,9 @@ export function TableEditor({
     onDocChange(next);
   };
 
+  /** 打开列定义面板：`panelSeq` 自增即换 key，面板重新挂载、草稿以最新文档为起点 */
+  const openColumnPanel = (): void => setPanelSeq((seq) => (seq ?? 0) + 1);
+
   return (    <div className="tableeditor">
       <header className="tableeditor__head">
         <h1 className="tableeditor__title">{title}</h1>
@@ -92,7 +97,7 @@ export function TableEditor({
           showChevron={false}
           trigger={<Icon name="chevron-down" size={13} />}
           items={[
-            { id: "columns", label: "列设置…", onSelect: onOpenColumnPanel },
+            { id: "columns", label: "列设置…", onSelect: () => openColumnPanel() },
             { id: "degrade", label: "降级为普通笔记", onSelect: onRequestDegrade },
           ]}
         />
@@ -102,7 +107,7 @@ export function TableEditor({
         view={view}
         onViewChange={setView}
         galleryAvailable={gallery.available}
-        onRequestImageColumn={onOpenColumnPanel}
+        onRequestImageColumn={() => openColumnPanel()}
         onAddRow={() => commit(addRow(doc).doc)}
         showAddRow={doc.rows.length > 0}
         filterOpen={filterOpen}
@@ -150,7 +155,7 @@ export function TableEditor({
           onEditingChange={setEditing}
           onCellChange={(rowId, columnId, value) => commit(setCell(doc, rowId, columnId, value))}
           onSortChange={setSort}
-          onOpenColumnPanel={onOpenColumnPanel}
+          onOpenColumnPanel={() => openColumnPanel()}
           onInsertRow={(anchorRowId, position) => commit(insertRow(doc, anchorRowId, position).doc)}
           onDeleteRow={(rowId) => commit(removeRow(doc, rowId))}
           onMoveRow={(rowId, offset) => commit(moveRow(doc, rowId, offset))}
@@ -170,6 +175,21 @@ export function TableEditor({
         columns={doc.columns.length}
         onCopyRow={onCopyRow}
       />
+
+      {panelSeq !== null ? (
+        <TableColumnManager
+          // 换 key 重新挂载：草稿从最新 `doc` 起算，无需在面板里做"打开时重置"
+          key={panelSeq}
+          open
+          mode="edit"
+          doc={doc}
+          onConfirm={(next) => {
+            commit(next);
+            setPanelSeq(null);
+          }}
+          onCancel={() => setPanelSeq(null)}
+        />
+      ) : null}
     </div>
   );
 }

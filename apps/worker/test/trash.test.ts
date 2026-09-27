@@ -422,6 +422,138 @@ describe("永久删除", () => {
   });
 });
 
+describe("文件夹连同内容进回收站（M4-6 后半）", () => {
+  async function deleteFolder(cookie: string, id: string): Promise<Response> {
+    return SELF.fetch(`${ORIGIN}/api/folders/${id}`, { method: "DELETE", headers: headers(cookie) });
+  }
+
+  async function restoreFolderRequest(cookie: string, id: string): Promise<Response> {
+    return SELF.fetch(`${ORIGIN}/api/folders/${id}/restore`, {
+      method: "POST",
+      headers: headers(cookie),
+      body: "{}",
+    });
+  }
+
+  async function createChildFolder(cookie: string, name: string, parentId: string): Promise<string> {
+    const id = newUlid();
+    const response = await SELF.fetch(`${ORIGIN}/api/folders`, {
+      method: "POST",
+      headers: headers(cookie),
+      body: JSON.stringify({ id, name, parent_id: parentId }),
+    });
+    if (response.status !== 200) throw new Error(`建子文件夹失败：${response.status}`);
+    return id;
+  }
+
+  it("删文件夹：自己 + 子夹 + 里面的条目一起进回收站，且共享同一个 sync_seq", async () => {
+    const user = await registerUser("Alice", nextDevice());
+    await openRegistration(user.cookie);
+    const parent = await createFolder(user.cookie, "项目");
+    const child = await createChildFolder(user.cookie, "子项", parent);
+    const inParent = await createNote(user.cookie, "父夹里的", parent);
+    const inChild = await createNote(user.cookie, "子夹里的", child);
+    const outside = await createNote(user.cookie, "不在夹里的");
+
+    const response = await deleteFolder(user.cookie, parent);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { folders: number; items: number; deleted_at: number };
+    expect(body.folders).toBe(2); // 自己 + 子夹
+    expect(body.items).toBe(2); // 两个夹各一条
+    expect(body.deleted_at).toBeGreaterThan(0);
+
+    const rows = await env.DB.prepare(
+      "SELECT id, deleted_at, sync_seq FROM items WHERE user_id = ? ORDER BY id",
+    )
+      .bind(user.id)
+      .all<{ id: string; deleted_at: number | null; sync_seq: number }>();
+    const byId = new Map(rows.results.map((row) => [row.id, row]));
+    expect(byId.get(inParent)?.deleted_at).toBe(body.deleted_at);
+    expect(byId.get(inChild)?.deleted_at).toBe(body.deleted_at);
+    expect(byId.get(outside)?.deleted_at).toBeNull(); // 夹外的条目不受影响
+    // 同一个逻辑写 → 同一个 sync_seq
+    expect(byId.get(inParent)?.sync_seq).toBe(byId.get(inChild)?.sync_seq);
+
+    const folders = await env.DB.prepare(
+      "SELECT id, deleted_at FROM folders WHERE user_id = ? AND is_enc_space = 0",
+    )
+      .bind(user.id)
+      .all<{ id: string; deleted_at: number | null }>();
+    expect(folders.results.every((row) => row.deleted_at === body.deleted_at)).toBe(true);
+  });
+
+  it("恢复文件夹：父夹没了则回根目录；里面的条目仍留在回收站（各自恢复）", async () => {
+    const user = await registerUser("Alice", nextDevice());
+    await openRegistration(user.cookie);
+    const parent = await createFolder(user.cookie, "项目");
+    const child = await createChildFolder(user.cookie, "子项", parent);
+    const note = await createNote(user.cookie, "子夹里的", child);
+
+    await deleteFolder(user.cookie, parent);
+
+    // 子夹先恢复：父夹还在回收站里 → 回根目录
+    const childRestore = await restoreFolderRequest(user.cookie, child);
+    expect(childRestore.status).toBe(200);
+    const childBody = (await childRestore.json()) as { parent_id: string | null };
+    expect(childBody.parent_id).toBeNull();
+
+    // 父夹恢复后，子夹不会自动回到它下面（恢复只恢复这个夹本身）
+    await restoreFolderRequest(user.cookie, parent);
+    const childRow = await env.DB.prepare("SELECT parent_id FROM folders WHERE id = ?")
+      .bind(child)
+      .first<{ parent_id: string | null }>();
+    expect(childRow?.parent_id).toBeNull();
+
+    // 条目仍在回收站：要单独恢复（恢复时原夹已回来，所以回原位置）
+    const noteRow = await env.DB.prepare("SELECT deleted_at FROM items WHERE id = ?")
+      .bind(note)
+      .first<{ deleted_at: number | null }>();
+    expect(noteRow?.deleted_at).not.toBeNull();
+    const restored = await restoreItem(user.cookie, note);
+    const restoredBody = (await restored.json()) as { folder_id: string | null };
+    expect(restoredBody.folder_id).toBe(child);
+  });
+
+  it("加密空间行不可删（M3-6 留下的守卫，删除入口到 M4 才有）", async () => {
+    const user = await registerUser("Alice", nextDevice());
+    const space = await env.DB.prepare(
+      "SELECT id FROM folders WHERE user_id = ? AND is_enc_space = 1",
+    )
+      .bind(user.id)
+      .first<{ id: string }>();
+    expect(space).not.toBeNull();
+
+    const response = await deleteFolder(user.cookie, space?.id ?? "");
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { message?: string; detail?: { reason?: string } };
+    expect(body.message ?? "").toContain("加密空间不能删除");
+
+    const row = await env.DB.prepare("SELECT deleted_at FROM folders WHERE id = ?")
+      .bind(space?.id ?? "")
+      .first<{ deleted_at: number | null }>();
+    expect(row?.deleted_at).toBeNull();
+  });
+
+  it("删别人的文件夹 404、重复删除不白推 sync_seq", async () => {
+    const alice = await registerUser("Alice", nextDevice());
+    await openRegistration(alice.cookie);
+    const bob = await registerUser("Bob", nextDevice());
+    const folder = await createFolder(alice.cookie, "Alice 的夹");
+
+    expect((await deleteFolder(bob.cookie, folder)).status).toBe(404);
+
+    expect((await deleteFolder(alice.cookie, folder)).status).toBe(200);
+    const seq1 = await env.DB.prepare("SELECT sync_seq FROM users WHERE id = ?")
+      .bind(alice.id)
+      .first<{ sync_seq: number }>();
+    expect((await deleteFolder(alice.cookie, folder)).status).toBe(200);
+    const seq2 = await env.DB.prepare("SELECT sync_seq FROM users WHERE id = ?")
+      .bind(alice.id)
+      .first<{ sync_seq: number }>();
+    expect(seq2?.sync_seq).toBe(seq1?.sync_seq);
+  });
+});
+
 describe("多用户隔离与鉴权", () => {
   it("不能删/恢复别人的条目；未登录 401", async () => {
     const alice = await registerUser("Alice", nextDevice());

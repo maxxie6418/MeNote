@@ -31,9 +31,149 @@ export interface PermanentDeleteResult {
   sync_seq: number;
 }
 
+export interface FolderTrashResult {
+  id: string;
+  meta_rev: number;
+  deleted_at: number | null;
+  parent_id: string | null;
+  /** 连带进回收站的子夹与条目数（恢复只恢复这个夹本身，里面的东西各自恢复） */
+  folders: number;
+  items: number;
+}
+
 /** 把 id 列表拼成 `?, ?, ?`（列名与 id 值一律不由请求决定，只有占位符个数随入参变） */
 function placeholders(count: number): string {
   return Array.from({ length: count }, () => "?").join(", ");
+}
+
+/**
+ * 软删一个文件夹：**连同内容一起进回收站**（设计 §5.1）。
+ *
+ * 三条要点：
+ * 1. 层级只有两层，所以"连同内容"= 自己 + 直接子夹 + 这些夹里的条目（一条 UPDATE 搞定）；
+ * 2. **整次操作共享一个 `sync_seq`**：一个逻辑写只推一个序号，客户端一次拉全；
+ * 3. **加密空间行不可删**（M3-6 留下的守卫，当时没有删除入口所以顺延到这里）：
+ *    空间是隐私锁的锚点，删掉它整片内容的归属就没了——要解散得先关隐私锁。
+ */
+export async function softDeleteFolder(
+  db: D1Database,
+  userId: string,
+  folderId: string,
+  now: number,
+): Promise<FolderTrashResult> {
+  const target = await db
+    .prepare("SELECT is_enc_space, deleted_at, parent_id FROM folders WHERE id = ? AND user_id = ?")
+    .bind(folderId, userId)
+    .first<{ is_enc_space: number; deleted_at: number | null; parent_id: string | null }>();
+  if (!target) throw new DomainError("not_found", "文件夹不存在");
+  if (target.is_enc_space === 1) {
+    throw new DomainError("invalid", "加密空间不能删除；如需解散，请先在设置里关闭隐私锁");
+  }
+  if (target.deleted_at !== null) {
+    // 已在回收站：不重复写（同条目的口径）
+    const row = await db
+      .prepare("SELECT meta_rev, deleted_at, parent_id FROM folders WHERE id = ? AND user_id = ?")
+      .bind(folderId, userId)
+      .first<{ meta_rev: number; deleted_at: number | null; parent_id: string | null }>();
+    return {
+      id: folderId,
+      meta_rev: row?.meta_rev ?? 0,
+      deleted_at: row?.deleted_at ?? null,
+      parent_id: row?.parent_id ?? null,
+      folders: 0,
+      items: 0,
+    };
+  }
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE folders SET deleted_at = ?, meta_rev = meta_rev + 1, updated_at = ?,
+           sync_seq = (SELECT sync_seq + 1 FROM users WHERE id = ?)
+         WHERE user_id = ? AND deleted_at IS NULL AND (id = ? OR parent_id = ?)`,
+      )
+      .bind(now, now, userId, userId, folderId, folderId),
+    db
+      .prepare(
+        `UPDATE items SET deleted_at = ?, meta_rev = meta_rev + 1, updated_at = ?,
+           sync_seq = (SELECT sync_seq + 1 FROM users WHERE id = ?)
+         WHERE user_id = ? AND deleted_at IS NULL
+           AND folder_id IN (SELECT id FROM folders WHERE user_id = ? AND (id = ? OR parent_id = ?))`,
+      )
+      .bind(now, now, userId, userId, userId, folderId, folderId),
+    db
+      .prepare(
+        `UPDATE users SET sync_seq = sync_seq + 1
+         WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE user_id = ? AND deleted_at = ?)`,
+      )
+      .bind(userId, userId, now),
+  ]);
+
+  const row = await db
+    .prepare("SELECT meta_rev, deleted_at, parent_id FROM folders WHERE id = ? AND user_id = ?")
+    .bind(folderId, userId)
+    .first<{ meta_rev: number; deleted_at: number | null; parent_id: string | null }>();
+
+  return {
+    id: folderId,
+    meta_rev: row?.meta_rev ?? 0,
+    deleted_at: row?.deleted_at ?? null,
+    parent_id: row?.parent_id ?? null,
+    folders: results[0]?.meta.changes ?? 0,
+    items: results[1]?.meta.changes ?? 0,
+  };
+}
+
+/**
+ * 恢复文件夹：父夹不在（被删或已永久删除）→ **回根目录**；`deleted_at = NULL`、`meta_rev + 1`。
+ *
+ * **只恢复这个夹本身**：里面的条目与子夹各自在回收站里，由用户逐条/批量恢复——
+ * 一次点击就把整棵子树复活，会让"我删的是这个夹、不是里面的东西"变得说不清。
+ */
+export async function restoreFolder(
+  db: D1Database,
+  userId: string,
+  folderId: string,
+  now: number,
+): Promise<FolderTrashResult> {
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE folders SET
+           parent_id = (SELECT CASE
+             WHEN f.parent_id IS NULL THEN NULL
+             WHEN p.id IS NOT NULL THEN f.parent_id
+             ELSE NULL END
+             FROM folders f LEFT JOIN folders p
+               ON p.id = f.parent_id AND p.user_id = f.user_id AND p.deleted_at IS NULL
+             WHERE f.id = ? AND f.user_id = ?),
+           deleted_at = NULL, meta_rev = meta_rev + 1, updated_at = ?,
+           sync_seq = (SELECT sync_seq + 1 FROM users WHERE id = ?)
+         WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
+      )
+      .bind(folderId, userId, now, userId, folderId, userId),
+    db
+      .prepare(
+        `UPDATE users SET sync_seq = sync_seq + 1
+         WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND user_id = ? AND deleted_at IS NULL)`,
+      )
+      .bind(userId, folderId, userId),
+  ]);
+
+  const row = await db
+    .prepare("SELECT meta_rev, deleted_at, parent_id FROM folders WHERE id = ? AND user_id = ?")
+    .bind(folderId, userId)
+    .first<{ meta_rev: number; deleted_at: number | null; parent_id: string | null }>();
+  if (!row) throw new DomainError("not_found", "文件夹不存在");
+
+  return {
+    id: folderId,
+    meta_rev: row.meta_rev,
+    deleted_at: row.deleted_at,
+    parent_id: row.parent_id,
+    folders: 0,
+    items: 0,
+  };
 }
 
 /**

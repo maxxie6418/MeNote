@@ -152,6 +152,19 @@ export const TrashItemResponseSchema = v.object({
 });
 export type TrashItemResponse = v.InferOutput<typeof TrashItemResponseSchema>;
 
+/** 文件夹进回收站 / 恢复的应答（M4-6 后半） */
+export const TrashFolderResponseSchema = v.object({
+  id: v.string(),
+  meta_rev: IntSchema,
+  deleted_at: NullableIntSchema,
+  /** 恢复后实际落到的父夹（原父夹没了 → null = 根目录） */
+  parent_id: v.nullable(v.string()),
+  /** 连带进回收站的子夹与条目数（软删时有值，恢复时为 0） */
+  folders: IntSchema,
+  items: IntSchema,
+});
+export type TrashFolderResponse = v.InferOutput<typeof TrashFolderResponseSchema>;
+
 /** 永久删除请求：**单批最多 10 条**（客户端分批；这个上限由 D1 的语句预算倒推） */
 export const PermanentDeleteRequestSchema = v.object({
   ids: v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(PERMANENT_DELETE_BATCH)),

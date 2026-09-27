@@ -15,6 +15,8 @@ export interface MemoTimelineProps {
   onSave: (itemId: string, text: string) => void;
   onTogglePinned: (itemId: string) => void;
   onConvert: (itemId: string) => void;
+  /** 删除（M4-12）：只报事件，二次确认由面板做（同一个面板能放撤销提示） */
+  onDelete?: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
   timeZone?: string;
@@ -26,6 +28,7 @@ export function MemoTimeline({
   onSave,
   onTogglePinned,
   onConvert,
+  onDelete,
   onOpenConverted,
   onSelectTag,
   timeZone,
@@ -56,6 +59,7 @@ export function MemoTimeline({
               onSave={onSave}
               onTogglePinned={onTogglePinned}
               onConvert={onConvert}
+              onDelete={onDelete}
               onOpenConverted={onOpenConverted}
               onSelectTag={onSelectTag}
               timeZone={timeZone}

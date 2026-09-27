@@ -71,6 +71,18 @@ export interface NoteListProps {
    * 单篇门禁与隐私锁态互不影响，所以这里单独传，不从 gate 里猜。
    */
   unlockedItemIds?: ReadonlySet<string>;
+  /**
+   * 可承载动作的面板提示（M4-12 的「撤销」）。
+   *
+   * 为什么不是轻提示：`DESIGN.md` §6.6 明确"轻提示**不承载需要用户行动的信息**（会被错过）"，
+   * 而界面稿 §6.6 要求删除后"提供撤销"。两个都满足的做法就是把它放进**面板提示**——
+   * 区块内信息条，本来就是这个用途（需要持续可见的说明与后果）。
+   */
+  notice?: {
+    message: string;
+    actionLabel: string;
+    onAction: () => void;
+  } | null;
 }
 
 /** 空状态的文案随视图不同——收藏空与笔记空的原因不一样，出口也不一样 */
@@ -105,6 +117,7 @@ export function NoteList({
   vault,
   unlockedItemIds,
   onDelete,
+  notice,
 }: NoteListProps) {
   const empty = emptyCopy(title);
   /** 这一篇在本次浏览器会话里是否已解密（单篇门禁与隐私锁态无关，故单独问） */
@@ -112,6 +125,14 @@ export function NoteList({
 
   return (
     <section className="listpane" aria-label="笔记列表">
+      {notice ? (
+        <div className="panel-hint" role="status">
+          <span>{notice.message}</span>
+          <button type="button" className="link" onClick={notice.onAction}>
+            {notice.actionLabel}
+          </button>
+        </div>
+      ) : null}
       <ItemListHead title={title} count={items.length} />
 
       <div className="listpane__scroll">

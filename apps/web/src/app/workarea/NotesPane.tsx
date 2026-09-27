@@ -10,7 +10,8 @@ import type { PrivacyGate } from "@menote/shared";
 import { useState } from "react";
 import { Button } from "../ui/Controls";
 import { Modal } from "../ui/Modal";
-import { moveToTrash } from "../../features/trash/useTrash";
+import { moveToTrash, undoTrash } from "../../features/trash/useTrash";
+import { restoreNotice } from "../../features/trash/model";
 import type { NotesWorkspace } from "../../features/notes/useNotesWorkspace";
 import type { DocMode } from "../../features/notes/ui/NoteWorkspace";
 import { NoteList } from "../../features/notes/ui/NoteList";
@@ -63,6 +64,12 @@ export function NotesPane({
   const selected = workspace.selected;
   /** 待确认删除的条目 id（确认框在下方渲染；列表行只报事件） */
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  /** 删除后的可撤销提示（面板提示，不是轻提示——见 NoteList 的注释） */
+  const [undoNotice, setUndoNotice] = useState<{
+    message: string;
+    actionLabel: string;
+    onAction: () => void;
+  } | null>(null);
   const pendingTitle =
     workspace.allItems.find((item) => item.id === pendingDelete)?.title ??
     workspace.selected?.title ??
@@ -97,6 +104,7 @@ export function NotesPane({
           vault={vault}
           unlockedItemIds={encryption.gate.unlockedItems}
           onDelete={(id) => setPendingDelete(id)}
+          notice={undoNotice}
         />
       }
       doc={
@@ -141,6 +149,7 @@ export function NotesPane({
             onLockAll: encryption.onLockAllItems,
           }}
           privacyLine={privacyLine}
+          onDelete={() => setPendingDelete(workspace.selectedId)}
         />
       }
       />
@@ -167,6 +176,25 @@ export function NotesPane({
                   .then(async () => {
                     await workspace.refresh();
                     onToast(`「${pendingTitle}」已移入回收站，30 天内可恢复`, "warn");
+                    // 「撤销」放进面板提示（轻提示不承载需要用户行动的信息，DESIGN.md §6.6）
+                    setUndoNotice({
+                      message: `「${pendingTitle}」已移入回收站`,
+                      actionLabel: "撤销",
+                      onAction: () => {
+                        setUndoNotice(null);
+                        void undoTrash(id)
+                          .then(async (result) => {
+                            await workspace.refresh();
+                            onToast(restoreNotice(result.folderId === null), "success");
+                          })
+                          .catch((error: unknown) => {
+                            onToast(
+                              error instanceof Error ? error.message : "撤销失败，请在回收站里恢复",
+                              "error",
+                            );
+                          });
+                      },
+                    });
                   })
                   .catch((error: unknown) => {
                     onToast(error instanceof Error ? error.message : "删除失败，请稍后重试", "error");

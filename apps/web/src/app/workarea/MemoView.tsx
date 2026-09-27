@@ -21,6 +21,8 @@ export interface MemoViewProps {
   onConvert: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
   onAdd: () => void;
+  /** 删除 Memo（M4-12）：移入回收站 */
+  onDelete: (itemId: string) => void;
 }
 
 export function MemoView(props: MemoViewProps) {
@@ -40,6 +42,7 @@ export function MemoView(props: MemoViewProps) {
           onConvert={props.onConvert}
           onOpenConverted={props.onOpenConverted}
           onAdd={props.onAdd}
+          onDelete={props.onDelete}
         />
       }
     />

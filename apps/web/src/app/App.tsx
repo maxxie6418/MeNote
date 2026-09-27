@@ -6,6 +6,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { outboxCount } from "../data/db";
+import { trashApi } from "../data/api/endpoints";
+import { moveToTrash } from "../features/trash/useTrash";
 import { createSyncEngine, type SyncEngine } from "../data/sync";
 import { useAuth } from "../features/auth/model";
 import { AuthLoading, AuthScreens } from "./AuthScreens";
@@ -165,6 +167,19 @@ export default function App() {
     onSelectView: showNotesView,
     onUnlock: requestUnlock,
     onEnableVault: () => navigate({ name: "settings", page: "privacy" }),
+    onDeleteFolder: async (folder) => {
+      // 删文件夹 = 连同内容一起进回收站；服务端返回连带计数，提示如实报出来
+      try {
+        const result = await trashApi.deleteFolder(folder.id);
+        await workspace.refresh();
+        pushToast(
+          `「${folder.name}」及其中 ${result.items} 条内容、${result.folders - 1} 个子文件夹已移入回收站`,
+          "warn",
+        );
+      } catch (error) {
+        pushToast(error instanceof Error ? error.message : "删除失败，请稍后重试", "error");
+      }
+    },
     onVaultMissing: () => pushToast("加密空间还没同步下来，请稍后重试", "error"),
     onOpenVaultFolder: (folderId) => {
       setBrowse(null);
@@ -535,6 +550,17 @@ export default function App() {
               void workspace.open(noteId);
             }}
             onAdd={focusComposer}
+            onDelete={(id) => {
+              // 删除 Memo（M4-12）：与笔记/文件夹同一套（软删走服务端，本地记账后再刷新）
+              void moveToTrash(id)
+                .then(async () => {
+                  await workspace.refresh();
+                  pushToast("已移入回收站，30 天内可恢复", "warn");
+                })
+                .catch((error: unknown) => {
+                  pushToast(error instanceof Error ? error.message : "删除失败，请稍后重试", "error");
+                });
+            }}
           />
         ) : (
           <NotesSlot

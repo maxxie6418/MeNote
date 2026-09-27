@@ -14,7 +14,13 @@ import { NotebookPanel } from "../src/features/notes/ui/NotebookPanel";
 
 afterEach(cleanup);
 
-function folder(id: string, name: string, parentId: string | null, depth: number): LocalFolder {
+function folder(
+  id: string,
+  name: string,
+  parentId: string | null,
+  depth: number,
+  overrides: Partial<LocalFolder> = {},
+): LocalFolder {
   return {
     id,
     parent_id: parentId,
@@ -30,6 +36,7 @@ function folder(id: string, name: string, parentId: string | null, depth: number
     deleted_at: null,
     deleted: false,
     pending: null,
+    ...overrides,
   };
 }
 
@@ -214,6 +221,56 @@ describe("文件夹的重命名与移动", () => {
     const menu = screen.getByRole("menu", { name: "英语 的更多操作" });
     expect(within(menu).queryByRole("menuitem", { name: "新建子文件夹" })).toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "重命名" })).toBeTruthy();
+  });
+});
+
+describe("删除文件夹（M4-12）", () => {
+  it("确认框写**实时计数**（N 条内容 / M 个子文件夹），确认后才真删", async () => {
+    const user = userEvent.setup();
+    const onDeleteFolder = vi.fn(async (target: LocalFolder) => {
+      // 断言里要看 id，这里显式读一次参数（也避免 lint 报未使用）
+      expect(target.id).toBe("f1");
+    });
+    renderPanel({
+      folders: [folder("f1", "工作", null, 1), folder("f2", "子夹", "f1", 2)],
+      counts: { f1: 2, f2: 3 },
+      onDeleteFolder,
+    });
+
+    await user.click(screen.getByRole("button", { name: "工作 的更多操作" }));
+    const item = screen.getByRole("menuitem", { name: "删除" });
+    expect(item.className).toContain("menu__item--danger");
+    await user.click(item);
+
+    const dialog = screen.getByRole("dialog", { name: "删除文件夹" });
+    // 自己 2 条 + 子夹 3 条 = 5 条；子文件夹 1 个
+    expect(within(dialog).getByText(/及其中 5 条内容、1 个子文件夹将移入回收站/)).toBeTruthy();
+    expect(within(dialog).getByText(/恢复时如果原文件夹已不在，内容会回到根目录/)).toBeTruthy();
+    expect(onDeleteFolder).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "移入回收站" }));
+    expect(onDeleteFolder).toHaveBeenCalledTimes(1);
+    expect(onDeleteFolder.mock.calls[0]?.[0]).toMatchObject({ id: "f1" });
+  });
+
+  it("取消则不删；加密空间行不出现删除入口", async () => {
+    const user = userEvent.setup();
+    const onDeleteFolder = vi.fn(async () => undefined);
+    renderPanel({ onDeleteFolder });
+
+    await user.click(screen.getByRole("button", { name: "学习 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(onDeleteFolder).not.toHaveBeenCalled();
+
+    cleanup();
+    renderPanel({
+      folders: [folder("s1", "加密空间", null, 1, { is_enc_space: 1 })],
+      counts: {},
+      onDeleteFolder,
+    });
+    await user.click(screen.getByRole("button", { name: "加密空间 的更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "删除" })).toBeNull();
   });
 });
 

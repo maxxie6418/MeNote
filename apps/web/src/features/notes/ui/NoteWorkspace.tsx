@@ -6,7 +6,7 @@
  */
 import { Suspense, lazy, useState } from "react";
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
-import { DropdownMenu } from "../../../app/ui/Menu";
+import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
 import type { NoteEditorSnapshot } from "../model";
@@ -72,6 +72,11 @@ export interface NoteWorkspaceProps {
     onLock?: () => void;
     lockLabel?: string;
   } | null;
+  /**
+   * 删除（M4-12）：**只报事件**，二次确认由外层做（同一套确认还要给列表行用）。
+   * 编辑器内**没有独立删除入口**——收在「更多」菜单里，保持正文头"只有模式切换 + 更多菜单"的不变量。
+   */
+  onDelete?: () => void;
 }
 
 export function NoteWorkspace({
@@ -88,6 +93,7 @@ export function NoteWorkspace({
   onTitleChange,
   encryption,
   privacyLine,
+  onDelete,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
@@ -230,6 +236,19 @@ export function NoteWorkspace({
                 title: encryption.unlockedCount === 0 ? "当前没有已解密的单篇" : undefined,
                 onSelect: () => encryption.onLockAll(),
               },
+              // 删除（M4-12）：破坏性操作 → 危险色；二次确认由工作区外层做
+              // （同一套确认逻辑还要给列表行用，不在这里各写一份）
+              ...(onDelete
+                ? ([
+                    {
+                      id: "delete",
+                      label: "删除",
+                      icon: "logout" as const,
+                      danger: true,
+                      onSelect: onDelete,
+                    },
+                  ] satisfies MenuItemSpec[])
+                : []),
             ]}
           />
         ) : null}

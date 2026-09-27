@@ -25,6 +25,8 @@ export interface MemoItemProps {
   onSave: (itemId: string, text: string) => void;
   onTogglePinned: (itemId: string) => void;
   onConvert: (itemId: string) => void;
+  /** 删除（M4-12）：只报事件，二次确认由面板做 */
+  onDelete?: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
   timeZone?: string;
@@ -36,6 +38,7 @@ export function MemoItem({
   onSave,
   onTogglePinned,
   onConvert,
+  onDelete,
   onOpenConverted,
   onSelectTag,
   timeZone,
@@ -94,6 +97,18 @@ export function MemoItem({
                       label: "转为笔记",
                       icon: "note" as const,
                       onSelect: () => onConvert(memo.id),
+                    },
+                  ]
+                : []),
+              // 删除（M4-12）：破坏性操作 → 危险色；二次确认由面板做（同一个面板能看到计数与撤销位）
+              ...(onDelete
+                ? [
+                    {
+                      id: "delete",
+                      label: "删除",
+                      icon: "logout" as const,
+                      danger: true,
+                      onSelect: () => onDelete(memo.id),
                     },
                   ]
                 : []),

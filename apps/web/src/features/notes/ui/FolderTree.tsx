@@ -39,6 +39,11 @@ export interface FolderTreeProps {
     onMoveIn: (folder: LocalFolder) => void;
     onMoveOut: (folder: LocalFolder) => void;
   };
+  /**
+   * 删除文件夹（M4-12）：**只报事件**，二次确认（含实时计数）由调用方做。
+   * 不给这个回调时菜单里不出现「删除」——未接线的视图不显示假按钮。
+   */
+  onDelete?: (folder: LocalFolder) => void;
 }
 
 export function FolderTree({
@@ -50,6 +55,7 @@ export function FolderTree({
   onMove,
   onCreateChild,
   vault,
+  onDelete,
 }: FolderTreeProps) {
   const roots = folders.filter((folder) => folder.parent_id === null);
   const childrenOf = (parentId: string): LocalFolder[] =>
@@ -66,6 +72,7 @@ export function FolderTree({
     onMove,
     onCreateChild,
     vault,
+    onDelete,
   });
 
   return (
@@ -93,6 +100,7 @@ interface FolderNodeProps {
   onMove: (folder: LocalFolder) => void;
   onCreateChild: (folder: LocalFolder) => void;
   vault?: FolderTreeProps["vault"];
+  onDelete?: (folder: LocalFolder) => void;
 }
 
 function FolderNode({
@@ -104,6 +112,7 @@ function FolderNode({
   onMove,
   onCreateChild,
   vault,
+  onDelete,
 }: FolderNodeProps) {
   // 第 2 层不出现"新建子文件夹"入口（那个位置永远没有合法动作）
   const canCreateChild = canCreateChildFolder(folder);
@@ -174,6 +183,18 @@ function FolderNode({
                       onSelect: () => vault.onMoveIn(folder),
                     },
                   ] satisfies MenuItemSpec[])
+              : []),
+            // 删除（M4-12）：空间行不可删（服务端也会拒绝，这里不给出入口）
+            ...(onDelete && folder.is_enc_space === 0
+              ? ([
+                  {
+                    id: "delete",
+                    label: "删除",
+                    icon: "logout" as const,
+                    danger: true,
+                    onSelect: () => onDelete(folder),
+                  },
+                ] satisfies MenuItemSpec[])
               : []),
           ]}
         />

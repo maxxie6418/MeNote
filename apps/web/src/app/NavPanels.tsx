@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import type { NotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
 import { isScopeGateOpen, type PrivacyGate } from "@menote/shared";
+import type { LocalFolder } from "../data/db";
 import { isInVault } from "../features/privacy/vault";
 import type { VaultNodeProps } from "./fnbar/VaultNode";
 import type { NotesView } from "../features/notes/views";
@@ -27,6 +28,8 @@ export interface NavPanelsInput {
   onUnlock: () => void;
   /** 未启用时点空间节点：去「设置 › 隐私锁」启用（设计 §9.2-② 的"引导启用"） */
   onEnableVault: () => void;
+  /** 删除文件夹（M4-12）：连带内容一起进回收站 */
+  onDeleteFolder: (folder: LocalFolder) => Promise<void>;
   /** 空间还没同步下来时的提示 */
   onVaultMissing: () => void;
   /** 切到某个空间内文件夹（`null` = 空间根） */
@@ -70,6 +73,7 @@ export function navPanels(input: NavPanelsInput): {
         onMoveOut: (folder, onProgress) =>
           workspace.moveFolderOutOfVault(folder.id, { onProgress }),
       }}
+      onDeleteFolder={input.onDeleteFolder}
     />
   );
 

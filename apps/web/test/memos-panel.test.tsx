@@ -65,6 +65,7 @@ function renderPanel(overrides: Partial<Parameters<typeof MemoPanel>[0]> = {}) {
   const onConvert = vi.fn();
   const onOpenConverted = vi.fn();
   const onUnlock = vi.fn();
+  const onDelete = vi.fn();
   const { container } = render(
     <MemoPanel
       memos={MEMOS}
@@ -79,11 +80,12 @@ function renderPanel(overrides: Partial<Parameters<typeof MemoPanel>[0]> = {}) {
       onConvert={onConvert}
       onOpenConverted={onOpenConverted}
       onAdd={onAdd}
+      onDelete={onDelete}
       now={NOW}
       {...overrides}
     />,
   );
-  return { container, onAdd, onSave, onTogglePinned, onConvert, onOpenConverted, onUnlock };
+  return { container, onAdd, onSave, onTogglePinned, onConvert, onOpenConverted, onUnlock, onDelete };
 }
 
 /** 按文本取标签胶囊（无障碍名里带 `#` 与空格，直接按文本更稳） */
@@ -262,5 +264,46 @@ describe("Memo 转笔记（Q10）", () => {
     await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
     const menu = screen.getByRole("menu", { name: "Memo 的更多操作" });
     expect(within(menu).queryByRole("menuitem", { name: "转为笔记" })).toBeNull();
+  });
+});
+
+describe("删除 Memo（M4-12）", () => {
+  it("菜单里有危险样式的「删除」，点击后必须二次确认才真正删除", async () => {
+    const user = userEvent.setup();
+    const { onDelete } = renderPanel();
+
+    const card = document.querySelector('[data-memo-id="m1"]') as HTMLElement;
+    await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
+    const item = screen.getByRole("menuitem", { name: "删除" });
+    expect(item.className).toContain("menu__item--danger");
+
+    await user.click(item);
+    const dialog = screen.getByRole("dialog", { name: "删除 Memo" });
+    expect(within(dialog).getByText(/将移入回收站，保留 30 天/)).toBeTruthy();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "移入回收站" }));
+    expect(onDelete).toHaveBeenCalledWith("m1");
+  });
+
+  it("确认框取消则不删除", async () => {
+    const user = userEvent.setup();
+    const { onDelete } = renderPanel();
+
+    const card = document.querySelector('[data-memo-id="m1"]') as HTMLElement;
+    await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "删除" }));
+    await user.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it("不给 onDelete 时不出现删除入口", async () => {
+    const user = userEvent.setup();
+    renderPanel({ onDelete: undefined });
+
+    const card = document.querySelector('[data-memo-id="m1"]') as HTMLElement;
+    await user.click(within(card).getByRole("button", { name: "Memo 的更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "删除" })).toBeNull();
   });
 });

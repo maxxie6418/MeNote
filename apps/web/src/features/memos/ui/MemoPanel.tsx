@@ -11,6 +11,7 @@ import type { LocalItem, MemoContent } from "../../../data/db";
 import { isMemoVisible, type PrivacyGate } from "@menote/shared";
 import { LockedPlaceholder } from "../../../app/ui/LockedPlaceholder";
 import { Button } from "../../../app/ui/Controls";
+import { Modal } from "../../../app/ui/Modal";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
 import { SegmentedControl } from "../../../app/ui/SegmentedControl";
@@ -38,6 +39,8 @@ export interface MemoPanelProps {
   onTogglePinned: (itemId: string) => void;
   /** Memo 转笔记（Q10） */
   onConvert: (itemId: string) => void;
+  /** 删除 Memo（M4-12）：只报事件；确认框在本面板里（同一处能显示"移入回收站"的后果） */
+  onDelete?: (itemId: string) => void;
   /** 打开已转出的那篇笔记 */
   onOpenConverted: (noteId: string) => void;
   /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
@@ -55,6 +58,7 @@ export function MemoPanel({
   onSave,
   onTogglePinned,
   onConvert,
+  onDelete,
   onOpenConverted,
   onAdd,
   timeZone,
@@ -67,6 +71,8 @@ export function MemoPanel({
    * 代价：跨零点时"今天"的范围要等下次进入视图才刷新——对个人笔记够用，M2-7 设置页再谈定时刷新。
    */
   const [nowMs] = useState(() => now ?? Date.now());
+  /** 待确认删除的 Memo（M4-12）：破坏性操作必须二次确认 */
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const memoVisible = isMemoVisible(gate);
   const tags = collectMemoTags(memos);
@@ -142,11 +148,40 @@ export function MemoPanel({
           onSave={onSave}
           onTogglePinned={onTogglePinned}
           onConvert={onConvert}
+          onDelete={onDelete ? (itemId) => setPendingDelete(itemId) : undefined}
           onOpenConverted={onOpenConverted}
           onSelectTag={(next) => setTag(next)}
           timeZone={timeZone}
         />
       </div>
+
+      {/* 删除确认（M4-12）：写明去向与可恢复性；破坏性操作必须二次确认 */}
+      <Modal
+        open={pendingDelete !== null}
+        title="删除 Memo"
+        desc="这条 Memo 将移入回收站，保留 30 天，可在回收站恢复。"
+        onClose={() => setPendingDelete(null)}
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setPendingDelete(null)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                const id = pendingDelete;
+                setPendingDelete(null);
+                if (id) onDelete?.(id);
+              }}
+            >
+              移入回收站
+            </Button>
+          </>
+        }
+      >
+        <p>删除后它不再出现在时间轴里；已转出的笔记不受影响。</p>
+      </Modal>
     </section>
   );
 }

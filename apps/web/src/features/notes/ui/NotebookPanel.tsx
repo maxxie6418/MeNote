@@ -17,6 +17,7 @@ import { useState } from "react";
 import type { LocalFolder, LocalItem } from "../../../data/db";
 import { progressLabel, type BatchProgress, type BatchResult } from "../batch";
 import { Icon } from "../../../app/ui/Icon";
+import { Button } from "../../../app/ui/Controls";
 import { Modal } from "../../../app/ui/Modal";
 import { NavItem } from "../../../app/ui/NavItem";
 import { FolderTree } from "./FolderTree";
@@ -52,6 +53,10 @@ export interface NotebookPanelProps {
       onProgress: (progress: BatchProgress) => void,
     ) => Promise<BatchResult<LocalItem>>;
   };
+  /**
+   * 删除文件夹（M4-12）：**只报事件**，确认框与实时计数在这里给（同一个面板能看到 folders/counts）。
+   */
+  onDeleteFolder?: (folder: LocalFolder) => void | Promise<void>;
 }
 
 export function NotebookPanel({
@@ -63,11 +68,14 @@ export function NotebookPanel({
   onRenameFolder,
   onMoveFolder,
   vault,
+  onDeleteFolder,
 }: NotebookPanelProps) {
   const [creatingIn, setCreatingIn] = useState<{ parentId: string | null } | null>(null);
   const [draftName, setDraftName] = useState("");
   const [renaming, setRenaming] = useState<LocalFolder | null>(null);
   const [moving, setMoving] = useState<{ folder: LocalFolder; targets: MoveTarget[] } | null>(null);
+  /** 待确认删除的文件夹（M4-12）：确认框里的计数要**实时算**，不是固定文案 */
+  const [deleting, setDeleting] = useState<LocalFolder | null>(null);
   /** 整夹移入/移出的进度与失败清单（M3-8）：进度显示"处理中 12 / 40" */
   const [batch, setBatch] = useState<{
     folder: LocalFolder;
@@ -181,6 +189,7 @@ export function NotebookPanel({
         onRename={(folder) => setRenaming(folder)}
         onMove={(folder) => setMoving({ folder, targets: folderMoveTargets(folders, folder.id) })}
         onCreateChild={(folder) => beginCreate(folder)}
+        onDelete={onDeleteFolder ? (folder) => setDeleting(folder) : undefined}
         vault={
           vault
             ? {
@@ -254,6 +263,56 @@ export function NotebookPanel({
           ))}
         </div>
       </Modal>
+
+      {/*
+        删除文件夹的确认框（M4-12；界面稿 §6.6 第 3 行）：**数量必须实时算**——
+        "N 条内容、M 个子文件夹"是当前事实，写死文案在删除前后会对不上。
+      */}
+      <Modal
+        open={deleting !== null}
+        title="删除文件夹"
+        desc={
+          deleting
+            ? `「${deleting.name}」及其中 ${folderContentCount(folders, counts, deleting.id)} 条内容、${childFolderCount(folders, deleting.id)} 个子文件夹将移入回收站，保留 30 天。`
+            : undefined
+        }
+        onClose={() => setDeleting(null)}
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setDeleting(null)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                const folder = deleting;
+                setDeleting(null);
+                if (folder) void onDeleteFolder?.(folder);
+              }}
+            >
+              移入回收站
+            </Button>
+          </>
+        }
+      >
+        <p>原路径会保留；恢复时如果原文件夹已不在，内容会回到根目录。</p>
+      </Modal>
     </div>
   );
+}
+
+/** 文件夹里的条目数 = 自己直接含的 + 直接子夹含的（层级只有两层） */
+function folderContentCount(
+  folders: readonly LocalFolder[],
+  counts: Readonly<Record<string, number>>,
+  folderId: string,
+): number {
+  const own = counts[folderId] ?? 0;
+  const children = folders.filter((folder) => folder.parent_id === folderId);
+  return own + children.reduce((sum, child) => sum + (counts[child.id] ?? 0), 0);
+}
+
+function childFolderCount(folders: readonly LocalFolder[], folderId: string): number {
+  return folders.filter((folder) => folder.parent_id === folderId).length;
 }

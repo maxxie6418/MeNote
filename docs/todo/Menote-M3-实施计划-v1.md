@@ -20,6 +20,7 @@
 | v1.5 | v0.3.6 | 2026-09-27 | **M3-4 完成**：`cryptoApi`、五个隐私广播事件（只带状态不带内容）、`usePrivacyLock` 组装层（缓存装门禁 / rev 失效 / 设备长期档 / 计时 / 多标签握手 / 动作集）；修掉"有缓存但离线时门禁不生效"的真 bug；全套 549 通过 | deepseek-v4.1-flash |
 | v1.6 | v0.3.7 | 2026-09-27 | **M3-5 前半完成**：搜索索引拆标题/正文两段（Dexie v6）、`searchLocal` 按门禁过滤、`useSearch` 与 `App` 接线；按授权拆出 `app/AuthScreens.tsx` 守住入口行数预算；全套 553 通过 | deepseek-v4.1-flash |
 | v1.7 | v0.3.8 | 2026-09-27 | **M3-5 后半（一）**：`filterByView`/`recentPreview`/`openTaskPreview` 接门禁、`HomePanel` 用 gate 取代 `memoLocked`、`noPrivacyGate()` 冻结单例（修掉"门禁对象每渲染重建"的引用稳定性陷阱）；全套 556 通过；Memo/待办占位与解锁框一并排入界面批次 | deepseek-v4.1-flash |
+| v1.8 | v0.3.9 | 2026-09-27 | **M3-5 完成 + 界面批次（一）**：`LockedPlaceholder`、`UnlockModal`（含逐次加等待）、`PrivacyCapsule`（三态与菜单）、Memo/待办占位；按授权再拆 `App.tsx`（`PrivacySlot`/`MemoView`/`TaskView`）；全套 570 通过；M3-10 标部分完成（缺 VaultNode / ItemRow / 编辑器状态栏 / 文案红线），胶囊开锁字形待确认 | deepseek-v4.1-flash |
 
 ---
 
@@ -79,10 +80,9 @@
 - **涉及文件**：`apps/web/src/features/privacy/model.ts`（状态机 / 档位 / 计时 / 握手）、`apps/web/src/features/privacy/crypto.ts`（PBKDF2 派生、verifier 校验、K 包裹与解包）、`apps/web/src/data/db/privacy.ts`（`privacyState` 缓存 + `rev` 失效）、`apps/web/src/data/db/schema.ts`（Dexie v5：`privacyState` 新表 + `searchIndex` 拆列）、`apps/web/src/data/sync/broadcast.ts`（四个新事件）、`apps/web/src/app/usePrivacyGate.ts`（组装 `PrivacyGate` 供 props 注入）。
 - **验收**：正确/错误密码的 verifier 校验各有用例；K 包裹解包往返一致；服务端 `rev` 变高 → 覆盖缓存并清空解锁态；多标签握手（替身）与"无人应答 = 锁定"；N 分钟计时用假时钟；`BroadcastChannel` 缺失时降级不报错。
 
-### M3-5 门禁接入全局 + 搜索改造 —— 🟡 **大部分完成（2026-09-27，v0.3.7 + v0.3.8）**
+### M3-5 门禁接入全局 + 搜索改造 —— ✅ **完成（2026-09-27，v0.3.7 + v0.3.8 + v0.3.9）**
 
-> 已完成：**搜索**（索引拆标题/正文两段 + Dexie v6 + `searchLocal(…, gate)` 按 `searchFields` 过滤 + `useSearch`/`App` 接线，v0.3.7）；**列表与三视图**（`filterByView(…, gate)`，标签云/计数不过门禁）；**首页**（`recentPreview`/`openTaskPreview` 接门禁，`homeStats` 口径不变，`HomePanel`/`HomeView` 用 gate 取代 `memoLocked`）；`App` 全面接线；顺带按授权拆出 `app/AuthScreens.tsx`（入口行数预算）、补 `noPrivacyGate()` 冻结单例。
-> 待做：**Memo 与待办视图的锁定占位**——占位上的「解锁」按钮需要一个真的解锁出口，因此**与解锁框（`UnlockModal`）一起做**（排在 M3-6/M3-9 的界面批次里），否则就是 DESIGN 禁止的"点了没反应"；编辑器锁态接线归 M3-7。
+> 已完成：**搜索**（索引拆标题/正文两段 + Dexie v6 + `searchLocal(…, gate)` 按 `searchFields` 过滤 + `useSearch`/`App` 接线，v0.3.7）；**列表与三视图**（`filterByView(…, gate)`，标签云/计数不过门禁，v0.3.8）；**首页**（`recentPreview`/`openTaskPreview` 接门禁、`homeStats` 口径不变、`HomePanel`/`HomeView` 用 gate 取代 `memoLocked`，v0.3.8）；**Memo 与待办锁定占位**（`LockedPlaceholder` + 两个面板的 `gate`/`onUnlock`，v0.3.9）；顺带按授权拆出 `app/AuthScreens.tsx`、`app/PrivacySlot.tsx`、`app/workarea/MemoView.tsx`、`app/workarea/TaskView.tsx`（入口行数预算）与 `noPrivacyGate()` 冻结单例。编辑器锁态归 M3-7。
 
 - **涉及文件**：`apps/web/src/data/db/search.ts`（索引含隐私条目、拆标题/正文两段、查询按 `searchFields` 过滤）、`apps/web/src/features/search/useSearch.ts`、`apps/web/src/features/notes/views.ts`（`gate` 入参）、`apps/web/src/features/home/*`（计数含全部、最近动态按门禁、Memo 占位接真值）、`apps/web/src/features/memos/*`、`apps/web/src/features/tasks/*`、`apps/web/src/app/fnbar/VaultNode.tsx`（未启用 / 锁定 / 解锁三态）。
 - **验收**：M2 那条"加密条目既不进索引也搜不到"用例改写为四组断言（进索引 / 锁定搜不到 / 解锁标题可搜 / 开关控正文 / 单篇标题可搜正文不可）；锁定态首页最近动态不含空间内条目、计数含；三视图在锁定/解锁切换后**立即重渲染**。
@@ -107,7 +107,10 @@
 - **涉及文件**：`apps/web/src/features/settings/ui/SettingsPanel.tsx`（分类进导航）、新增分类页组件、`features/settings/model.ts`（读改 `privacy` 设置）、`useUserSettings`（即时生效 + 同步）。
 - **验收**：启用 / 关闭 / 改密 / 重置四条流程各走一次（含联网前置与失败提示）；关闭被拒时给出"先取消单篇标记并清空空间"的原因；范围配置改动立即影响 Memo 门禁；三档与 N 分钟写入并同步到其他设备。
 
-### M3-10 状态标识与文案（四处）
+### M3-10 状态标识与文案（四处）—— 🟡 **部分完成（2026-09-27，v0.3.9）**
+
+> 已完成：`PrivacyCapsule`（顶栏第 5 块）三态与菜单（`TierMenu` 的功能以菜单项形式落在胶囊里）。**待做**：`VaultNode` 的计数与三态、`ItemRow` 的锁标识与"已加密"摘要位、编辑器状态栏与 30 秒提示、文案集中一处 + 文案红线断言。
+> **一处待确认**：sprite 只有 `lock`、没有开锁字形，胶囊两态暂共用它（颜色 + 文字区分）；补字形要动 `Icon.tsx` 与 `DESIGN.md §5.5`，需用户点头。
 
 - **涉及文件**：`apps/web/src/app/topbar/PrivacyCapsule.tsx`（新增，顶栏第 5 块）、`TierMenu`（三档）、`VaultNode`（计数 + 三态）、`ItemRow`（锁标识与"已加密"摘要位）、编辑器状态栏与 30 秒提示、文案常量集中一处。
 - **验收**：设计 §9.2 四处逐条对照；两套标识（隐私锁态 / 单篇加密态）同屏可辨；30 秒闪烁 + 状态栏文案；**文案红线**用 grep 型断言兜住（禁止"加密存储""数据已加密""已加密保存"等词）。

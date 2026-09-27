@@ -14,6 +14,7 @@
 |---|---|---|---|---|
 | v1 | v0.3.1 | 2026-09-27 | 初稿：范围边界、前置条件、12 步子计划（含先稿后码的界面稿）、风险与交付物 | deepseek-v4.1-flash |
 | v1.1 | v0.3.2 | 2026-09-27 | **M3-1 完成**（《M3 界面稿》v1.1 经用户确认）；状态由「草案」改「执行中」；开工前置两项打勾 | deepseek-v4.1-flash |
+| v1.2 | v0.3.3 | 2026-09-27 | **M3-2 完成**：`packages/shared/src/privacy.ts` 判定契约 + `privacy` 设置契约 + 22 个用例（全套 487 通过）；用户已授权 M3/M4 一并执行、允许 wiki 回写与前端接线层拆分 | deepseek-v4.1-flash |
 
 ---
 
@@ -55,7 +56,7 @@
 - **涉及文件**：新增文档；对照 `DESIGN.md`（视觉已定稿 v1.3）与 `wiki/components.md`（`PrivacyCapsule` / `VaultNode` / `VaultPanel` / `UnlockModal` / `ResetPrivacyModal` / `TierMenu` / `VaultDocEmpty` / `LockedDocPanel`）；原型锚点 `#unlockOverlay` / `#vaultNode` / `#setNav` / `#lockCapsule` 可复用。
 - **验收**：用户确认该稿；文档说明"这一屏有哪些块、主操作、空状态"；未确认前不写任何界面代码。 ✅ **已完成**：`Menote-M3-界面稿-v1.md` v1.1，用户 2026-09-27 确认（三条待确认按稿内默认结论关闭）。
 
-### M3-2 共享判定契约与设置契约（纯函数）
+### M3-2 共享判定契约与设置契约（纯函数）—— ✅ **完成（2026-09-27，v0.3.3）**
 
 - **涉及文件**：`packages/shared/src/privacy.ts`（新增）、`packages/shared/src/settings.ts`（增 `privacy` 四字段 + 默认值；`QUICK_MENU_FEATURES` 的 `lock.pendingStep` → `null`）、`packages/shared/src/index.ts`（导出）、`packages/shared/test/privacy.test.ts`（新增）。
 - **验收**：设计 §3.2 的判定规则表**逐行有用例**（六类内容 × 列表/正文/标题搜索/正文搜索）；设置 schema 对缺字段填默认值（部署窗口兼容）；`pnpm --filter @menote/shared test` 通过。

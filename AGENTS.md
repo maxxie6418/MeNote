@@ -8,7 +8,7 @@
 - 名称：`MeNote`
 - 一句话：面向个人与家人的轻量多端笔记应用（浏览器 PWA + Cloudflare 自托管），支持 Markdown 笔记、表格、Memo、待办、版本历史与隐私锁。
 - 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared` + `packages/mdcore`（Markdown 核心，M2 建）+ `packages/crypto-format`（备份导出信封的编解码纯函数；**M3 落最小骨架**，可顺延到 M5——其消费方是 M5 的备份导出），见架构文档 §2.3）
-- 当前版本：v0.3.2（**M2 已收口**，v0.3.0——逐条验收复核与未验证项见 `docs/modules/Menote-M2-收口验收复核-v1.md`）
+- 当前版本：v0.4.0（**M3 已收口**——逐条验收复核、能力矩阵 16 行、流程 20 项、反例 7 条与未验证项见 `docs/modules/Menote-M3-收口验收复核-v1.md`）
 - 技术栈：
   - 前端：`React PWA（Vite + CodeMirror 6，编辑器已接入）`
   - 后端：`Cloudflare Workers（Hono）`
@@ -17,7 +17,7 @@
 - 源码位置：`apps/web`（PWA 客户端）、`apps/worker`（Cloudflare Worker，唯一入口 `src/index.ts` 只装配）、`packages/shared`（两端共享类型与纯函数）
 - 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 结构章与**视觉章（§3）均已定稿**（现 `DESIGN.md` v1.3），实现界面时按 `DESIGN.md` §3.1 从原型取值并标注临时值
 - 怎么跑：`pnpm install` → `pnpm dev`（前端 + Worker + 本地 D1 一体）；常用命令与部署流程见 `wiki/guides/local-dev.md`；本地数据在 `apps/web/.wrangler/state`（删掉即可重置）
-- 现在做到哪：**M1、M2 均已收口（v0.3.0）**，此后 v0.3.1 / v0.3.2 为品牌图标与设置「关于」页等小改动——M2 落地了 `packages/mdcore`（Markdown 核心）、界面框架、笔记本与文件夹、Memo、待办、搜索、设置、首页与同步补全（跨标签页广播、批量写入、冲突对比）。**收口复核**（逐条验收证据、六处偏离、五项未验证）见 `docs/modules/Menote-M2-收口验收复核-v1.md`；M2 实施计划已归档到 `docs/archive/`。**M3（隐私锁与加密空间）的设计（`docs/modules/Menote-隐私锁设计-v1.md` v1.3）与界面稿（`docs/modules/Menote-M3-界面稿-v1.md` v1.1）已成稿并经用户确认，待开工**（实施计划 `docs/todo/Menote-M3-实施计划-v1.md` v1.1，M3-1 已完成）；已知待办：移动端界面稿的 3 条阻塞项；`wiki/` 的同步清单**已于 2026-09-27 执行**（功能拆解 v2.5、项目架构 v1.12、设计文档 v7.5、`components.md` v3、`docs-roadmap` v1.2，按《隐私锁设计》附录 B 逐条回写）
+- 现在做到哪：**M1、M2、M3 均已收口**（M2 → v0.3.0、M3 → v0.4.0）。M3 落地了隐私锁与加密空间：`packages/shared` 的门禁判定契约、服务端迁移 0003 `user_crypto` 与 crypto 四端点、前端门禁核心（PBKDF2 + 本地 verifier + 材料缓存 + 多标签广播 + 三档计时）、门禁接入列表/三视图/首页/搜索/Memo/待办、加密空间视图与整夹移入移出、单篇加密、设置页「隐私锁」四条流程、四处状态标识与文案红线断言。**收口复核**见 `docs/modules/Menote-M3-收口验收复核-v1.md`（含 8 处偏离与 7 项未验证，其中"线上逐屏点验"需先在 Cloudflare 端配好 `BACKUP_CRED_KEY`）；M3 实施计划已归档到 `docs/archive/`。**下一步 M4（附件与版本历史）**：设计 `docs/modules/Menote-M4-设计-v1.md` v1、界面稿 `docs/modules/Menote-M4-界面稿-v1.md` v1、实施计划 `docs/todo/Menote-M4-实施计划-v1.md` v1 均已成稿（评审中），开工前需在 Cloudflare 端建好 R2 桶并补 `wrangler.jsonc` 的 `r2_buckets` 与 `triggers.crons`；已知待办：移动端界面稿的 3 条阻塞项、`M3-11`（`crypto-format` 信封纯函数）顺延到 M5 前；`wiki/` 的 M3 同步清单**已于 2026-09-27 执行**（功能拆解 v2.5、项目架构 v1.12、设计文档 v7.5、`components.md` v3、`docs-roadmap` v1.2，按《隐私锁设计》附录 B 逐条回写）
 
 ## 工作原则
 

@@ -10,19 +10,24 @@
  * 稳在 D1 的 45 条以内（预检用的是单条查询，不计入 batch）。
  *
  * 省的是什么：客户端到 Worker 的**网络往返**（弱网上最贵的那段），不是 D1 内部的调用次数。
+ *
+ * 收 `env` 而不是 `db`：`saveItemBody` 要在保存正文前判定并封 `session` 版本（设计 §4.1），
+ * 那一步要写 R2，所以桶绑定得能传下去。
  */
 import { BATCH_MAX_OPS, isUlid, type BatchOp, type BatchResult } from "@menote/shared";
 import { DomainError } from "../errors";
+import type { StorageEnv } from "../types";
 import { createItem, saveItemBody } from "./items";
 import { patchItemMeta } from "./item-meta";
 
 export async function applyBatch(
-  db: D1Database,
+  env: StorageEnv,
   userId: string,
   ops: readonly BatchOp[],
   now: number,
   deviceLabel: string | null,
 ): Promise<BatchResult[]> {
+  const db = env.DB;
   if (ops.length > BATCH_MAX_OPS) {
     throw new DomainError("invalid", `单批最多 ${BATCH_MAX_OPS} 个操作`);
   }
@@ -76,7 +81,7 @@ export async function applyBatch(
         });
       } else if (op.kind === "save_body") {
         const written = await saveItemBody(
-          db,
+          env,
           userId,
           op.id,
           op.base_rev,

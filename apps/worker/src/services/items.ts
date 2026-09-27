@@ -26,6 +26,8 @@ import {
   SQL_UPSERT_ITEM_BODY,
 } from "../db/tables";
 import { DomainError } from "../errors";
+import type { StorageEnv } from "../types";
+import { sealSessionVersionIfNeeded } from "./version-session";
 
 export interface CreateItemInput {
   id: string;
@@ -167,9 +169,14 @@ export async function getItemBody(
  *
  * 预检把三种情况分开，**都不写库**：条目不存在（404）、上次其实已成功（200）、真冲突（409）。
  * 只有 `rev` 与基版本一致时才走 batch，避免"重放空推计数器"。
+ *
+ * **收 `env` 而不是 `db`**：预检通过后、写新正文之前，要按设计 §4.1 判定并封一条 `session` 版本
+ * （换设备 / 距上次编辑超 1 小时），而封存要写 R2（`sealVersion` 需要桶）。放在这里而不是路由层，
+ * 一是判定紧跟预检——冲突（409）与幂等重放（200）两条提前返回的路径都不会白封一条；
+ * 二是批量端点（`POST /api/batch` 的 `save_body`）复用同一函数，能一起拿到这个行为。
  */
 export async function saveItemBody(
-  db: D1Database,
+  env: StorageEnv,
   userId: string,
   id: string,
   baseRev: number,
@@ -178,6 +185,7 @@ export async function saveItemBody(
   deviceLabel: string | null,
   now: number,
 ): Promise<ItemBodyWriteResult> {
+  const db = env.DB;
   const { bytes, chars } = await measure(body);
 
   const current = await db
@@ -195,6 +203,9 @@ export async function saveItemBody(
       content_hash: current.content_hash,
     });
   }
+
+  // 会话封存：读的是**保存前**的 `last_edit_at` / `last_device`（写入时会刷新这两列）
+  await sealSessionVersionIfNeeded(env, userId, id, deviceLabel, now);
 
   const results = await db.batch([
     db

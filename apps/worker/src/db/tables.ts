@@ -291,6 +291,21 @@ export const SQL_SELECT_ITEMS_WITH_VERSIONS = `SELECT DISTINCT item_id, user_id 
   WHERE (created_at, id) > (?, ?) ORDER BY created_at ASC, id ASC LIMIT ?`;
 
 /**
+ * `session` 封存前的预检（设计 §4.1）：一次读拿到**旧正文 + 它的元数据 + 上次编辑信息**。
+ *
+ * 与 `SQL_SELECT_ITEM_REV` 分开是因为这里要多读正文与 `last_edit_at` / `last_device`，
+ * 而预检那条在每次写入（含幂等重放）上都会走，不该为按小时才触发一次的判断加负担。
+ *
+ * `item_bodies` 用**内连接**：没有正文行的条目（刚建、或正文行缺失）查不出结果，
+ * 调用方据此跳过封存——不给刚建的条目封一条空版本。
+ */
+export const SQL_SELECT_ITEM_VERSION_BASE = `SELECT i.rev AS rev, i.title AS title,
+    i.content_hash AS content_hash, i.size_bytes AS size_bytes,
+    i.last_edit_at AS last_edit_at, i.last_device AS last_device, b.body AS body
+  FROM items i JOIN item_bodies b ON b.item_id = i.id
+  WHERE i.id = ? AND i.user_id = ? AND i.deleted_at IS NULL`;
+
+/**
  * idle 兜底封存的候选：**停编辑超过 N 分钟**、且**比最后一个版本还新**（否则会把同一份内容反复封存）。
  *
  * `item_bodies` 里是当前正文——服务端封存要自己读它（此刻客户端已经走了）。

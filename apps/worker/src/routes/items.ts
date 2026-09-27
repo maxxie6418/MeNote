@@ -115,7 +115,7 @@ app.put("/items/:id/body", requireSession, async (c) => {
   }
 
   const result = await saveItemBody(
-    c.env.DB,
+    c.env,
     c.get("user").id,
     id,
     baseRev,
@@ -189,7 +189,7 @@ app.post("/batch", requireSession, async (c) => {
   }
 
   const results = await applyBatch(
-    c.env.DB,
+    c.env,
     c.get("user").id,
     parsed.output.ops,
     Date.now(),

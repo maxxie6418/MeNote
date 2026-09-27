@@ -201,7 +201,15 @@ async function pushMetaPatch(row: OutboxRow, ctx: ResolvedContext, seq: number):
     return "done";
   }
 
-  // 本地条目已经带着"想要的元数据"，整组发过去；服务端逐字段判定
+  /*
+    本地条目已经带着"想要的元数据"，整组发过去；服务端逐字段判定。
+
+    **必须包含隐私相关的两列**（2026-09-27 修）：此前只发了 title / folder_id / tags / pinned / starred，
+    `enc_self` 与 `in_enc_space` **一个都没发**——于是"切换单篇加密""移入/移出加密空间"只改了本地，
+    服务端那份始终没变；下一次同步拉回时本地标记被覆盖回去，**加密标记自己消失**
+    （门禁在前端，标记一丢正文就直接明文呈现）。这类"写了没接上"本程已抓到多次，
+    这里是最严重的一处：它不是显示问题，而是隐私保护失效。
+  */
   const patch: ItemMetaPatch = {
     base_meta_rev: row.base_meta_rev,
     title: item.title,
@@ -209,6 +217,8 @@ async function pushMetaPatch(row: OutboxRow, ctx: ResolvedContext, seq: number):
     tags: item.tags,
     pinned: item.pinned,
     starred: item.starred,
+    enc_self: item.enc_self,
+    in_enc_space: item.in_enc_space,
   };
 
   const result = await ctx.api.patchMeta(item.id, patch);

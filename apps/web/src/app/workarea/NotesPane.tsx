@@ -197,6 +197,7 @@ export function NotesPane({
                 }
           }
           onFiles={(files) => void attachments.add(files)}
+          attachmentsMeta={attachments.known}
           onEditorReady={setEditorHandle}
           onDelete={() => setPendingDelete(workspace.selectedId)}
           onOpenVersions={() => {

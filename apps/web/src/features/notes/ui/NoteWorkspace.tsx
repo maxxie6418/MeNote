@@ -4,8 +4,9 @@
  * 编辑器与 Markdown 渲染都走**动态 import**（架构 §14.1：编辑器与渲染各自独立分包，不进首屏）。
  * 切换条目由 `key={item.id}` 重新挂载编辑器；切换编辑/预览模式**不重建文档**（架构 §3.3）。
  */
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useRef, useState } from "react";
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
+import { Button } from "../../../app/ui/Controls";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
@@ -91,6 +92,8 @@ export interface NoteWorkspaceProps {
   attachments?: { label: string; tone: "busy" | "warn"; onRetry?: () => void } | null;
   /** 粘贴/拖入文件（M4-10；界面稿 §7.1）：编辑器把文件交出来，上传由调用方负责 */
   onFiles?: (files: File[]) => void;
+  /** 这一篇已知的附件（`sha256 -> { size, hasThumb }`）：预览补大小、标"不可用"用 */
+  attachmentsMeta?: Record<string, { size: number; hasThumb: boolean }>;
   /** 编辑器句柄（附件占位替换要用它改正文） */
   onEditorReady?: (handle: EditorHandle) => void;
 }
@@ -114,9 +117,12 @@ export function NoteWorkspace({
   versionsDisabledReason,
   attachments,
   onFiles,
+  attachmentsMeta,
   onEditorReady,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
+  /** 「添加附件」代点的隐藏文件输入（M4-10） */
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
   const [previewSource, setPreviewSource] = useState(initialBody);
 
@@ -191,6 +197,41 @@ export function NoteWorkspace({
           value={item.title ?? ""}
           onChange={(event) => onTitleChange(event.target.value)}
         />
+
+        {/*
+          添加附件（M4-10；界面稿 §7.1 的"选择文件"入口）：
+          真实的 `<input type="file">` 藏起来由按钮代点——这是唯一能唤起系统文件选择器、
+          又能在移动端沿用系统选择器（含拍照）的做法。
+        */}
+        {onFiles ? (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="visually-hidden"
+              aria-label="选择附件"
+              tabIndex={-1}
+              disabled={bodyLocked}
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                // 同一个文件连选两次也要能触发（不清空 value 时第二次不触发 change）
+                event.target.value = "";
+                if (files.length > 0) onFiles(files);
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={bodyLocked}
+              title={bodyLocked ? "解锁后才能添加附件" : undefined}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              添加附件
+            </Button>
+          </>
+        ) : null}
+
         <div className="segmented" role="group" aria-label="编辑模式" style={{ flex: "none" }}>
           {(Object.keys(MODE_LABEL) as DocMode[]).map((candidate) => (
             <button
@@ -311,7 +352,7 @@ export function NoteWorkspace({
                 />
               </div>
               <div className="doc-split__pane">
-                <MarkdownPreview source={previewSource} />
+                <MarkdownPreview source={previewSource} attachments={attachmentsMeta} />
               </div>
             </div>
           ) : mode === "edit" ? (
@@ -327,7 +368,7 @@ export function NoteWorkspace({
             </div>
           ) : (
             <div className="doc-split__pane">
-              <MarkdownPreview source={previewSource} />
+              <MarkdownPreview source={previewSource} attachments={attachmentsMeta} />
             </div>
           )}
           </Suspense>

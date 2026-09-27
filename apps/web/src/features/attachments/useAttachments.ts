@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { newUlid } from "@menote/shared";
 import type { EditorHandle } from "../../app/editor/Editor";
 import { attachmentsApi } from "../../data/api/endpoints";
-import { findAttachment, markAttachmentUploaded, putAttachmentMeta } from "../../data/db";
+import { findAttachment, listItemAttachments, markAttachmentUploaded, putAttachmentMeta } from "../../data/db";
 import { createPreviewStore, isImageMime, uploadStatusLabel, type UploadProgress } from "./model";
 import { createAttachmentQueue, pendingPlaceholder, progressOf, type AttachmentQueue, type QueueTask } from "./queue";
 import { browserUploadDeps } from "./upload";
@@ -31,6 +31,11 @@ export interface UseAttachmentsResult {
   statusLabel: string;
   statusTone: "busy" | "warn" | null;
   failedCount: number;
+  /**
+   * 这一篇已知的附件（`sha256 -> { size, hasThumb }`）：预览用它补大小、
+   * 并标出"引用在、对象不在"的那种（界面稿 §7.4）。
+   */
+  known: Record<string, { size: number; hasThumb: boolean }>;
   add(files: readonly File[]): Promise<void>;
   retry(): Promise<void>;
 }
@@ -44,9 +49,22 @@ function placeholderFor(task: QueueTask, previewUrl: string | undefined): string
 export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsResult {
   const { itemId } = options;
   const [tasks, setTasks] = useState<readonly QueueTask[]>([]);
+  const [known, setKnown] = useState<Record<string, { size: number; hasThumb: boolean }>>({});
   const optionsRef = useRef(options);
   const previews = useMemo(() => createPreviewStore(), []);
   const queueRef = useRef<AttachmentQueue | null>(null);
+
+  /** 读这一篇的附件元数据（**纯读**：只返回数据，写状态由调用方决定，免得两处各写一遍） */
+  const readKnown = useCallback(
+    async (target: string | null): Promise<Record<string, { size: number; hasThumb: boolean }>> => {
+      if (!target) return {};
+      const rows = await listItemAttachments(target);
+      return Object.fromEntries(
+        rows.map((row) => [row.sha256, { size: row.size_bytes, hasThumb: row.has_thumb }]),
+      );
+    },
+    [],
+  );
 
   // 回调与当前条目放进 ref：队列只建一次，读最新值靠这里（**不在渲染期写 ref**）
   useEffect(() => {
@@ -97,6 +115,8 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
             updated_at: Date.now(),
           });
           await markAttachmentUploaded(attachmentId);
+          // 刚上传完：立刻把元数据读回来，预览那边的大小与"不可用"判定就跟着更新了
+          setKnown(await readKnown(target));
         })();
       },
       onFailed: (task) => {
@@ -113,7 +133,8 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
     return () => {
       queueRef.current = null;
     };
-  }, [previews]);
+    // `readKnown` 是稳定引用（`useCallback([])`）：列进依赖只是为了让 lint 满意，不会引发重建
+  }, [previews, readKnown]);
 
   const add = useCallback(async (files: readonly File[]) => {
     if (files.length === 0) return;
@@ -128,6 +149,17 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
   // 卸载时撤销所有本地预览地址（锁定或离开即撤销；这里只撤销地址，不碰 React 状态）
   useEffect(() => () => previews.revokeAll(), [previews]);
 
+  // 切条目时重读附件元数据（`.then` 里 setState：不在 effect 里同步 setState）
+  useEffect(() => {
+    let alive = true;
+    void readKnown(itemId).then((next) => {
+      if (alive) setKnown(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [itemId, readKnown]);
+
   const mine = tasks.filter((task) => task.itemId === itemId);
   const progress: UploadProgress[] = progressOf(mine);
   const failedCount = mine.filter(
@@ -139,6 +171,7 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
     statusLabel,
     statusTone: failedCount > 0 ? "warn" : statusLabel === "" ? null : "busy",
     failedCount,
+    known,
     add,
     retry,
   };

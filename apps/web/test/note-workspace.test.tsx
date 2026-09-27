@@ -194,3 +194,83 @@ describe("跨标签页改动的事前提示（M2-9）", () => {
     expect(onReload).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("附件入口（M4-10；界面稿 §7.1 / §7.5）", () => {
+  it("正文头有「添加附件」，点它代点隐藏的文件输入（多选）", async () => {
+    const user = userEvent.setup();
+    const onFiles = vi.fn();
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        onInput={noop}
+        onTitleChange={noop}
+        onFiles={onFiles}
+      />,
+    );
+
+    const input = screen.getByLabelText("选择附件") as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+
+    // 点按钮应当点到那个 input（jsdom 里 click 不会真的开选择器，只能断言"被点了"）
+    const clickSpy = vi.spyOn(input, "click");
+    await user.click(screen.getByRole("button", { name: "添加附件" }));
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("选完文件后把文件交出去，并清空 input（同一个文件连选两次也要能触发）", async () => {
+    const onFiles = vi.fn();
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        onInput={noop}
+        onTitleChange={noop}
+        onFiles={onFiles}
+      />,
+    );
+
+    const input = screen.getByLabelText("选择附件") as HTMLInputElement;
+    const file = new File(["x"], "图.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(onFiles).toHaveBeenCalledWith([file]);
+    expect(input.value).toBe("");
+  });
+
+  it("没给 onFiles 时不渲染附件入口（组件不假设上传能力）", () => {
+    render(
+      <NoteWorkspace item={item("a")} initialBody="正文" snapshot={null} onInput={noop} onTitleChange={noop} />,
+    );
+    expect(screen.queryByRole("button", { name: "添加附件" })).toBeNull();
+  });
+
+  it("锁定态：正文区是占位，**不渲染预览**（附件自然也不会漏出来，界面稿 §7.5）", async () => {
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="![图](/api/attachments/h/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)"
+        snapshot={null}
+        encryption={{
+          enabled: true,
+          encrypted: true,
+          unlocked: false,
+          unlockedCount: 0,
+          onUnlock: noop,
+          onLock: noop,
+          onToggle: noop,
+          onLockAll: noop,
+        }}
+        onInput={noop}
+        onTitleChange={noop}
+        onFiles={vi.fn()}
+      />,
+    );
+
+    // 预览（会渲染图片）整个不出现，附件入口也不可用
+    expect(screen.queryByTestId("preview")).toBeNull();
+    expect((screen.getByRole("button", { name: "添加附件" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});

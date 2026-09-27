@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { renderMarkdown } from "../src/app/editor/markdown";
+import { decorateAttachmentSizes, renderMarkdown } from "../src/app/editor/markdown";
 
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
@@ -44,5 +44,62 @@ describe("Markdown 渲染", () => {
     for (const link of doc.querySelectorAll("a")) {
       expect(link.getAttribute("href") ?? "").not.toMatch(/^javascript:/i);
     }
+  });
+});
+
+describe("附件引用（M4-10；界面稿 §7.3 / §7.4）", () => {
+  const SHA = "a".repeat(64);
+  const OTHER = "b".repeat(64);
+
+  it("非图片附件走链接样式，并补一个大小（**不显示哈希**）", () => {
+    const html = decorateAttachmentSizes(
+      renderMarkdown(`[报告.pdf](/api/attachments/h/${SHA})`, {
+        attachments: { [SHA]: { size: 2048, hasThumb: false } },
+      }),
+      { [SHA]: { size: 2048, hasThumb: false } },
+    );
+    const doc = parse(html);
+
+    const link = doc.querySelector("a");
+    expect(link?.className).toContain("attachment-link");
+    expect(link?.getAttribute("class")).toContain("link");
+    expect(link?.getAttribute("download")).toBe("");
+    expect(doc.querySelector(".size-tag")?.textContent).toBe("2.0 KB");
+    // 哈希是内部标识，界面不该出现
+    expect(doc.body.textContent ?? "").not.toContain(SHA);
+  });
+
+  it("引用在、对象不在的附件：标不可用并给 title，且**不给下载**", () => {
+    const html = renderMarkdown(`[老文件.pdf](/api/attachments/h/${OTHER})`, { attachments: {} });
+    const doc = parse(html);
+
+    const link = doc.querySelector("a");
+    expect(link?.getAttribute("class")).toContain("attachment-link--missing");
+    expect(link?.getAttribute("title")).toBe("附件不可用");
+    expect(link?.getAttribute("download")).toBeNull();
+  });
+
+  it("图片引用加懒加载（一篇里几十张图不该一次性全拉）", () => {
+    const doc = parse(renderMarkdown(`![图](/api/attachments/h/${SHA})`));
+    const img = doc.querySelector("img");
+    expect(img?.getAttribute("loading")).toBe("lazy");
+    expect(img?.getAttribute("decoding")).toBe("async");
+    expect(img?.getAttribute("data-attachment")).toBe(SHA);
+  });
+
+  it("普通外链不受影响（不加附件类、不加大小）", () => {
+    const html = decorateAttachmentSizes(renderMarkdown("[官网](https://example.com)"), {
+      [SHA]: { size: 10, hasThumb: false },
+    });
+    const doc = parse(html);
+
+    expect(doc.querySelector("a")?.getAttribute("class")).toBeNull();
+    expect(doc.querySelector(".size-tag")).toBeNull();
+  });
+
+  it("没给附件元数据时保持原样（预览不该因为拿不到元数据就报错）", () => {
+    const html = renderMarkdown(`[x](/api/attachments/h/${SHA})`);
+    expect(html).toContain("<a");
+    expect(parse(html).querySelector(".size-tag")).toBeNull();
   });
 });

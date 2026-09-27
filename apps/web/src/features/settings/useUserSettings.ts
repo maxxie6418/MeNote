@@ -24,13 +24,25 @@ export interface UserSettingsState {
 }
 
 export function useUserSettings(
-  options: { onWrite?: () => void; onLoaded?: (settings: UserSettings) => void } = {},
+  options: {
+    onWrite?: () => void;
+    onLoaded?: (settings: UserSettings) => void;
+    /**
+     * 本地写盘失败时的提示出口（2026-09-27 补）。
+     *
+     * `patch` 是**乐观更新**（先改界面再落盘），调用方一律 `void userSettings.patch(...)`——
+     * 于是写盘一失败，rejection 被丢弃、界面继续显示"已生效"的假象（本地存储配额满、
+     * IndexedDB 被禁用/隐私模式都会走到这里）。现在失败**回滚到改动前**并报出来。
+     */
+    onError?: (message: string) => void;
+  } = {},
 ): UserSettingsState {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [pending, setPending] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const onWrite = options.onWrite;
   const onLoaded = options.onLoaded;
+  const onError = options.onError;
   /**
    * 回调放进 ref：调用方通常传内联箭头（要闭包最新的 workspace 等），若直接进 effect 依赖，
    * 每次渲染都会重新读盘。用 ref 保证"只在首次读盘时通知一次"。
@@ -66,14 +78,26 @@ export function useUserSettings(
 
   const patch = useCallback(
     async (partial: Partial<UserSettings>) => {
+      const previous = settings;
       const next = { ...settings, ...partial };
       // 乐观：先更新界面，再落盘
       setSettings(next);
-      setPending(true);
-      await saveLocalSettings(next, Date.now());
+      try {
+        await saveLocalSettings(next, Date.now());
+      } catch (error) {
+        // 落盘失败**回滚**并报出来：不回滚就是"界面说改了、刷新后变回去"的假象
+        setSettings(previous);
+        onError?.(error instanceof Error ? error.message : "设置没能保存到本机");
+        return;
+      }
+      /*
+        这里**不再** `setPending(true)`：它此前设了却没有任何地方复位，也没有消费方读它。
+        `pending` 现在如实来自本地库（读盘 / `reload` 时取 `local.pending`），
+        同步跑完后 `reload()` 会把它刷新到最新值。
+      */
       onWrite?.();
     },
-    [onWrite, settings],
+    [onError, onWrite, settings],
   );
 
   return { settings, pending, loaded, patch, reload };

@@ -94,6 +94,11 @@ export default function App() {
       engineRef.current?.notifyLocalWrite();
       void refreshPending();
     },
+    /*
+      落盘失败要看得见：`patch` 是乐观更新，调用方一律 `void`——不报出来就是
+      "界面说改了、刷新后变回去"的假象（本地存储满 / IndexedDB 被禁用都会走到这里）。
+    */
+    onError: (message) => pushToast(message, "error"),
     onLoaded: (loaded) => {
       if (startViewApplied.current) return;
       startViewApplied.current = true;
@@ -218,7 +223,13 @@ export default function App() {
     await workspace.refresh();
     await workspace.refreshEditorState();
     await refreshPending();
-  }, [refreshPending, workspace]);
+    /*
+      同步跑完把设置也重新读一次盘（2026-09-27 接上）：`useUserSettings.reload` 此前
+      **没有任何调用点**——另一台设备改了设置（或服务端带下来新值），本机界面会一直显示旧值，
+      直到整页刷新。这里读的是本地库，所以即使刚做过乐观改动也不会把未落盘的内容冲掉。
+    */
+    await userSettings.reload();
+  }, [refreshPending, userSettings, workspace]);
 
   /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
   const focusComposer = useCallback(() => {

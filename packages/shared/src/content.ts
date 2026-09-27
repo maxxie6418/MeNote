@@ -99,16 +99,47 @@ export const VersionReasonSchema = v.picklist([
 ]);
 export type VersionReason = v.InferOutput<typeof VersionReasonSchema>;
 
-/** 封存原因的**中文映射**（集中一处：界面与日志用同一份，不各写一遍） */
+/**
+ * 版本元数据（线上形状；M4-5 的服务端返回、M4-11 的界面消费）。
+ *
+ * 两端共用同一份定义——版本行的字段（原因、备注、保留、大小）在界面上一个不少，
+ * 各写一份类型必然会漂移。
+ */
+export const VersionMetaSchema = v.object({
+  id: v.string(),
+  rev: v.number(),
+  reason: v.string(),
+  label: v.nullable(v.string()),
+  /** 1 = 保留（不参与稀疏化） */
+  keep: v.number(),
+  codec: v.picklist(["gzip", "none"]),
+  size_bytes: v.number(),
+  content_hash: v.string(),
+  title: v.nullable(v.string()),
+  created_at: v.number(),
+});
+export type VersionMeta = v.InferOutput<typeof VersionMetaSchema>;
+
+/**
+ * 封存原因的**中文映射**（M4 界面稿 §4.3 定的原文，集中一处：界面与日志用同一份）。
+ *
+ * 界面**不允许**回落到英文原值（界面稿 §4.3 的硬要求），所以取不到时用 `versionReasonLabel()`
+ * 给一个中性中文，而不是把 `pre_mcp` 这种内部字面量摆给用户看。
+ */
 export const VERSION_REASON_LABELS: Readonly<Record<VersionReason, string>> = {
-  autosave_idle: "自动封存",
-  session: "会话恢复",
+  autosave_idle: "停止编辑后自动保存",
+  session: "新会话首次编辑",
   manual: "手动保存",
   pre_restore: "恢复前",
-  pre_conflict: "冲突副本",
-  pre_mcp: "外部修改前",
+  pre_conflict: "冲突前",
+  pre_mcp: "AI 修改前",
   pre_convert: "表格降级前",
 };
+
+/** 取中文原因；未知值（将来加了新 reason 而界面还没更新）给中性文案，**不回落到英文** */
+export function versionReasonLabel(reason: string): string {
+  return (VERSION_REASON_LABELS as Record<string, string | undefined>)[reason] ?? "其他改动";
+}
 
 /** `POST /api/items/:id/versions`：手动封存（备注可空） */
 export const VersionSealSchema = v.object({

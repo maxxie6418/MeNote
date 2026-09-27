@@ -28,6 +28,7 @@ import {
   type SearchResponse,
   type TrashFolderResponse,
   type TrashItemResponse,
+  type VersionMeta,
   type UserSettingsPayload,
   type UserSettingsWrite,
   type FolderPatch,
@@ -186,6 +187,47 @@ export const trashApi = {
     });
     return v.parse(TrashFolderResponseSchema, raw);
   },
+};
+
+/**
+ * 版本历史（M4-11 的前端接线；服务端在 M4-5）。
+ *
+ * 都需要联网：封存要写 R2、恢复要在一个 batch 里改正文与派生列、列表与正文都在服务端。
+ */
+export const versionsApi = {
+  list: (itemId: string, options: { cursor?: number | null; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (options.cursor != null) params.set("cursor", String(options.cursor));
+    if (options.limit != null) params.set("limit", String(options.limit));
+    const query = params.toString();
+    return apiRequest<{ versions: VersionMeta[]; next_cursor: number | null }>(
+      `/api/items/${encodeURIComponent(itemId)}/versions${query ? `?${query}` : ""}`,
+    );
+  },
+
+  body: (versionId: string) =>
+    apiRequest<{ meta: VersionMeta; body: string }>(
+      `/api/versions/${encodeURIComponent(versionId)}`,
+    ),
+
+  /** 手动「存为版本」（备注可空；落库即 `keep = 1`） */
+  seal: (itemId: string, label: string | null) =>
+    apiRequest<{ version: VersionMeta; created: boolean }>(
+      `/api/items/${encodeURIComponent(itemId)}/versions`,
+      { method: "POST", body: { label } },
+    ),
+
+  restore: (versionId: string) =>
+    apiRequest<{ restored: VersionMeta; sealed: VersionMeta | null; item: { id: string; rev: number } }>(
+      `/api/versions/${encodeURIComponent(versionId)}/restore`,
+      { method: "POST", body: {} },
+    ),
+
+  setKeep: (versionId: string, keep: boolean) =>
+    apiRequest<{ ok: boolean }>(`/api/versions/${encodeURIComponent(versionId)}/keep`, {
+      method: "PUT",
+      body: { keep },
+    }),
 };
 
 /** 搜索的服务端兜底（M2-6）：只在本地索引还没建完时调用 */

@@ -77,6 +77,13 @@ export interface NoteWorkspaceProps {
    * 编辑器内**没有独立删除入口**——收在「更多」菜单里，保持正文头"只有模式切换 + 更多菜单"的不变量。
    */
   onDelete?: () => void;
+  /**
+   * 打开版本历史（M4-11；界面稿 §四）。**锁定态下入口整体不可用**（设计 §4.5）：
+   * "列表可见、内容打码"的中间态明确不做。
+   */
+  onOpenVersions?: () => void;
+  /** 版本历史入口为什么不可用（锁定态时给原因，`DESIGN.md` §6.1） */
+  versionsDisabledReason?: string;
 }
 
 export function NoteWorkspace({
@@ -94,6 +101,8 @@ export function NoteWorkspace({
   encryption,
   privacyLine,
   onDelete,
+  onOpenVersions,
+  versionsDisabledReason,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
@@ -236,6 +245,19 @@ export function NoteWorkspace({
                 title: encryption.unlockedCount === 0 ? "当前没有已解密的单篇" : undefined,
                 onSelect: () => encryption.onLockAll(),
               },
+              // 版本历史（M4-11）：锁定态整体不可用，并说明原因
+              ...(onOpenVersions
+                ? ([
+                    {
+                      id: "versions",
+                      label: "版本历史",
+                      icon: "clock" as const,
+                      disabled: versionsDisabledReason !== undefined,
+                      title: versionsDisabledReason,
+                      onSelect: onOpenVersions,
+                    },
+                  ] satisfies MenuItemSpec[])
+                : []),
               // 删除（M4-12）：破坏性操作 → 危险色；二次确认由工作区外层做
               // （同一套确认逻辑还要给列表行用，不在这里各写一份）
               ...(onDelete

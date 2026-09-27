@@ -16,6 +16,8 @@ import type { NotesWorkspace } from "../../features/notes/useNotesWorkspace";
 import type { DocMode } from "../../features/notes/ui/NoteWorkspace";
 import { NoteList } from "../../features/notes/ui/NoteList";
 import { NoteWorkspace } from "../../features/notes/ui/NoteWorkspace";
+import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPanel";
+import { useVersions } from "../../features/versions/useVersions";
 import { TwoPane } from "./TwoPane";
 
 export interface NotesPaneProps {
@@ -70,6 +72,9 @@ export function NotesPane({
     actionLabel: string;
     onAction: () => void;
   } | null>(null);
+  /** 版本历史面板（M4-11）：打开时占满主操作区（界面稿 §4.1：弹窗宽度装不下并排 diff） */
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const versions = useVersions((notice) => onToast(notice.message, notice.tone));
   const pendingTitle =
     workspace.allItems.find((item) => item.id === pendingDelete)?.title ??
     workspace.selected?.title ??
@@ -77,6 +82,30 @@ export function NotesPane({
 
   return (
     <>
+      {versionsOpen && selected ? (
+        <VersionHistoryPanel
+          itemTitle={selected.title ?? "（无标题）"}
+          rows={versions.rows}
+          loading={versions.loading}
+          bodyLoading={versions.bodyLoading}
+          bodies={versions.bodies}
+          currentBody={workspace.initialBody}
+          busy={versions.busy}
+          onClose={() => {
+            setVersionsOpen(false);
+            versions.reset();
+          }}
+          onOpenVersion={(versionId) => void versions.openVersion(versionId)}
+          onSeal={(label) => void versions.seal(label)}
+          onToggleKeep={(versionId, keep) => void versions.toggleKeep(versionId, keep)}
+          onRestore={(versionId) =>
+            void versions.restore(versionId).then(() => {
+              // 恢复改了正文与派生列：正文区要重新读一次（设计 §4.4 第 2 步）
+              void workspace.reloadSelected();
+            })
+          }
+        />
+      ) : (
       <TwoPane
       list={
         <NoteList
@@ -150,9 +179,21 @@ export function NotesPane({
           }}
           privacyLine={privacyLine}
           onDelete={() => setPendingDelete(workspace.selectedId)}
+          onOpenVersions={() => {
+            if (!workspace.selectedId) return;
+            setVersionsOpen(true);
+            void versions.open(workspace.selectedId);
+          }}
+          // 锁定态下版本入口整体不可用（设计 §4.5：不做"列表可见、内容打码"的中间态）
+          versionsDisabledReason={
+            selected?.enc_self === 1 && !encryption.gate.unlockedItems.has(selected.id)
+              ? "先解锁这一篇，才能看版本历史"
+              : undefined
+          }
         />
       }
       />
+      )}
 
       {/* 删除确认（M4-12）：写明去向、保留期与可恢复性；破坏性操作必须二次确认（DESIGN.md §6.5） */}
       <Modal

@@ -10,6 +10,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { noPrivacyGate, privacyGateFrom } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { TaskPanel } from "../src/features/tasks/ui/TaskPanel";
 
@@ -62,17 +63,20 @@ const TITLES = { t1: "交物业费", t2: "写周报", t3: "买牛奶", notTask: 
 function renderPanel(overrides: Partial<Parameters<typeof TaskPanel>[0]> = {}) {
   const onStatusChange = vi.fn();
   const onClearMarker = vi.fn();
+  const onUnlock = vi.fn();
   const { container } = render(
     <TaskPanel
       tasks={TASKS}
       titles={TITLES}
       today={TODAY}
+      gate={noPrivacyGate()}
+      onUnlock={onUnlock}
       onStatusChange={onStatusChange}
       onClearMarker={onClearMarker}
       {...overrides}
     />,
   );
-  return { container, onStatusChange, onClearMarker };
+  return { container, onStatusChange, onClearMarker, onUnlock };
 }
 
 /** 按文本取卡片（卡片上还有按钮，直接按 data 属性更稳） */
@@ -194,5 +198,21 @@ describe("筛选（纯本地）", () => {
     await user.click(screen.getByRole("button", { name: "已完成" }));
     expect(screen.getByText("没有符合条件的待办")).toBeTruthy();
     expect(screen.getByText(/在录入框切到「待办」记一条/)).toBeTruthy();
+  });
+
+  it("隐私门禁锁定时整屏占位：不显示卡片与状态，且「解锁」是活出口（M3-5）", async () => {
+    const user = userEvent.setup();
+    const { container, onUnlock } = renderPanel({
+      gate: privacyGateFrom({ scope: { memo: true }, search_bodies_when_unlocked: true }, "locked"),
+    });
+
+    expect(screen.getByText("待办已锁定")).toBeTruthy();
+    expect(container.querySelectorAll(".taskcard")).toHaveLength(0);
+    expect(screen.queryByText("交物业费")).toBeNull();
+    // 计数仍显示（统计口径不变）
+    expect(screen.getByText(/共 3 条/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /解锁/ }));
+    expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 });

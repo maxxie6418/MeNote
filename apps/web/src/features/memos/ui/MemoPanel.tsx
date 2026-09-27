@@ -8,6 +8,8 @@
  */
 import { useState } from "react";
 import type { LocalItem, MemoContent } from "../../../data/db";
+import { isMemoVisible, type PrivacyGate } from "@menote/shared";
+import { LockedPlaceholder } from "../../../app/ui/LockedPlaceholder";
 import { Button } from "../../../app/ui/Controls";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
@@ -25,6 +27,13 @@ export interface MemoPanelProps {
   memos: readonly LocalItem[];
   /** 已剥掉 front matter 的正文 + 已转笔记关联 */
   contents: Readonly<Record<string, MemoContent>>;
+  /**
+   * 隐私门禁（M3-5）：Memo 在范围内且锁定时**整体占位**（不显示内容、标签与图片）。
+   * 判定走共享包的 `isMemoVisible`，界面不自己拼条件。
+   */
+  gate: PrivacyGate;
+  /** 占位上的「解锁」出口（打开解锁框） */
+  onUnlock: () => void;
   onSave: (itemId: string, text: string) => void;
   onTogglePinned: (itemId: string) => void;
   /** Memo 转笔记（Q10） */
@@ -41,6 +50,8 @@ export interface MemoPanelProps {
 export function MemoPanel({
   memos,
   contents,
+  gate,
+  onUnlock,
   onSave,
   onTogglePinned,
   onConvert,
@@ -57,8 +68,29 @@ export function MemoPanel({
    */
   const [nowMs] = useState(() => now ?? Date.now());
 
+  const memoVisible = isMemoVisible(gate);
   const tags = collectMemoTags(memos);
   const visible = filterMemos(memos, { tag, range }, nowMs, timeZone);
+
+  if (!memoVisible) {
+    // 锁定时整屏占位：**保留标题与计数**（计数属于统计口径，一律计入），
+    // 但标签、筛选与时间轴一律不渲染（设计 §9.2）
+    return (
+      <section className="memopanel" aria-label="Memo">
+        <header className="memopanel__head">
+          <h2 className="memopanel__title">Memo</h2>
+          <span className="listpane__count">{memos.length} 条</span>
+        </header>
+        <div className="memopanel__body">
+          <LockedPlaceholder
+            title="Memo 已锁定"
+            hint="隐私锁已锁定，内容、标签与图片都不显示。解锁后即可查看。"
+            onUnlock={onUnlock}
+          />
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="memopanel" aria-label="Memo">

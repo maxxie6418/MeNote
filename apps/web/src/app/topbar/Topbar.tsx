@@ -34,6 +34,11 @@ export interface TopbarProps {
   onFocusSearch: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+  /**
+   * ⑤ 隐私锁胶囊（M3）。**由 `App` 组装后按插槽传入**：顶栏不认识隐私锁状态机，
+   * 未启用时传 `null`（整个槽位不渲染，符合"未启用不显示"）。
+   */
+  privacy?: ReactNode;
 }
 
 export function Topbar({
@@ -48,6 +53,7 @@ export function Topbar({
   onFocusSearch,
   onOpenSettings,
   onLogout,
+  privacy,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -71,7 +77,8 @@ export function Topbar({
           {sync.label}
         </Pill>
 
-        {/* ⑤ 隐私锁胶囊：未启用隐私锁时不显示（M1 恒不显示） */}
+        {/* ⑤ 隐私锁胶囊：由 App 组装后按插槽传入；未启用时为 null */}
+        {privacy}
 
         {/* ⑥ 账户快捷菜单（M2-7：账户头 → 可配置功能项 → 定底设置/退出） */}
         <AccountQuickMenu

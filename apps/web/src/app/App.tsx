@@ -33,15 +33,16 @@ import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { TwoPane } from "./workarea/TwoPane";
 import { HomeView } from "./workarea/HomeView";
+import { MemoView } from "./workarea/MemoView";
+import { TaskView } from "./workarea/TaskView";
 import { SearchView } from "./workarea/SearchView";
-import { MemoPanel } from "../features/memos/ui/MemoPanel";
 import { convertMemoToNote } from "../features/memos/actions";
-import { TaskPanel } from "../features/tasks/ui/TaskPanel";
 import { clearTaskMarker, setTaskStatus } from "../features/tasks/actions";
 import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
 import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
+import { AppUnlockModal, PrivacySlot } from "./PrivacySlot";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -115,11 +116,15 @@ export default function App() {
   /**
    * 隐私锁（M3-4）：材料缓存、门禁状态、档位计时与跨标签一致都在这里；
    * `privacy.gate` 交给各视图（列表、搜索、首页、Memo、编辑器）——判定只此一处。
+   *
+   * 解锁框（M3-9）的开关也放在这一层：顶栏胶囊、Memo/待办占位、单篇加密都指向它。
    */
   const privacy = usePrivacyLock({
     authenticated: auth.snapshot.user != null,
     config: userSettings.settings.privacy,
   });
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const requestUnlock = useCallback(() => setUnlockOpen(true), []);
 
   /** `onLoaded` 里要调 workspace 的方法，但 workspace 在下面才建：用 ref 顶一下 */
   const workspaceRef = useRef<NotesWorkspace | null>(null);
@@ -333,6 +338,7 @@ export default function App() {
               document.getElementById("search-input")?.focus();
             }}
             sync={sync}
+            privacy={<PrivacySlot privacy={privacy} onRequestUnlock={requestUnlock} />}
             onOpenSettings={() => navigate({ name: "settings", page: "general" })}
             onLogout={() => {
               void auth.logout().then(() => navigate({ name: "login" }));
@@ -476,59 +482,47 @@ export default function App() {
           />
         ) : browse === "task" ? (
           /* 待办视图：单栏占满（列表 / 看板由面板内部切换） */
-          <TwoPane
-            listHidden={true}
-            list={null}
-            doc={
-              <TaskPanel
-                tasks={workspace.memos.filter((memo) => memo.is_task === 1)}
-                titles={Object.fromEntries(
-                  Object.entries(workspace.memoContents).map(([id, entry]) => [
-                    id,
-                    taskTitle(entry.content),
-                  ]),
-                )}
-                today={today}
-                onStatusChange={(id, status) => {
-                  void setTaskStatus(id, status).then(() => workspace.refresh());
-                }}                onClearMarker={(id) => {
-                  void clearTaskMarker(id).then(() => workspace.refresh());
-                }}
-              />
-            }
+          <TaskView
+            memos={workspace.memos}
+            contents={workspace.memoContents}
+            today={today}
+            gate={privacy.gate}
+            onUnlock={requestUnlock}
+            onStatusChange={(id, status) => {
+              void setTaskStatus(id, status).then(() => workspace.refresh());
+            }}
+            onClearMarker={(id) => {
+              void clearTaskMarker(id).then(() => workspace.refresh());
+            }}
           />
         ) : browse === "memo" ? (
           /* Memo 视图：单栏占满（时间轴），列表让位 */
-          <TwoPane
-            listHidden={true}
-            list={null}
-            doc={
-              <MemoPanel
-                memos={workspace.memos}
-                contents={workspace.memoContents}
-                timeZone={userSettings.settings.timezone}
-                onSave={(id, text) => {
-                  void workspace.updateMemo(id, text);
-                }}
-                onTogglePinned={(id) => {
-                  void workspace.togglePinned(id);
-                }}
-                onConvert={(id) => {
-                  void convertMemoToNote(id).then(async (noteId) => {
-                    // Q10：新笔记直接打开 —— 回到笔记视图并打开它
-                    setBrowse(null);
-                    await workspace.refresh();
-                    await workspace.open(noteId);
-                    pushToast("已转为笔记", "success");
-                  });
-                }}
-                onOpenConverted={(noteId) => {
-                  setBrowse(null);
-                  void workspace.open(noteId);
-                }}
-                onAdd={focusComposer}
-              />
-            }
+          <MemoView
+            memos={workspace.memos}
+            contents={workspace.memoContents}
+            timeZone={userSettings.settings.timezone}
+            gate={privacy.gate}
+            onUnlock={requestUnlock}
+            onSave={(id, text) => {
+              void workspace.updateMemo(id, text);
+            }}
+            onTogglePinned={(id) => {
+              void workspace.togglePinned(id);
+            }}
+            onConvert={(id) => {
+              void convertMemoToNote(id).then(async (noteId) => {
+                // Q10：新笔记直接打开 —— 回到笔记视图并打开它
+                setBrowse(null);
+                await workspace.refresh();
+                await workspace.open(noteId);
+                pushToast("已转为笔记", "success");
+              });
+            }}
+            onOpenConverted={(noteId) => {
+              setBrowse(null);
+              void workspace.open(noteId);
+            }}
+            onAdd={focusComposer}
           />
         ) : (
           <TwoPane
@@ -587,6 +581,17 @@ export default function App() {
           />
         )}
       </AppShell>
+      {/* 解锁框：顶栏胶囊、Memo/待办占位、单篇加密共用同一个出口（实现见 PrivacySlot.tsx） */}
+      <AppUnlockModal
+        open={unlockOpen}
+        privacy={privacy}
+        settings={userSettings.settings}
+        onClose={() => setUnlockOpen(false)}
+        onForgot={() => {
+          setUnlockOpen(false);
+          navigate({ name: "settings", page: "privacy" });
+        }}
+      />
       <ToastHost />
     </>
   );

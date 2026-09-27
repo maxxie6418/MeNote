@@ -10,6 +10,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { noPrivacyGate, privacyGateFrom } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { MemoPanel } from "../src/features/memos/ui/MemoPanel";
 
@@ -63,6 +64,7 @@ function renderPanel(overrides: Partial<Parameters<typeof MemoPanel>[0]> = {}) {
   const onTogglePinned = vi.fn();
   const onConvert = vi.fn();
   const onOpenConverted = vi.fn();
+  const onUnlock = vi.fn();
   const { container } = render(
     <MemoPanel
       memos={MEMOS}
@@ -70,6 +72,8 @@ function renderPanel(overrides: Partial<Parameters<typeof MemoPanel>[0]> = {}) {
         m1: { content: "今天开会讨论 **方案**", convertedTo: null },
         m2: { content: "- [ ] 买牛奶", convertedTo: null },
       }}
+      gate={noPrivacyGate()}
+      onUnlock={onUnlock}
       onSave={onSave}
       onTogglePinned={onTogglePinned}
       onConvert={onConvert}
@@ -79,7 +83,7 @@ function renderPanel(overrides: Partial<Parameters<typeof MemoPanel>[0]> = {}) {
       {...overrides}
     />,
   );
-  return { container, onAdd, onSave, onTogglePinned, onConvert, onOpenConverted };
+  return { container, onAdd, onSave, onTogglePinned, onConvert, onOpenConverted, onUnlock };
 }
 
 /** 按文本取标签胶囊（无障碍名里带 `#` 与空格，直接按文本更稳） */
@@ -148,6 +152,8 @@ describe("筛选", () => {
       <MemoPanel
         memos={[memo("old", NOW - 40 * DAY)]}
         contents={{ old: { content: "很久以前", convertedTo: null } }}
+        gate={noPrivacyGate()}
+        onUnlock={vi.fn()}
         onSave={vi.fn()}
         onTogglePinned={vi.fn()}
         onConvert={vi.fn()}
@@ -158,6 +164,24 @@ describe("筛选", () => {
     );
     await user.click(screen.getByRole("button", { name: "今天" }));
     expect(screen.queryByText("很久以前")).toBeNull();
+  });
+
+  it("隐私门禁锁定时整屏占位：不显示内容与标签，且「解锁」是活出口（M3-5）", async () => {
+    const user = userEvent.setup();
+    const { container, onUnlock } = renderPanel({
+      gate: privacyGateFrom({ scope: { memo: true }, search_bodies_when_unlocked: true }, "locked"),
+    });
+
+    expect(screen.getByText("Memo 已锁定")).toBeTruthy();
+    // 内容、标签、图片一律不渲染
+    expect(screen.queryByText(/今天开会讨论/)).toBeNull();
+    expect(screen.queryByText("# 工作")).toBeNull();
+    expect(container.querySelectorAll(".memo")).toHaveLength(0);
+    // 计数仍显示（统计口径不变）
+    expect(screen.getByText("2 条")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /解锁/ }));
+    expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 });
 

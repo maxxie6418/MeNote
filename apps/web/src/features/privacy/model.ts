@@ -141,3 +141,22 @@ export function gateFrom(
 export function needsDeviceFlag(runtime: PrivacyRuntime): boolean {
   return runtime.tier === "device" && runtime.lockState === "unlocked";
 }
+
+/**
+ * 输错隐私密码后的**本地等待秒数**：1、2、4、8、16、30 封顶。
+ *
+ * 服务端不参与密码校验，所以这只是界面层面的减速（《隐私锁设计》§4.5）——
+ * 它挡不住有决心的攻击者，但能挡住"边上有人乱试"。
+ */
+export function unlockBackoffSeconds(failures: number): number {
+  if (failures <= 0) return 0;
+  return Math.min(30, 2 ** (failures - 1));
+}
+
+/** 倒计时文案：`4:32`；不足一分钟也给 `0:07` 这种形式（与原型一致） */
+export function formatCountdown(remainingMs: number): string {
+  const total = Math.max(0, Math.floor(remainingMs / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}

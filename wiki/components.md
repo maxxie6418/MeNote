@@ -5,7 +5,7 @@
 | 文档性质 | 前端组件规划：**组件名、所属 feature / 落点、职责、props 约定、复用关系**，以及与界面原型的对应。是架构文档 §2.3.2「功能 → 代码落点对照表」在**组件层**的展开 |
 | 基准 | 需求文档 `wiki/Menote-设计文档-v7.4.md`（下称“需求文档”）；功能点编号与验收看 `wiki/Menote-功能拆解-v2.md`（下称“功能拆解”）；落点、分层与依赖方向看 `wiki/Menote-项目架构-v1.md`（下称“架构”）§2.3、§3.1；视觉与令牌看根目录 `DESIGN.md`（下称“视觉源”） |
 | 主要来源 | 界面原型 `prototype/menote-prototype.html`（高保真）与 `prototype/menote-framework.html`（线框评审页）。引用原型**只写元素名或选择器**（如 `#topAccount`、`.composer`、`.nav-seg`），不写行号——行号随原型改动会失效 |
-| 版本 | v3（文件名 `components.md` 不变，版本在修订记录内演进） |
+| 版本 | v4（文件名 `components.md` 不变，版本在修订记录内演进） |
 | 日期 | 2026-09-27 |
 | 状态 | 首稿。**代码尚未初始化**：组件名与 props 均为**约定名**，实现时如无充分理由不要改名；若实现中发现更合适的拆法，先回报本文再改 |
 | 不包含 | 颜色 / 字号 / 间距 / 圆角 / 阴影的具体数值（归 `DESIGN.md`，本文只写“走令牌”，不复制令牌值）；接口、表结构、同步算法（归架构文档）；功能规则与验收口径（归需求文档与功能拆解） |
@@ -27,6 +27,7 @@
 | v1 | 2026-09-26 | 首稿。以原型已落地的组件为主体（第四至九章），附通用控件库与映射矩阵，并单列预留组件（第十二章） |
 | v2 | 2026-09-26 | M2 收口回写【已定·用户确认 2026-09-26】：新增第十四章「M2 落地后的组件与收敛记录」——列出 M2 实际新增的组件（含实现名与落点）、五处**文档与实现不一致**的收敛去向（`Placeholder`→`EmptyState`、`Menu`→`DropdownMenu`、`Button.secondary`、`Pill.err`、`SegmentedControl` 未抽共享件），以及两项**已知未实现**（锚点自动上翻、共享 `SegmentedControl`） |
 | v3 | 2026-09-27 | 隐私锁设计 v1.3 回写【已定·用户确认 2026-09-27】：①`TierMenu` 改**三档**（本次会话 / N 分钟 / 当前设备长期）并删「仅本次查看」；②`PrivacyCapsule` **状态映射去掉「仅本次查看」**，三档显示口径按设计 §9.2（N 分钟带倒计时、本次会话显示「已解锁 · 本次会话」、当前设备长期用 danger 色 + 「本设备始终解锁」）；③把原型里两份形态相同的 `MemoLockedPlaceholder` / `TaskLockedPlaceholder` 记为**收敛为一个 `LockedPlaceholder`**（§14.2 收敛表新增第 6 条）；④账户快捷菜单账户头由两行改**三行**（用户名 / 角色 · 实例 / 版本号 `MeNote vX.Y.Z`，后两行复用 `.acct__sub`），并补设置新增的第 11 个分类页「**关于**」（版本号 + 项目 GitHub 地址链接）。（应用版本 v0.3.2；修改模型ID：deepseek-v4.1-flash） |
+| v4 | 2026-09-27 | M4 收口回写【已定·用户确认 2026-09-27（授权两点之一，M4 设计 §九 第 8 行）】：新增第十五章「M4 落地后的组件与收敛记录」——①**M4 实际新增的组件**（实现名 + 落点 + props，含表格六个、版本两个、回收站两个）；②**界面稿 §十一 约定的 11 个组件逐条对账**：4 个按代码回写（props 名/形态有差，差异与理由逐条写）、**7 个"未独立成组件"**（职责落在既有组件里，拆出去会引入共享状态或空壳）；③**§十二 预留表的处置**：`VersionHistoryPanel` / `VersionDiff` / `TableColumnManager` / `AttachmentUploader` 等已实现的行标「M4 已实现，见 §15」；④**已知未实现 6 条**（拖动柄、标签 chip 编辑、自动降级提示条、版本列表"已保留 N 个"、附件引用集合对齐、`ConfirmDialog`/`InfoHint` 未做）；⑤明确 **`media.worker` 落点已删除**（缩略图浏览器端生成）。（应用版本 v0.5.0；修改模型ID：deepseek-v4.1-flash） |
 
 ---
 
@@ -552,22 +553,22 @@ AppShell                                    app/
 | `ShareViewer` | `features/share-viewer/` | 分享查看器，**独立入口加载**（`share.html`），不挂主应用外壳 | M14-05（§16.1） |
 | `ShareCreateDialog` / `ShareManageList` | `features/` | 创建分享（密码、过期）、管理我的分享、撤销 | M14-01、M14-03、M14-04（§16.1、§7.5） |
 | `MemoCollectionShare` | `features/` | Memo 固定合集分享（条目在创建时固定） | M14-02（§16.1） |
-| `VersionHistoryPanel` / `VersionDiff` | `features/versions/` | 版本列表、查看与对比、恢复、标记为「保留」 | M11-01~M11-05（§12.2–§12.4、§7.1） |
+| `VersionHistoryPanel` / `VersionDiff` | `features/versions/` | 版本列表、查看与对比、恢复、标记为「保留」 | M11-01~M11-05（§12.2–§12.4、§7.1）**【M4 已实现，形态与 props 见 §15.1】** |
 | `RetentionPolicyForm` | `features/settings/ui/` | 版本保留策略设置（原型只有静态文案 + 「调整」按钮） | M11-06（§12.3） |
 | `BackupRestoreFlow` | `features/backup/` | 从备份恢复的流程（选择目标 → 预检 → 执行 → 报告） | M16-04（§16.3） |
 | `BackupTargetForm` | `features/backup/` | 备份目标的新增 / 编辑（原型只有已配置好的卡片） | M16-01、M16-02、M16-03（§16.3） |
 | `EnvelopeDecryptGuide` | `features/backup/` | 备份导出信封的外部解密工具说明 | 架构 §7.3 |
 | `McpTokenCreateDialog` / `McpTokenDetail` / `McpAuditLog` | `features/settings/ui/` | 令牌创建（完整值**只显示一次**）、范围与权限、审计日志 | M17-01、M17-02、M17-03（§17.2、§17.3） |
-| `AttachmentUploader` / `AttachmentPreview` / `AttachmentGrid` | `features/attachments/` | 上传（哈希去重、缩略图在 `media.worker`）、预览、附件管理 | M10-01、M10-02、M10-03（§14） |
+| `AttachmentUploader` / `AttachmentPreview` / `AttachmentGrid` | `features/attachments/` | 上传（哈希去重、**缩略图在浏览器端生成**）、预览、附件管理 | M10-01、M10-02、M10-03（§14）**【M4 已实现上传与预览：`upload.ts` / `thumbnail.ts` / `queue.ts` / `model.ts`；附件管理页留 M6，见 §15.3】** |
 | `OrphanScanResult` | `features/settings/ui/` | 孤儿附件扫描结果清单与清理确认 | M10-03（§14.3） |
 | `ConflictBadge` / `ConflictCopyNotice` | `data/sync/` 的展示层 | 「冲突」状态的标记与冲突副本提示 | M13-04（§15.5） |
 | `OfflineBanner` | `app/topbar/` | 离线横幅「离线，改动会在联网后上传」 | M02-06（§15.3） |
 | `UpdateNotice` | `app/` | 「有新版本」提示，下次打开生效；只推送给 `owner` | M19-04（§21.1 第 11 条、§15.6） |
-| `TableColumnManager` / `FieldTypePicker` / `FilterBar` / `SortBar` | `features/tables/ui/` | 列管理（新建列、十种字段类型选择）、筛选与排序 UI | M05-02、M05-03、M05-07（§10.2、§10.4、§10.7） |
-| `ImageCell` / `CellEditor` | `features/tables/ui/` | 图片附件单元格、各字段类型的行内编辑器 | M05-05、M05-06、M05-09（§10.5、§10.7） |
+| `TableColumnManager` / `FieldTypePicker` / `FilterBar` / `SortBar` | `features/tables/ui/` | 列管理（新建列、十种字段类型选择）、筛选与排序 UI | M05-02、M05-03、M05-07（§10.2、§10.4、§10.7）**【M4 已实现 `TableColumnManager` 与合并后的 `TableFilterBar`；`FieldTypePicker` / `FilterBar` / `SortBar` 未独立成组件，见 §15.2】** |
+| `ImageCell` / `CellEditor` | `features/tables/ui/` | 图片附件单元格、各字段类型的行内编辑器 | M05-05、M05-06、M05-09（§10.5、§10.7）**【M4 未独立成组件：行内编辑在 `TableGrid`（表格级状态），图片列按文件名渲染，见 §15.2】** |
 | `TagManager` | `features/settings/ui/` | 标签重命名 / 合并 / 删除 | M04-06（§7.1） |
 | `MoveToFolderDialog` | `app/ui/` | 「移动到…」对话框（含移入加密空间；超三层置灰） | M03-04、M08-09、M08-10（§4.5、§6.11） |
-| `ConfirmDialog` | `app/ui/` | 通用确认框（删除文件夹写明「N 条内容、M 个子文件夹将移入回收站」；破坏性操作必须可见说明） | M03-05、M12-01（AGENTS.md「警告必须保持可见」） |
+| `ConfirmDialog` | `app/ui/` | 通用确认框（删除文件夹写明「N 条内容、M 个子文件夹将移入回收站」；破坏性操作必须可见说明） | M03-05、M12-01（AGENTS.md「警告必须保持可见」）**【M4 未做：一律用 `Modal` + danger `Button`，见 §15.2】** |
 | `BatchMarkBar` | `app/ui/` | 批量标记操作条（元数据操作，锁定时可执行） | M08-11（§6.4 修订） |
 | `ExportDialog` | `features/` | 单篇导出 / 按条件导出 / 全量 ZIP（含隐私规则提示） | M15-01~M15-03（§16.2、§6.10） |
 | `TimeZonePicker` | `features/settings/ui/` | 时区选择（原型只有 `KeyCap` + 「修改」按钮） | M02-04（§7.5、§8.4） |
@@ -626,3 +627,70 @@ AppShell                                    app/
 3. **`search.worker.ts`**：本地搜索索引在 `data/db/search.ts`（按 `sync_seq` 增量），检索在 `features/search/model.ts` 纯函数里；Worker 化未做（M2 已知偏离，接口不变）。
 
 > 三项均为**实现侧待办**，不影响本文其余契约；做完后回写本节并去掉对应条目。
+
+---
+
+## 十五、M4 落地后的组件与收敛记录【M4 收口回写】
+
+本章按实现回写（**实现名优先**，同 §十四）。落点全部对得上架构 §2.3.2（v1.13）。
+
+### 15.1 M4 实际新增的组件（实现名 + 落点 + props）
+
+| 组件 | 落点 | 职责（一句话） | 关键 props / 契约 |
+|---|---|---|---|
+| `TableEditor` | `features/tables/ui/` | 表格文档的装配（工具栏 + 网格 / 图册 + 状态条） | `title?` / `doc` / `onDocChange` / `onRequestDegrade` / `onCopyRow?` / `encrypted?` |
+| `TableGrid` | `features/tables/ui/` | 表格网格：单元格编辑、列头菜单、行菜单、虚拟滚动、键盘导航 | `state` / `rows` / `columns` / `editing` / `onEditingChange` / `onCellChange` / `onSortChange` / `onOpenColumnPanel` / `onInsertRow` / `onDeleteRow` / `onMoveRow` / `emptyAction?` |
+| `GalleryView` | `features/tables/ui/` | 图册（卡片网格）+ 卡片详情 | `doc` / `columns` / `onCellChange` / `onBackToTable` |
+| `TableToolbar` | `features/tables/ui/` | 表格 / 图册分段切换 + 新增行 + 筛选入口 + "筛选后 N / M 行" | `view` / `onViewChange` / `galleryAvailable` / `onRequestImageColumn` / `onAddRow` / `showAddRow?` / `filterOpen` / `onToggleFilter` / `activeFilterCount` / `filteredCount` / `totalCount` |
+| `TableFilterBar` | `features/tables/ui/` | 按列筛选（纯本地，关闭即重置）+ 显示当前排序 | `columns` / `filters` / `onChange` / `onClearAll` / `sort`（**合并了原登记的 `FilterBar` / `SortBar`**） |
+| `TableColumnManager` | `features/tables/ui/` | 列定义面板（新建 / 编辑两态），含十种类型单选与 `_id` 列开关 | `open` / `mode: "create" \| "edit"` / `doc` / `onConfirm` / `onCancel` |
+| `TableSizeBar` | `features/tables/ui/` | 表格大小与提示（软 / 硬上限、拆分与复制行出口） | `size` / `hints` / `rows` / `columns` / `onSplit?` / `onCopyRow?` |
+| `useVirtualWindow` | `features/tables/ui/` | 大表格的窗口化渲染（超过阈值才启用） | hook：`VIRTUAL_ROW_THRESHOLD = 100` / `DEFAULT_ROW_HEIGHT = 36` |
+| `VersionHistoryPanel` | `features/versions/ui/` | 版本历史**独立面板页**：列表 / 对比 / 恢复 / 存为版本 | `itemTitle` / `rows` / `loading?` / `bodyLoading?` / `bodies` / `currentBody` / `busy?` / `onClose` / `onSeal` / `onRestore` / `onToggleKeep` / `onOpenVersion` |
+| `VersionDiff` | `features/versions/ui/` | 行级 diff（`+/-` 前缀文字 + 颜色，两版标题与摘要） | `leftTitle` / `rightTitle` / `result: DiffResult` |
+| `TrashPage` | `features/trash/ui/` | 回收站独立页：多选、恢复、永久删除、清空、进度与失败清单 | `rows` / `selected` / `onToggleSelect` / `onSelectAll` / `onRestore` / `onPurge` / `onEmpty` / `progress?` / `failures?` / `onRetry?` / `offline?` / `onBackToSettings` |
+| `PurgeConfirmDialog` | `features/trash/ui/` | 永久删除 / 清空的确认框（写明不可撤销与影响数量） | `open` / `count` / `kind: "purge" \| "empty"` / `onCancel` / `onConfirm` |
+
+**既有组件在 M4 的扩展**（不是新组件，但契约变了，一并登记）：
+
+| 组件 | 扩展 |
+|---|---|
+| `Editor`（`app/editor/`） | 新增 `onFiles?(files)`（粘贴 / 拖入文件交给上层，编辑器不关心怎么传）与 `onReady?(handle)`——句柄从"读正文的函数"升级为 `{ read, insert, replace }`（附件占位与最终片段要靠它改正文）；拖入时加 `.editor--drop` 虚线描边 |
+| `MarkdownPreview`（`app/editor/`） | 新增 `attachments?`（`sha256 -> { size, hasThumb }`）：补附件大小、标"附件不可用"、图片加 `loading="lazy"` |
+| `DocStatusBar`（`features/notes/ui/`） | 新增 `attachments?: { label, tone, onRetry? }`——上传进度与失败落在**既有**状态栏（界面稿 §7.2 明确不新增第二条） |
+| `NoteWorkspace`（`features/notes/ui/`） | 新增 `onOpenVersions` / `versionsDisabledReason`（锁定态入口整体不可用并说明原因）、`attachments` / `onFiles` / `attachmentsMeta` / `onEditorReady` |
+| `SettingsPanel`（`features/settings/ui/`） | 新增 `versionsPage` 插槽（与 `privacyPage` 同一套接法）与 `onBackToNotes`（设置是独立页，需要可见出口） |
+| `NotebookPanel`（`features/notes/ui/`） | 新增 `onDeleteFolder`（确认框写**实时计数**：N 条内容 / M 个子文件夹） |
+| `NoteList`（`features/notes/ui/`） | 新增 `notice` 面板提示（删除后的「撤销」放在这里——`DESIGN.md` §6.6 禁止轻提示承载需要行动的信息） |
+| `MemoItem` / `MemoTimeline` / `MemoPanel`（`features/memos/ui/`） | 新增 `onDelete`（Memo 删除入口，确认框写明"已转出的笔记不受影响"） |
+
+### 15.2 界面稿 §十一 约定的 11 个组件：逐条对账
+
+| # | 约定名 | 判定 | 落地情况 |
+|---|---|---|---|
+| 1 | `TableToolbar` | 🟡 按代码回写 | 见 §15.1；`mode`→`view`、`galleryDisabled`+原因 → `galleryAvailable` + `onRequestImageColumn`（不可用时点它去**加图片列**，比只置灰更给出口） |
+| 2 | `TableColumnManager` | 🟡 按代码回写 | 传整份 `doc`（面板改的不只 columns）；`onSubmit`→`onConfirm`；`parseFailCount` 由 `doc` 内部算 |
+| 3 | `FieldTypePicker` | ❌ 未独立 | 十种类型是列面板的**内部一块**（`TYPE_OPTIONS` + 原生 `radio` + 每项一行说明）。`disabledTypes` 未做（当前没有需要禁用的类型） |
+| 4 | `TableFilterBar` | 🟡 按代码回写 | 已按建议**合并**原 `FilterBar` / `SortBar`；`rules`→`filters`、`onClear`→`onClearAll`；`onSortChange` **不在**此组件（排序从列头菜单进，筛选条只显示当前排序） |
+| 5 | `CellEditor` | ❌ 未独立 | 行内编辑是**表格级状态**（同一时刻只有一个格子进入编辑），拆组件要把"谁在编辑"提升成共享状态 |
+| 6 | `ImageCell` | ❌ 未独立 | 图片列按文件名渲染，图册卡片由 `GalleryView` 画；`onRemoveRef` **M4 未提供入口**（见 §15.3-5） |
+| 7 | `RowDragHandle` | ❌ 未独立 | 行移动是 `TableGrid.onMoveRow(rowId, offset)` + 行菜单；**拖动柄未做**，但键盘/菜单等价入口已满足界面稿 §12-4 的底线 |
+| 8 | `TableDowngradeNotice` | ❌ 未独立 | 降级入口在 `TableEditor` 的「更多」菜单；**"自动降级提示条"未做**（解析失败时就地提示 + 手动降级） |
+| 9 | `VersionRestoreConfirm` | ❌ 未独立 | 确认框在 `VersionHistoryPanel` 内用 `Modal`；**文案是纯函数** `restoreConfirmText(row)`（三段，有单测），比写死在组件里更可测 |
+| 10 | `TrashRow` | ❌ 未独立 | `TrashPage` 接收 `rows: TrashRowModel[]`（含剩余天数与锁定占位），行在页面内渲染——"显示什么"已抽成模型，组件层只剩排版 |
+| 11 | `AttachmentOutboxRow` | ❌ 未独立 | 落在 `DocStatusBar.attachments`——界面稿 §7.2 的硬要求就是**不新增第二条状态栏**，所以它本来就该是状态栏的一块 |
+
+> **结论**：4 项按代码回写、7 项按"未独立成组件"登记。**登记一份不存在的组件清单比不登记更糟**——需要组件化时再抽（触发条件是"第二处也要用它"，见 §十三 第 6 条）。
+
+**同批的三处订正**：①`AttachmentUploader` 职责里的"缩略图在 `media.worker`"已改为**浏览器端生成**（`features/attachments/thumbnail.ts`），`media.worker` 落点删除；②`ConfirmDialog` / `InfoHint` **M4 未做**（确认框统一用 `Modal` + danger `Button`，说明文字用可见的 `hint-line`）——**不标"实做"**；③`TableColumnManager` 的 props 定稿（按本节），`FieldTypePicker` / `CellEditor` / `ImageCell` 标"未独立"。
+
+### 15.3 已知未实现（M4，登记在案）
+
+1. **列拖动调序**（`RowDragHandle`）：只有行菜单与箭头的等价入口；列调序同理（箭头）。
+2. **标签列的 chip 编辑**：暂用逗号分隔输入（标签仍按数组存）。
+3. **自动降级提示条**（`TableDowngradeNotice` 的自动态）：只有解析失败时的就地提示与手动降级入口。
+4. **版本列表页脚的"已保留 N 个"**：保留标记在行上可见（`Chip` "保留"），未做页脚汇总。
+5. **附件引用的集合对齐**：引用只在 `finalize(itemId)` 时落一条；"保存正文时对齐引用集合"要改 `PUT /api/items/:id/body` 的请求结构，留 M6 与附件管理页一起做（期间由孤儿 30 天规则兜底）。
+6. **`Drawer` 与 `InfoHint`**：图册卡片详情与版本历史用 `Modal` / 独立面板页替代；说明文字用可见 `hint-line`。
+
+> 六条均为**实现侧待办**，做完后回写本节。第 5 条还牵扯接口结构，**需用户点头**后才动。

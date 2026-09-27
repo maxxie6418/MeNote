@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1.10（草案修订，待用户审核） |
-| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.10 修订） |
+| 文档版本 | v1.12（草案修订，待用户审核） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 修订）** |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
@@ -24,6 +24,7 @@
 | v1.9 | 2026-09-26 | M1 开工前同步【已定·用户确认 2026-09-26】：①§15.4/§15.5 迁移机制统一为**运行时自愈**，删除部署脚本里的 `wrangler d1 migrations apply` 写法（该命令在全新账户上会因查不到库而失败、且对 Workers Builds 通道无效）；②§5.1 建表改指向新隐私模型权威 DDL（`docs/modules/Menote-数据模型与迁移设计-v1.md` §3，需求 18.2 原文勿直接照抄）；③§6.1/§6.3 清理 v1.0 遗留（拉取实体清单里的“数据密钥”、outbox 的 `key` 实体）；④§15.5 机密清单删 `SESSION_SECRET`（会话令牌随机 256 位、库里只存 SHA-256，不需要服务端密钥）；⑤§2.3.2 补落点行（`/api/health`、`services/auth.ts`、`/api/admin/*` 归 `routes/settings.ts`）并在目录树补 `middleware/`；⑥表头文档版本由 v1.1 更正为 v1.9 |
 | v1.10 | 2026-09-26 | M1 收口回写【已定·用户确认 2026-09-26】：①§15.5 **删除 `wrangler.jsonc` 的 `"secrets": { "required": [...] }` 写法**——实测它是 deploy 硬门禁（机密未设即部署失败，而首次部署时 Worker 不存在、无法先设机密，等于堵死一键部署）；改为「Dashboard / `wrangler secret put` 设机密 + 运行时 `middleware/config-guard.ts` fail-closed（缺机密返回 503 并说明缺哪项）」；②§6.x `prelogin` 行补全确定盐口径（`HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:" + 用户名小写)[0..16]`，注册与改密沿用同一个盐，否则注册/改密后立即登不进去；附带收益是不泄露用户名是否存在），并补公开接口 `GET /api/auth/registration-state`（不受机密缺失影响）；③§2.3 目录树 `middleware/` 注释补 `config-guard` |
 | v1.11 | 2026-09-26 | M2 收口回写【已定·用户确认 2026-09-26】：①§2.3.2 Worker 侧补落点——`POST /api/batch`（`routes/items.ts` + `services/batch.ts`）、搜索兜底 `GET /api/search`（`routes/search.ts` + `services/search.ts`）、用户级设置 `GET/PUT /api/settings` 归 `routes/settings.ts`、迁移目录注明 0001 建表与 0002 任务字段约束触发器，并在同步行注明响应另带 `user_settings` 且**不参与游标**；②§2.3.2 Web 侧补落点——`data/sync/`（含 broadcast）与 `data/db/`（含 search / settings / conflicts）不属任何 feature、`features/notes/` 含文件夹与冲突处理、各 feature 的 `model.ts`/`actions.ts` 分工、搜索的 `useSearch.ts`，并**订正**「索引在 `workers/search.worker.ts`」为本地增量索引 `data/db/search.ts`（Worker 化未做，属 M2 已知偏离）、补 `packages/mdcore/` 一行；③`app/` 落点写明子目录（`ui/`、`fnbar/`、`topbar/`、`workarea/`、`theme/`） |
+| v1.12 | 2026-09-27 | 隐私锁设计 v1.3 回写【已定·用户确认 2026-09-27】：①**§7.1 门禁模型**补**隐私范围**（加密空间＝默认成员、恒在范围内、不可移出；Memo 及衍生的待办＝可配置开关、默认加入；另留扩展位）与**单篇加密＝与隐私锁正交的独立门禁**（逐篇解密、时效本次浏览器会话、可手动锁上），档位由四档改**三档**（本次会话 / N 分钟 / 当前设备长期）并删「仅本次查看」，补**统计计数一律计入全部隐私内容、不因锁定改变**与「空间内条目解锁期间进入最近编辑/收藏/标签、重锁即隐藏」；②**§7.2 / §5.1** 写入 `user_crypto` **权威列定义**与 BLOB 打包约定（`版本(1B) \|\| IV(12B) \|\| 密文 \|\| GCM 标签(16B)`、verifier 明文常量 `menote-verifier-v1`、迭代 600000、盐 16B、两份包裹的明文均为 32 字节 K）、**不加 `sync_seq`** 与四个专用端点（`GET/PUT /api/crypto`、`POST /api/crypto/reset`、`DELETE /api/crypto` 关闭时校验无隐私内容含回收站）；③**§7.5** 本地搜索索引口径改为「**标题（+标签）与正文分两段索引 + 查询时按门禁过滤**」，补**两套标识**（隐私锁态 / 单篇加密态）与本模型下**不再需要** `visibilitychange` 锁屏、SharedWorker、持久化 CryptoKey、撤销 `blob:`；④**§11 MCP** 补不变式 **I1/I2**（可见集合口径、与隐私锁状态无关；界面矩阵与 MCP 矩阵互不联动）与「条目数不含隐私内容、空间节点不进 MCP 文件夹树」；⑤**§12.4 / §13.2 / §15.5** `BACKUP_CRED_KEY` **由 M5 提前到 M3** 并注明派生（`SHA-256(机密字节)`）与轮换风险（换机密后需在解锁态重新包裹一次 K）。（应用版本 v0.3.2；修改模型ID：deepseek-v4.1-flash） |
 
 ### 标注约定
 
@@ -457,7 +458,7 @@ flowchart LR
 | 新增 `tombstones` 表 | 需求 15.2 用 `deleted_at` 表示删除，但永久删除（14.4）会删掉 `items` 行，其他设备的增量同步收不到“已删除”信号，本地会残留条目 | `(user_id, entity, entity_id, sync_seq, deleted_at)`，索引 `(user_id, sync_seq)`；保留 180 天，过期清理 |
 | `users` 增加 `tombstone_floor` | 墓碑清理后，游标早于清理点的设备必须全量重同步 | 整数：已清理墓碑中最大的 `sync_seq`；客户端游标小于它时触发全量重建 |
 | 新增 `r2_gc_queue` 表 | 需求 14.4“登记待清理的 R2 对象，由 Cron 分批删除”，DDL 中没有这张表 | `(r2_key PRIMARY KEY, reason, due_at)`；也用作上传意图登记（见 5.3） |
-| `user_crypto`、`user_settings`、`attachments` 增加 `sync_seq` | 需求 15.2 只列了条目和文件夹的增量同步；设置与附件元数据也需要在多设备间同步（v1.1：`data_keys` 表废弃，`user_crypto` 改存 verifier 与 K 的两份包裹，见 7.2） | 各加 `sync_seq` 列与 `(user_id, sync_seq)` 索引 |
+| `user_settings`、`attachments` 增加 `sync_seq` | 需求 15.2 只列了条目和文件夹的增量同步；设置与附件元数据也需要在多设备间同步（v1.1：`data_keys` 表废弃，`user_crypto` 改存 verifier 与 K 的两份包裹，见 7.2） | 各加 `sync_seq` 列与 `(user_id, sync_seq)` 索引。**`user_crypto` 不加 `sync_seq`**：门禁材料不参与增量同步，走 7.2 的四个专用端点 |
 | `attachment_refs` 增加版本引用 | 需求 14.3 规定“保留中的历史版本”引用的附件不算孤儿，但 `attachment_refs` 只记录条目引用 | 增加 `version_id` 列（NULL 表示当前稿引用），主键改为 `(item_id, version_id, attachment_id)` 的等价唯一约束 |
 | 新增 `rate_counters` 表（条件启用） | 需求 17.3：Rate Limiting 绑定在免费版不可用时，用 D1 按分钟计数 | `(key, window_start, count)`；可用绑定时不建 |
 | `items` 增加 `last_edit_at`、`last_device` | 需求 12.2-3 的“跨会话”判断需要知道上次编辑时间与设备 | 两列，随正文保存写入（同一条 UPDATE，不增加行写入） |
@@ -568,10 +569,16 @@ sequenceDiagram
 
 ### 7.1 门禁模型【已定·用户确认 2026-09-26】
 
+- **两层门禁，互不替代**：①**范围门禁（隐私锁）**——一次解锁覆盖整个**隐私范围**；②**单篇门禁（单篇加密）**——`enc_self = 1` 条目**逐篇**解密，与隐私锁**正交**（解锁隐私锁不解开它，锁定隐私锁也不清它已解密的篇目），时效为**本次浏览器会话**，可手动锁上（本篇 / 全部单篇）。
+- **隐私范围**＝一份**类别清单**（不是一个容器），决定范围门禁覆盖谁：
+  - **加密空间**（含空间内文件夹与条目）：**默认成员、恒在范围内、不可移出**——它是范围的本体（`folders.is_enc_space = 1` / `items.in_enc_space = 1`）；
+  - **Memo 及由其衍生的待办**（清单视图 / 看板）：**可配置开关，默认加入**，一个开关管两者（账户级设置项 `privacy.scope.memo`）；
+  - **预留后续扩展位**：新类别须是可枚举的内容类别、且其锁定表现能在界面上明确表达（占位 / 隐藏 / 收起三选一），逐个加入。
 - 隐私空间条目与单篇“设为隐私”的条目在存储、传输、同步、版本、回收站全链路均为**明文**，仅携带标记：`in_enc_space = 1` 或 `enc_self = 1`（字段名沿用需求 DDL，不改名）。
-- 标记的变更（移入 / 移出 / 开启 / 取消）是普通元数据操作，**不需要任何密钥**：锁定时移入隐私空间（M08-09）由此天然成立，一条 `PATCH /api/items/:id/meta` 即可，条件写与冲突处理沿用第六章。
-- 门禁是纯前端行为，规则沿用需求 6.9 / 8.9：锁定时占位、不计入统计、搜索过滤、禁止分享。Memo 隐私浏览与本模型同构。
-- 解锁档位（仅本次查看 / N 分钟 / 本次浏览器会话 / 当前设备长期）只是“门禁保持打开时长”的四种选择，实现为本地状态（含“当前设备长期”的持久标志），不再涉及密钥保管，也不依赖 SharedWorker（v1 附录 #4、#7 作废）。
+- 标记的变更（移入 / 移出 / 开启 / 取消）与范围配置的变更都是普通元数据操作，**不需要任何密钥**：锁定时移入隐私空间（M08-09）由此天然成立，一条 `PATCH /api/items/:id/meta` 即可，条件写与冲突处理沿用第六章。
+- 门禁是纯前端行为，规则沿用需求 6.9 / 8.9：锁定时占位或从列表消失、搜索按门禁过滤、禁止分享。**统计计数不受门禁影响**：首页统计卡片、导航节点、文件夹树、标签云等一切“某集合有多少条”的展示**一律计入全部隐私内容**（空间内条目、范围内的 Memo 与待办、单篇加密条目），**不因锁定 / 解锁改变**（口径与已知后果见 `docs/modules/Menote-隐私锁设计-v1.md` §4.7）。
+- **空间内条目在解锁期间进入最近编辑、收藏、标签视图**（含标签筛选），**重锁即隐藏**。Memo 隐私浏览与本模型同构。
+- 解锁档位为**三档**（**本次会话** / **N 分钟**无操作（默认 5，可选 1/5/15/30/60）/ **当前设备长期**），只是“门禁保持打开时长”的三种选择，实现为本地状态（含“当前设备长期”的持久标志），不再涉及密钥保管，也不依赖 SharedWorker（v1 附录 #4、#7 作废）。原“仅本次查看”档与“标签页隐藏即锁”**已作废**（四档改三档，2026-09-27）。
 - 解锁 = 输入隐私密码，浏览器本地校验（对照服务端存的 verifier）通过后打开门禁；输入错误的代价只是进不了门禁。
 
 ### 7.2 隐私密码与密钥材料【已定·用户确认 2026-09-26】
@@ -586,6 +593,32 @@ sequenceDiagram
 - 修改隐私密码 = 浏览器用旧密码解包 K → 新密码重包裹，同步更新 verifier；K 本身不变，历史备份文件仍可用**当时的口令**解开（文件头自带当时的 KDF 参数与 K 包裹块）。
 - 忘记隐私密码：已登录状态下可重置——Worker 用 `BACKUP_CRED_KEY` 解出 K 交浏览器按新密码重包裹，并更新 verifier。界面明示“该重置说明隐私密码不防御账号持有者”（与保护边界一致）【架构定】。
 - 恢复码机制取消（其原本服务的是主钥恢复场景，本模型不存在主钥）。
+
+**`user_crypto` 权威列定义**（权威 DDL 与迁移 `0003_user_crypto` 见 `docs/modules/Menote-隐私锁设计-v1.md` §4）：
+
+| 列 | 类型 / 约束 | 说明 |
+|---|---|---|
+| `user_id` | TEXT **PRIMARY KEY** | 每账户一行 |
+| `kdf` | TEXT NOT NULL，CHECK 仅 `'PBKDF2-SHA-256'` | 算法标识，将来换算法不改表 |
+| `kdf_iterations` | INTEGER NOT NULL，CHECK 100000–2000000 | 当前 **600000** |
+| `kdf_salt` | BLOB NOT NULL | **16 字节**（裸值，不套信封） |
+| `verifier` | BLOB NOT NULL | 明文为**常量** `menote-verifier-v1` |
+| `k_wrapped_pw` | BLOB NOT NULL | `AES-GCM(KEK, K)`，供外部解密工具 |
+| `k_wrapped_backup` | BLOB NOT NULL | `AES-GCM(BACKUP_CRED_KEY, K)`，供 Worker（见 12.4） |
+| `rev` | INTEGER NOT NULL DEFAULT 1 | 后写为准递增；本地缓存按它检测失效 |
+| `created_at` / `updated_at` | INTEGER NOT NULL | 时间戳 |
+
+- **BLOB 打包约定**（自带版本号，将来换算法不用改表）：`版本(1B) || IV(12B) || 密文 || GCM 标签(16B)`；两份包裹的明文都是 **32 字节内容密钥 K**。不存明文 K、KEK、隐私密码或其裸哈希（verifier 除外）。
+- **不加 `sync_seq`**：门禁材料**不参与增量同步**（第六章的同步协议不变，M3 不改 M1 的同步载荷），改走**专用端点**：
+
+| 端点 | 用途 |
+|---|---|
+| `GET /api/crypto` | 取门禁材料（`enabled` / `kdf` / 迭代 / 盐 / verifier / 两个包裹 / `rev`，二进制一律 base64）；需会话鉴权，`Cache-Control: no-store` |
+| `PUT /api/crypto` | 启用 / 改密 / 重置后写入全部字段；后写为准，`rev + 1`；响应不回显材料 |
+| `POST /api/crypto/reset` | 忘记隐私密码：服务端用 `BACKUP_CRED_KEY` 解包 K 并返回明文 K（base64），浏览器用完即弃；`no-store`，**不得写入日志或审计正文** |
+| `DELETE /api/crypto` | 关闭隐私锁；服务端**校验“无隐私内容”**（`enc_self = 1 OR in_enc_space = 1` 的条数 > 0，**含回收站中的条目**）→ 409 并返回原因 |
+
+- `BACKUP_CRED_KEY` 的派生：`SHA-256(机密字节)` → **32 字节 AES-GCM 密钥**（避免 base64 解码差异）；启用时机（由 M5 提前到 M3）与轮换风险见 12.4。
 
 ### 7.3 备份导出信封格式【已定·用户确认 2026-09-26】
 
@@ -614,8 +647,10 @@ sequenceDiagram
 
 ### 7.5 门禁的界面落点【依需求 6.8 / 6.9 / 8.9】
 
+- **两套标识必须能分辨**：**隐私锁态**（范围门禁：顶栏胶囊含倒计时、侧边栏空间节点、Memo 与待办的锁定占位）与**单篇加密态**（逐篇门禁：列表行锁标识、编辑器标题旁锁胶囊、正文区锁定占位）。两者可同时出现且必须同时可见，不得用同一处标识表达两种状态（逐处映射与文案见 `docs/modules/Menote-隐私锁设计-v1.md` §9）。
+- **本地搜索索引分两段**：`title_text`（标题 + 标签）与 `body_text`（正文）各自建索引，**覆盖全部未删除条目（含隐私条目）**；**查询时按门禁过滤**——标题与正文的命中规则不同：单篇加密条目的**标题任何状态可搜**、正文仅该篇已解密后可搜；空间内条目的标题与正文均需解锁，正文还受「解锁时可搜索加密内容」开关约束。M2 的“加密条目不进索引 + 锁定时过滤”写法随之作废（需求 6.10、8.9）。
 - 锁定清理大幅简化：无密钥可清除、无 `blob:` 地址需撤销；锁定 = 门禁状态切换 + 关闭明文视图，未保存改动照常写入 outbox（需求 6.8 的清理清单缩减为界面项）。
-- 本地搜索索引包含隐私条目明文（与 Memo 同级，属已确认边界）；锁定时查询结果过滤 `in_enc_space = 1 OR enc_self = 1` 的条目与 Memo（需求 6.10、8.9）。
+- **本模型下不再需要**：不监听 `visibilitychange` / `pagehide` 做锁定（“标签页隐藏即锁”已作废，这两个事件不承担门禁语义）；不需要 SharedWorker、不需要持久化不可导出的 CryptoKey、不需要撤销 `blob:` 地址。
 - 原 v1 的 7.1–7.4（密钥库组件、数据密钥 AAD、批量转换阶段）作废；`convertJobs`、`deviceKey`、`dataKeys` 相关存储删除（见 3.2）。
 
 ---
@@ -687,6 +722,9 @@ sequenceDiagram
 - 协议：无状态 JSON-RPC，支持 `initialize`、`notifications/initialized`（返回 202）、`ping`、`tools/list`、`tools/call`。工具的 JSON Schema 在构建时生成静态常量，运行时不做 schema 编译。
 - 每次调用的处理顺序：令牌哈希查询（SHA-256 由 WebCrypto 计算）、过期与撤销检查、限速、权限位检查、范围过滤、执行、审计与幂等记录（与写入在同一个 batch 中）。`last_used_at` 最多每 10 分钟写一次。
 - 范围过滤作为每条查询的固定 SQL 片段：`enc_self = 0 AND in_enc_space = 0`（加密内容不可见，需求 6.13）；文件夹范围用 `folder_id IN (SELECT id FROM folders WHERE user_id = ? AND (id IN (SELECT value FROM json_each(?)) OR parent_id IN (SELECT value FROM json_each(?))))`（文件夹最多两层，需求 4.5）；`include_memos = 0` 时排除 Memo。
+- **不变式 I1**：MCP 可见集合 ＝ 令牌范围 ∩ 非隐私内容 ∩（Memo 需令牌勾选「包含 Memo」）∩ 非回收站，且**与隐私锁是否解锁无关**。
+- **不变式 I2**：**界面矩阵与 MCP 矩阵互不联动**——改隐私范围配置不动令牌，改令牌不动范围。
+- MCP 返回的**条目数不含隐私内容**（需求 17.4 的 `list_folders` 等计数同此口径）；**空间节点不出现在 MCP 的文件夹树里**。
 - 大条目处理完全按需求 17.4：区间读取与搜索片段用 `substr()` / `instr()`；追加用 `body = body || ?`；小节解析、`replace_section` 等只对 512 KB 以内的条目开放。【待核实】512 KB 小节解析在 10 ms 内的实际耗时，开发早期实测，必要时下调门槛。
 - 追加类写入的条件重试（需求 17.4）在同一个请求内最多一次，保证单请求的 D1 语句数可控。
 
@@ -732,7 +770,7 @@ sequenceDiagram
   - Git：托管平台的 git data API，一批文件为 N 次 blob 创建 + 1 次 tree + 1 次 commit + 1 次 ref 更新，一批最多约 40 个文件，受 50 个子请求限制；不使用 contents API（每个文件一次提交）。
 - “立即备份”和首次全量备份由浏览器循环调用 `POST /api/backup/:target/run`，每次一批，显示进度（需求 16.3）。
 - **出站加密【v1.1 新增，已定·用户确认】**：隐私条目的所有文件出站前按 7.3 信封加密——快照生成时即加密写入 `snap/`；附件与版本在推送时加密。每轮加密字节配额 ≤ 4 MB（实测校准），超出部分留到下一轮；普通内容明文出站。
-- 备份凭据与内容密钥 K 用 `BACKUP_CRED_KEY` 以 AES-GCM 加密存 D1，只在 Worker 内存中解密使用。
+- 备份凭据与内容密钥 K 用 `BACKUP_CRED_KEY` 以 AES-GCM 加密存 D1，只在 Worker 内存中解密使用。**`BACKUP_CRED_KEY` 由 M5 提前到 M3**【已定·用户确认 2026-09-27】：重置隐私密码时服务端就要用它解包 K（§7.2 的 `POST /api/crypto/reset`），不提前则重置流程无法实现。派生方式：`SHA-256(机密字节)` → 32 字节 AES-GCM 密钥。**轮换风险**：更换该机密后已存的 `k_wrapped_backup` 解不开（重置与备份加密随之中断），需在解锁态下**重新包裹一次 K**（重跑一次 `PUT /api/crypto`）即可修复；记入运维注意项（Runbook 属 M6）。
 
 ---
 
@@ -756,7 +794,7 @@ sequenceDiagram
 - **CSP**（通过 Static Assets 的 `_headers` 文件下发）：`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`。`style-src` 需要 `'unsafe-inline'` 是因为 CodeMirror 6 运行时注入样式；脚本不允许内联。v1.1 后前端无 wasm，`wasm-unsafe-eval` 移除。
 - **XSS**：所有用户内容渲染经 DOMPurify；markdown-it 不直接放行原始 HTML；链接统一加 `rel="noopener noreferrer"`。
 - **其他响应头**：`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`（分享页为 `no-referrer`）、`Permissions-Policy` 关闭不需要的能力。
-- **Secrets**：`AUTH_PEPPER`、`BACKUP_CRED_KEY`（需求 18.2；`BACKUP_CRED_KEY` 另用于包裹备份内容密钥 K，见 7.2）；分享访问令牌签名密钥由 `AUTH_PEPPER` 派生。
+- **Secrets**：`AUTH_PEPPER`、`BACKUP_CRED_KEY`（**M3 起**，`user_crypto` 一次建全；另用于包裹备份内容密钥 K，派生与轮换风险见 7.2 / 12.4）；分享访问令牌签名密钥由 `AUTH_PEPPER` 派生。
 - **多用户隔离**：仓储层的每条 SQL 都必须包含 `user_id` 条件（需求 18.1），并在测试中用“两个用户互相访问对方 ID”的用例覆盖所有接口。
 
 ---
@@ -840,7 +878,7 @@ CI 中加入包体积检查，首屏包超预算即构建失败。
 
 仓库为满足一键部署需要遵守的约定：
 
-- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建。**机密不要写进 `wrangler.jsonc`**：`"secrets": { "required": [...] }` 看似"部署页逐项提示"，实际是 **deploy 的硬门禁**——机密未设置时 `wrangler deploy` 直接失败，而首次部署时 Worker 尚不存在、无法先设机密，会把一键部署与 Workers Builds 永久堵死（M1 实测踩到）。正确做法：随仓库提供 `.dev.vars.example` 说明每一项的格式与生成方式；线上机密在 Dashboard（Worker → Settings → Variables and Secrets，类型选 Secret）或 `wrangler secret put <NAME>` 添加；缺机密的保护放在**运行时**——`apps/worker/src/middleware/config-guard.ts` 对真正需要机密的端点返回 503 并说明缺哪一项，且绝不用空密钥算 HMAC。机密清单：`AUTH_PEPPER`（见 §13.2）、`BACKUP_CRED_KEY`（M5 起）。**没有 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，不需要服务端密钥
+- **`wrangler.jsonc`**：资源绑定带默认名（如 `database_name: "menote-db"`、`bucket_name: "menote-files"`），保证自动供给能按名创建。**机密不要写进 `wrangler.jsonc`**：`"secrets": { "required": [...] }` 看似"部署页逐项提示"，实际是 **deploy 的硬门禁**——机密未设置时 `wrangler deploy` 直接失败，而首次部署时 Worker 尚不存在、无法先设机密，会把一键部署与 Workers Builds 永久堵死（M1 实测踩到）。正确做法：随仓库提供 `.dev.vars.example` 说明每一项的格式与生成方式；线上机密在 Dashboard（Worker → Settings → Variables and Secrets，类型选 Secret）或 `wrangler secret put <NAME>` 添加；缺机密的保护放在**运行时**——`apps/worker/src/middleware/config-guard.ts` 对真正需要机密的端点返回 503 并说明缺哪一项，且绝不用空密钥算 HMAC。机密清单：`AUTH_PEPPER`（见 §13.2）、`BACKUP_CRED_KEY`（**M3 起**，见 §7.2 / §12.4）。**没有 `SESSION_SECRET`**：会话令牌是随机 256 位、库里只存 SHA-256，不需要服务端密钥
 - **`package.json` 的 `deploy` 脚本**：只做 `wrangler deploy`。**不要把 `wrangler d1 migrations apply` 放进部署链路**（原因见 §15.4 第三条）；迁移由运行时自愈在首个请求完成。
 - **不硬编码域名**：`*.workers.dev` 子域因账户而异。§13.2 的 Origin 校验、分享链接、MCP 端点地址均从请求的 `URL.origin` 推导；自定义域名作为可选后置步骤（dashboard 添加），代码不依赖它。
 - **仓库可见性**：仓库须为 public，其他人才可能通过按钮部署；本人部署自己的仓库（含私有）可直接走 dashboard「Import a repository」，自动供给行为相同。

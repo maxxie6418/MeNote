@@ -7,17 +7,17 @@
 
 - 名称：`MeNote`
 - 一句话：面向个人与家人的轻量多端笔记应用（浏览器 PWA + Cloudflare 自托管），支持 Markdown 笔记、表格、Memo、待办、版本历史与隐私锁。
-- 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared` + `packages/mdcore`（Markdown 核心，M2 建；`crypto-format` 待 M5），见架构文档 §2.3）
-- 当前版本：v0.3.0（**M2 已收口**——界面框架、笔记本与文件夹、Memo、待办、搜索、设置、首页均已落地；逐条验收复核与未验证项见 `docs/modules/Menote-M2-收口验收复核-v1.md`；M3 隐私锁待开工）
+- 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared` + `packages/mdcore`（Markdown 核心，M2 建）+ `packages/crypto-format`（备份导出信封的编解码纯函数；**M3 落最小骨架**，可顺延到 M5——其消费方是 M5 的备份导出），见架构文档 §2.3）
+- 当前版本：v0.3.2（**M2 已收口**，v0.3.0——逐条验收复核与未验证项见 `docs/modules/Menote-M2-收口验收复核-v1.md`）
 - 技术栈：
   - 前端：`React PWA（Vite + CodeMirror 6，编辑器已接入）`
   - 后端：`Cloudflare Workers（Hono）`
   - 数据：`Cloudflare D1 + R2 + Static Assets；外部备份 WebDAV / S3 / Git`
   - 部署：`GitHub 一键部署到 Cloudflare（Workers Builds，见架构文档 §15.5）。首个请求触发运行时自愈建表；机密在 Dashboard 里加（AUTH_PEPPER），不要用 wrangler.jsonc 的 secrets.required`
 - 源码位置：`apps/web`（PWA 客户端）、`apps/worker`（Cloudflare Worker，唯一入口 `src/index.ts` 只装配）、`packages/shared`（两端共享类型与纯函数）
-- 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 结构章已定稿、**视觉章（§3）待定**，实现界面时按 `DESIGN.md` §3.1 从原型取值并标注临时值
+- 界面样板：`prototype/menote-prototype.html`（高保真交互原型）、`prototype/menote-framework.html`（线框评审页）；`DESIGN.md` 结构章与**视觉章（§3）均已定稿**（现 `DESIGN.md` v1.3），实现界面时按 `DESIGN.md` §3.1 从原型取值并标注临时值
 - 怎么跑：`pnpm install` → `pnpm dev`（前端 + Worker + 本地 D1 一体）；常用命令与部署流程见 `wiki/guides/local-dev.md`；本地数据在 `apps/web/.wrangler/state`（删掉即可重置）
-- 现在做到哪：**M1、M2 均已收口（v0.3.0）**——M2 落地了 `packages/mdcore`（Markdown 核心）、界面框架、笔记本与文件夹、Memo、待办、搜索、设置、首页与同步补全（跨标签页广播、批量写入、冲突对比）。**收口复核**（逐条验收证据、六处偏离、五项未验证）见 `docs/modules/Menote-M2-收口验收复核-v1.md`；M2 实施计划已归档到 `docs/archive/`。下一步 **M3（隐私锁与加密空间）**；已知待办：移动端界面稿的 3 条阻塞项、`wiki/` 的同步清单（改定稿须用户同意）
+- 现在做到哪：**M1、M2 均已收口（v0.3.0）**，此后 v0.3.1 / v0.3.2 为品牌图标与设置「关于」页等小改动——M2 落地了 `packages/mdcore`（Markdown 核心）、界面框架、笔记本与文件夹、Memo、待办、搜索、设置、首页与同步补全（跨标签页广播、批量写入、冲突对比）。**收口复核**（逐条验收证据、六处偏离、五项未验证）见 `docs/modules/Menote-M2-收口验收复核-v1.md`；M2 实施计划已归档到 `docs/archive/`。**M3（隐私锁与加密空间）的设计（`docs/modules/Menote-隐私锁设计-v1.md` v1.3）与界面稿（`docs/modules/Menote-M3-界面稿-v1.md` v1.1）已成稿并经用户确认，待开工**（实施计划 `docs/todo/Menote-M3-实施计划-v1.md` v1.1，M3-1 已完成）；已知待办：移动端界面稿的 3 条阻塞项；`wiki/` 的同步清单**已于 2026-09-27 执行**（功能拆解 v2.5、项目架构 v1.12、设计文档 v7.5、`components.md` v3、`docs-roadmap` v1.2，按《隐私锁设计》附录 B 逐条回写）
 
 ## 工作原则
 
@@ -161,3 +161,5 @@ Git：
 - **提交信息不要塞进命令行（用户要求 2026-09-26）**：here-string（`@'...'@`）或 `-m` 里一旦出现 ASCII 双引号就会被截断，后果不是报错而是"更糟"——`git commit` 失败、改动留在暂存区，被随后的提交一并带走（曾把整轮功能代码混进一个 `docs:` 提交，`--amend` 之前那轮历史就名不副实了）。统一写法：信息先写进 `.git/COMMIT_MSG.txt`，再 `git commit -F <文件>`；暂存也要点名文件，别用 `git add <目录>` 一把梭，否则代码与文档又混在一起。
 
 - **提交后、推送前先核对消息（用户要求 2026-09-26）**：消息文件可能因编辑工具的文件版本守卫而**根本没写进去**，此时 `git commit -F` 会静默沿用上一次的消息，于是提交内容与消息对不上（本仓库已发生两次：一次把整轮功能代码混进 `docs:` 提交，一次把 v0.2.11 的文档提交标成 v0.2.10 且已推送）。规定：`git commit` 之后**先** `git log -1 --format="%s"` 核对首行与预期一致，**不一致且尚未推送**就 `git commit --amend -F <文件>`；确认一致再 `git push`。已推送的历史不追改（不做 force-push）。
+
+- **版本号只有一处来源（用户确认 2026-09-27）**：根 `package.json` 的 `version` 是唯一来源，**前端不复制版本号**——由 `apps/web/vite.config.ts` 与 `vitest.config.ts` 在构建期从根 `package.json` 注入 `__APP_VERSION__`（`import ... with { type: "json" }`），统一从 `apps/web/src/app/about.ts` 读取；新增 / 修改版本号只动根 `package.json`，并同步 `CHANGELOG.md`。

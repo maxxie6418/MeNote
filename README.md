@@ -4,7 +4,7 @@
 
 面向个人与家人的轻量多端笔记应用：浏览器 PWA + Cloudflare 自托管。**Markdown 是所有数据的最终规范形式**——长文笔记、表格、Memo 三种内容形态都从 md 自然延伸，随时可整体导出为 `.md`。
 
-> 当前状态：**M2 已收口（v0.3.x）**——界面框架、笔记本与文件夹、Memo、待办、搜索、设置、首页都已落地，可以日常使用；逐条验收复核与**未验证项**见 `docs/modules/Menote-M2-收口验收复核-v1.md`。M1 阶段（注册登录 → 建笔记 → 编辑保存 → 多端同步）的闭环更早跑通并已在真实浏览器与线上实例验证。下一步 M3（隐私锁与加密空间）；M0–M6 路线图见 `docs/todo/Menote-开发计划-v1.md`。
+> 当前状态：**v0.3.2，M2 已收口**——界面框架、笔记本与文件夹、Memo、待办、搜索、设置、首页都已落地，可以日常使用；逐条验收复核与**未验证项**见 `docs/modules/Menote-M2-收口验收复核-v1.md`。M1 阶段（注册登录 → 建笔记 → 编辑保存 → 多端同步）的闭环更早跑通并已在真实浏览器与线上实例验证。设置新增第 11 个分类「**关于**」（版本号 + 项目 GitHub 地址）。**M3（隐私锁与加密空间）的专项设计与界面稿已成稿、待开工**：设计 `docs/modules/Menote-隐私锁设计-v1.md` v1.3、界面稿 `docs/modules/Menote-M3-界面稿-v1.md` v1.1、实施计划 `docs/todo/Menote-M3-实施计划-v1.md` v1.1（M3-1 已完成）；M0–M6 路线图见 `docs/todo/Menote-开发计划-v1.md`。
 
 ## 特性（设计目标）
 
@@ -23,7 +23,7 @@
 |---|---|---|
 | 前端 | React 19 + Vite 8（PWA 规划：vite-plugin-pwa） | 已接入 |
 | 编辑器 / 本地库 / 接口校验 | CodeMirror 6（编辑与 Markdown 预览动态分包）、Dexie（IndexedDB）、Valibot（前后端共享 schema） | 已接入（M1） |
-| 样式 | **原生 CSS + 令牌层**（`app/theme/tokens.css` 为唯一视觉入口；视觉源是根目录 `DESIGN.md`，禁止另引 UI 库） | 已接入（M1，视觉章待定稿） |
+| 样式 | **原生 CSS + 令牌层**（`app/theme/tokens.css` 为唯一视觉入口；视觉源是根目录 `DESIGN.md`，禁止另引 UI 库） | 已接入（M1；视觉章已于 `DESIGN.md` v1.3 定稿） |
 | 后端 | Cloudflare Workers + Hono（同源单 Worker：静态资源 + API + MCP + Cron） | 已接入 |
 | 数据 | Cloudflare D1（正文与元数据）+ R2（版本、附件、快照）+ Static Assets | D1 已绑定（含运行时自愈建表），R2 于 M4 接入 |
 | 语言 | TypeScript（严格模式），前后端统一 | 已接入 |
@@ -95,7 +95,7 @@ CHANGELOG.md      每次改动一条记录
 | 位置 | 内容 |
 |---|---|
 | `wiki/` | 定稿（写入与修改须经用户确认）：需求文档（设计文档 v7.4）、功能拆解 v2、项目架构 v1、组件规划、ADR、操作指南 |
-| `docs/todo/` | 专项计划：一个功能/任务一份实施计划（M2 的计划已随收口移入 `docs/archive/`；M0–M6 路线图 `Menote-开发计划-v1.md`） |
+| `docs/todo/` | 专项计划：一个功能/任务一份实施计划（M2 的计划已随收口移入 `docs/archive/`；M0–M6 路线图 `Menote-开发计划-v1.md`；M3 的实施计划与界面稿已在 `docs/todo/` / `docs/modules/`） |
 | `docs/modules/` | 各专项功能的设计文档 |
 | `docs/scratch/` | 草稿：临时讨论，一份讨论一份文件 |
 | `docs/archive/` | 归档：过期、被取代的文档，默认不读 |

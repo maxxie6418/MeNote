@@ -62,7 +62,7 @@
 
 ## 五、待用户拍板
 
-1. **`wiki/` 同步清单**（改定稿须用户同意）：
+1. **`wiki/` 同步清单**（改定稿须用户同意）—— ✅ **已执行（2026-09-26，见 `d310307` 与其后的 `2f17db1`）**：
    - 《项目架构》§2.3.2 落点表补：`packages/mdcore`、`apps/worker/src/routes/search.ts` +
      `services/search.ts` + `services/batch.ts`、`apps/web/src/data/db/{search,settings,conflicts}.ts`、
      `apps/web/src/features/{search,tasks,home,memos}/`；

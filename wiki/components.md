@@ -5,8 +5,8 @@
 | 文档性质 | 前端组件规划：**组件名、所属 feature / 落点、职责、props 约定、复用关系**，以及与界面原型的对应。是架构文档 §2.3.2「功能 → 代码落点对照表」在**组件层**的展开 |
 | 基准 | 需求文档 `wiki/Menote-设计文档-v7.4.md`（下称“需求文档”）；功能点编号与验收看 `wiki/Menote-功能拆解-v2.md`（下称“功能拆解”）；落点、分层与依赖方向看 `wiki/Menote-项目架构-v1.md`（下称“架构”）§2.3、§3.1；视觉与令牌看根目录 `DESIGN.md`（下称“视觉源”） |
 | 主要来源 | 界面原型 `prototype/menote-prototype.html`（高保真）与 `prototype/menote-framework.html`（线框评审页）。引用原型**只写元素名或选择器**（如 `#topAccount`、`.composer`、`.nav-seg`），不写行号——行号随原型改动会失效 |
-| 版本 | v1（文件名 `components.md` 不变，版本在修订记录内演进） |
-| 日期 | 2026-09-26 |
+| 版本 | v3（文件名 `components.md` 不变，版本在修订记录内演进） |
+| 日期 | 2026-09-27 |
 | 状态 | 首稿。**代码尚未初始化**：组件名与 props 均为**约定名**，实现时如无充分理由不要改名；若实现中发现更合适的拆法，先回报本文再改 |
 | 不包含 | 颜色 / 字号 / 间距 / 圆角 / 阴影的具体数值（归 `DESIGN.md`，本文只写“走令牌”，不复制令牌值）；接口、表结构、同步算法（归架构文档）；功能规则与验收口径（归需求文档与功能拆解） |
 
@@ -26,6 +26,7 @@
 |---|---|---|
 | v1 | 2026-09-26 | 首稿。以原型已落地的组件为主体（第四至九章），附通用控件库与映射矩阵，并单列预留组件（第十二章） |
 | v2 | 2026-09-26 | M2 收口回写【已定·用户确认 2026-09-26】：新增第十四章「M2 落地后的组件与收敛记录」——列出 M2 实际新增的组件（含实现名与落点）、五处**文档与实现不一致**的收敛去向（`Placeholder`→`EmptyState`、`Menu`→`DropdownMenu`、`Button.secondary`、`Pill.err`、`SegmentedControl` 未抽共享件），以及两项**已知未实现**（锚点自动上翻、共享 `SegmentedControl`） |
+| v3 | 2026-09-27 | 隐私锁设计 v1.3 回写【已定·用户确认 2026-09-27】：①`TierMenu` 改**三档**（本次会话 / N 分钟 / 当前设备长期）并删「仅本次查看」；②`PrivacyCapsule` **状态映射去掉「仅本次查看」**，三档显示口径按设计 §9.2（N 分钟带倒计时、本次会话显示「已解锁 · 本次会话」、当前设备长期用 danger 色 + 「本设备始终解锁」）；③把原型里两份形态相同的 `MemoLockedPlaceholder` / `TaskLockedPlaceholder` 记为**收敛为一个 `LockedPlaceholder`**（§14.2 收敛表新增第 6 条）；④账户快捷菜单账户头由两行改**三行**（用户名 / 角色 · 实例 / 版本号 `MeNote vX.Y.Z`，后两行复用 `.acct__sub`），并补设置新增的第 11 个分类页「**关于**」（版本号 + 项目 GitHub 地址链接）。（应用版本 v0.3.2；修改模型ID：deepseek-v4.1-flash） |
 
 ---
 
@@ -120,7 +121,7 @@ AppShell                                    app/
 ├─ SearchPanel        features/search/
 ├─ VaultPanel         features/privacy/     —— 锁定 / 解锁两态
 ├─ TrashPanel         features/settings/    —— 设置子页面
-└─ SettingsPanel      features/settings/    —— 两栏分页，10 分类
+└─ SettingsPanel      features/settings/    —— 两栏分页，11 分类
 ```
 
 ---
@@ -187,7 +188,7 @@ AppShell                                    app/
 | 原型 | `.capsule`（`#lockCapsule` / `#lockTimer`），变体 `.locked` / `.unlocked` / `.danger` / `.blink` |
 | 职责 | 全局唯一的锁状态显示。点已锁定时直接开解锁框；点已解锁时弹**解锁档位菜单**（`tierMenuHtml`） |
 | props | `locked`、`timeoutMin`、`remaining`、`onUnlock`、`onPickTier`、`onLockNow` |
-| 状态映射 | `locked` → `已锁定`（灰）；`timeoutMin === -2` → `本设备始终解锁`（**红，danger**，属降低安全性的状态）；其余 → `已解锁` + 倒计时；`仅本次查看` / `本次会话` 用文字替代倒计时 |
+| 状态映射 | `locked` → `已锁定`（灰色锁形图标）；N 分钟档 → 琥珀色开锁图标 + `已解锁 · 4:32`（每秒刷新，**有操作则重置**）；本次会话档 → `已解锁 · 本次会话`（文字替代倒计时）；当前设备长期档 → **红（danger）** + `本设备始终解锁` + 警示角标（属降低安全性的状态）。**原「仅本次查看」档已作废**（2026-09-27，见 `docs/modules/Menote-隐私锁设计-v1.md` §9.2） |
 | 需求 | M02-05、M08-12（§6.9）。未启用隐私锁时**整个胶囊不显示** |
 | 关联 | 剩余 30 秒时加 `.blink` 并提示即将自动锁定（原型 `startTimer`） |
 
@@ -197,7 +198,7 @@ AppShell                                    app/
 | 原型 | `#topAccount`（圆形头像）→ 复用 `.menu` 组件；菜单内容由 `quickMenuHtml()` 按 `quickMenu` 生成 |
 | 职责 | 全站**唯一账户入口**，紧邻隐私胶囊右侧；**只显示头像、不显示用户名**（顶栏是紧凑条），`title` 里给提示 |
 | **交互（易错点）** | 点击头像**弹出快捷菜单**，**不直达设置页**。菜单里「设置」是一项。此前一度定为“点击直接进设置、不弹菜单”，该写法**已作废**（功能拆解 M02-01 / M18-03） |
-| 菜单结构（自上而下，固定） | 账户头（头像 + `owner` + 实例）→ 分隔线 → **可配置功能项**（按 `quickMenu` 顺序）→ 分隔线 → `设置` / `退出登录`（固定底部，不在配置清单内） |
+| 菜单结构（自上而下，固定） | 账户头（头像 + **三行文字**：用户名 / 角色 · 实例（如 `owner · 本地实例`）/ **版本号 `MeNote vX.Y.Z`**——后两行复用 `.acct__sub`，**不新增 CSS**）→ 分隔线 → **可配置功能项**（按 `quickMenu` 顺序）→ 分隔线 → `设置` / `退出登录`（固定底部，不在配置清单内） |
 | 可配置功能项 | 5 项候选：`主题切换`（菜单内一排三档，**切完不收起菜单**）/ `立即锁定`（带状态：`解锁中` \| `已锁定`）/ `搜索` / `回收站` / `立即备份`。默认只开前两项 |
 | props（Entry） | `user`、`onOpenMenu` |
 | props（Menu） | `items: string[]`（`quickMenu`）、`theme`、`locked`、`onPick(id)`、`onThemeChange(theme)` |
@@ -341,15 +342,15 @@ AppShell                                    app/
 | 视图 | 落点 | 原型 | 关键子组件 |
 |---|---|---|---|
 | `HomePanel` | `features/home/` | `homePanel()` | `StatCards`（`.home-stats` / `.home-stat`）、`TodayTasks`（`.home-list` / `.home-locked`）、`RecentActivity`、`ShortcutGrid`（`.home-acts` / `.home-act`）、`QuickNav`（`.home-nav`） |
-| `MemoPanel` | `features/memos/` | `memoPanel()` | `MemoTimeline`（`.day-group` / `.day-head` / `.memo-item`）、`MemoWaterfall`（`.waterfall` / `.wf-card`）、`MemoItem`（`memoItemHtml`，含 `.memo-imgs`、`.memo-foot` 胶囊）、`MemoLockedPlaceholder` |
-| `TaskPanel` | `features/tasks/` | `taskPanel()` / `tasksInner()` | `TaskListView`（`.task-list` / `.task-row` / `.checkbox`）、`TaskKanban`（`.kanban` / `.kb-col` / `.kb-card`）、`TaskFilterBar`（`.task-filters`）、`TaskLockedPlaceholder` |
+| `MemoPanel` | `features/memos/` | `memoPanel()` | `MemoTimeline`（`.day-group` / `.day-head` / `.memo-item`）、`MemoWaterfall`（`.waterfall` / `.wf-card`）、`MemoItem`（`memoItemHtml`，含 `.memo-imgs`、`.memo-foot` 胶囊）、`LockedPlaceholder`（原 `MemoLockedPlaceholder`，收敛见 14.2 第 6 条） |
+| `TaskPanel` | `features/tasks/` | `taskPanel()` / `tasksInner()` | `TaskListView`（`.task-list` / `.task-row` / `.checkbox`）、`TaskKanban`（`.kanban` / `.kb-col` / `.kb-card`）、`TaskFilterBar`（`.task-filters`）、`LockedPlaceholder`（原 `TaskLockedPlaceholder`，收敛见 14.2 第 6 条） |
 | `TablePanel` | `features/tables/` | `tablePanel()` | `TableView`（`.tbl-wrap` / `table.data` / `.rowid` / `.cover-mini`）、`GalleryView`（`.gallery` / `.gal-card` / `.gal-cover`）、`FieldChip` |
 
 **要点**：
 
 - **Memo 与待办是两个独立视图**（Q1 已确认）。Memo → 时间轴 / 瀑布流，**无清单 tab**；待办 → 列表 / 看板。两者顶部各有「添加」按钮，点击切功能栏录入框模式并聚焦。
 - 首页数据**全由本地元数据计算，不发请求**；**统计始终计入**加密空间与单篇加密条目，不区分锁定（用户确认 2026-09-26）；来自 Memo 的部分在门禁锁定时显示「已锁定」（M02-03）。
-- `MemoPanel` 与 `TaskPanel` 各有一个锁定占位（`.placeholder.boxed`），可抽成公共 `LockedPlaceholder`（当前原型是两份文案，形状相同）。
+- `MemoPanel` 与 `TaskPanel` 各有一个锁定占位（`.placeholder.boxed`），原型里是**两份形态相同的实现**（`MemoLockedPlaceholder` / `TaskLockedPlaceholder`，仅文案不同），收敛为**一个** `LockedPlaceholder`（文案作 props 传入）：**以实现名为准、只保留一个组件**，不两份并存；收敛去向见 14.2 第 6 条。
 - 表格**第一列 `_id`** 是稳定行 ID（6–8 位 base36），编辑器默认隐藏。
 - 图册与表格是**同一张 md 的两种渲染**（§10.8），视图是派生的，新增视图不改数据模型。
 - 待办看板与列表是**纯视图**，不动数据模型；清单不是独立类型，是加在 Memo 上的标记（§9.1 / §9.4）。
@@ -362,7 +363,7 @@ AppShell                                    app/
 |---|---|---|---|
 | `UnlockModal` | `features/privacy/ui/` | `#unlockOverlay`（`.modal` / `.field` / `.field-err` / `.link`） | 隐私密码解锁框。文案须说明「隐私密码与登录密码是两个独立密码」。演示原型任意非空即可解锁 |
 | `ResetPrivacyModal` | `features/privacy/ui/` | `#resetPwOverlay` | 重置隐私密码。**恢复码已废弃**（2026-09-26 模型修订）；文案如实说明「内容是明文存储的，重置不丢内容，只有已导出的旧备份需要旧密码」 |
-| `TierMenu` | `features/privacy/ui/` | `tierMenuHtml()` | 解锁档位菜单（隐私胶囊触发）：4 档 + 立即锁定 |
+| `TierMenu` | `features/privacy/ui/` | `tierMenuHtml()` | 解锁档位菜单（隐私胶囊触发）：**三档**（本次会话 / N 分钟 / 当前设备长期）+ 立即锁定。原「仅本次查看」档已作废（2026-09-27） |
 | `VaultDocEmpty` | `features/privacy/ui/` | `vaultEmptyDoc()` | 加密空间解锁后未选中条目时的占位，含「保护边界」说明 |
 | `SearchPanel` | `features/search/` | `searchPanel()` / `.sr-item` | 搜索结果列表；高亮用 `<em>`。**门禁过滤**：锁定时加密条目与 Memo 不参与搜索 |
 | `TrashPanel` | `features/settings/ui/` | `trashPanel()` / `.trash-row` | 回收站是**设置子页面**，带「← 返回设置」按钮（返回时落回「版本与回收站」分类），不是功能栏独立入口 |
@@ -376,8 +377,8 @@ AppShell                                    app/
 | 原型 | `.set-wrap` > `.set-nav`（`#setNav`）+ `.set-pages`（`.set-page` / `.set-grid`） |
 | 结构 | **左列分类导航 + 右侧当前分类内容**；**一次只渲染一个分类**（§7.5，功能拆解 M18-01） |
 | 子组件 | `SetNav`（`.set-nav-item[data-set]`，含 `owner` 徽标）、`SetCard`（`.set-card` / `.set-head` / `.set-body`）、`SetRow`（`.set-row`）、`Toggle`、`RadioSet`（`.radio-opt` / `.radio-dot`）、`Field`、`KeyCap`、`WarnBox`、`BackupTargetCard`（`.bk-card`） |
-| 分类（10 个） | 通用（**默认落地页**）/ 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 备份 / 分享 / MCP / 数据管理 / 实例管理（带 `owner` 徽标）。除「通用」提到首位外，顺序同 §7.5 表 |
-| 卡片装配 | 按分类拆成 `cardGeneral` / `cardAccount` / `cardQuickMenu` / `cardEditor` / `cardPrivacy` / `cardMemoPrivacy` / `cardMcp` / `cardBackup` / `cardShare` / `cardVersion` / `cardData` / `cardInstance`，由 `setPageBody(id)` 装配 |
+| 分类（11 个） | 通用（**默认落地页**）/ 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 备份 / 分享 / MCP / 数据管理 / 实例管理（带 `owner` 徽标）/ **关于**（**第 11 个分类，排最后**；内容＝**版本号** + **项目 GitHub 地址**链接，纯信息页、无主操作）。除「通用」提到首位外，顺序同 §7.5 表 |
+| 卡片装配 | 按分类拆成 `cardGeneral` / `cardAccount` / `cardQuickMenu` / `cardEditor` / `cardPrivacy` / `cardMemoPrivacy` / `cardMcp` / `cardBackup` / `cardShare` / `cardVersion` / `cardData` / `cardInstance` / `cardAbout`，由 `setPageBody(id)` 装配 |
 | 页头 | 显示「分类名 · 简述 · 分类总数」 |
 | 通用页 | **两张卡**：启动视图 / 时区 / 主题 ＋ 快捷菜单配置 |
 | 状态 | 当前分类记在 `state.setPage`（界面状态，Zustand） |
@@ -607,7 +608,7 @@ AppShell                                    app/
 | `SettingsPanel` + `CardGeneral` / `CardQuickMenu` 等卡片 | `features/settings/ui/` | 设置两栏分页（六个分类）与各分类卡片 | 即时生效 + 整份上传（`useUserSettings`） |
 | `AccountQuickMenu` | `app/topbar/` | 账户快捷菜单（账户头 → 可配置功能项 → 设置 / 退出登录） | 显示项由 `settings.quick_menu` 决定；`MenuItemSpec.keepOpen` 让主题切换**不收起菜单** |
 
-### 14.2 五处「文档与实现不一致」的收敛去向
+### 14.2 六处「文档与实现不一致」的收敛去向
 
 | # | 文档原写法 | M1/M2 实现 | 收敛 |
 |---|---|---|---|
@@ -616,6 +617,7 @@ AppShell                                    app/
 | 3 | `Button` 变体 `.primary` / `.danger` / `.ghost` / `.sm` | 另有 `.secondary` | **补进文档**：`.secondary` 用于空状态次操作与提示条里的动作按钮 |
 | 4 | `Pill` 变体 `.ok` / `.busy` | 另有 `.err` | **补进文档**：`.err` 用于顶栏「同步失败」 |
 | 5 | `SegmentedControl` 是**共享控件** | 仍在 `Composer` / `NoteWorkspace`（模式切换）/ `SettingsPanel`（单选组）三处内联 | **未收敛**（见 14.3）：文档保留「应为共享件」的结论，实现按 §十三 第 6 条留待抽出 |
+| 6 | `MemoLockedPlaceholder` / `TaskLockedPlaceholder`（§7.3） | 两份形态相同、仅文案不同的锁定占位 | **收敛为一个 `LockedPlaceholder`**：文案作 props 传入，**落 `app/ui/`**（跨 feature 复用只能走 `app/ui/`，见 §2.2 与 §11.1），**不两份并存**；本文 §7.3 的两处引用已改写（2026-09-27，见 `docs/modules/Menote-隐私锁设计-v1.md` §9.4） |
 
 ### 14.3 已知未实现（登记在案，避免长期漂移）
 

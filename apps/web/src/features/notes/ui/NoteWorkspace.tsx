@@ -11,6 +11,7 @@ import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
+import type { EditorHandle } from "../../../app/editor/Editor";
 
 const Editor = lazy(async () => {
   const mod = await import("../../../app/editor/Editor");
@@ -84,6 +85,14 @@ export interface NoteWorkspaceProps {
   onOpenVersions?: () => void;
   /** 版本历史入口为什么不可用（锁定态时给原因，`DESIGN.md` §6.1） */
   versionsDisabledReason?: string;
+  /**
+   * 附件上传状态（M4-10；界面稿 §7.2）：状态栏只**显示**，上传流程在 `features/attachments`。
+   */
+  attachments?: { label: string; tone: "busy" | "warn"; onRetry?: () => void } | null;
+  /** 粘贴/拖入文件（M4-10；界面稿 §7.1）：编辑器把文件交出来，上传由调用方负责 */
+  onFiles?: (files: File[]) => void;
+  /** 编辑器句柄（附件占位替换要用它改正文） */
+  onEditorReady?: (handle: EditorHandle) => void;
 }
 
 export function NoteWorkspace({
@@ -103,6 +112,9 @@ export function NoteWorkspace({
   onDelete,
   onOpenVersions,
   versionsDisabledReason,
+  attachments,
+  onFiles,
+  onEditorReady,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
@@ -293,6 +305,8 @@ export function NoteWorkspace({
                   key={item.id}
                   initialValue={previewSource}
                   onChange={handleInput}
+                  onReady={onEditorReady}
+                  onFiles={onFiles}
                   ariaLabel="正文"
                 />
               </div>
@@ -306,6 +320,8 @@ export function NoteWorkspace({
                 key={item.id}
                 initialValue={previewSource}
                 onChange={handleInput}
+                onReady={onEditorReady}
+                onFiles={onFiles}
                 ariaLabel="正文"
               />
             </div>
@@ -327,6 +343,7 @@ export function NoteWorkspace({
               : undefined
           }
           privacyLine={privacyLine}
+          attachments={attachments}
         />
       ) : null}
       {bodyLocked ? (

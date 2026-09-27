@@ -18,6 +18,8 @@ import { NoteList } from "../../features/notes/ui/NoteList";
 import { NoteWorkspace } from "../../features/notes/ui/NoteWorkspace";
 import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPanel";
 import { useVersions } from "../../features/versions/useVersions";
+import { useAttachments } from "../../features/attachments/useAttachments";
+import type { EditorHandle } from "../editor/Editor";
 import { TwoPane } from "./TwoPane";
 
 export interface NotesPaneProps {
@@ -75,6 +77,13 @@ export function NotesPane({
   /** 版本历史面板（M4-11）：打开时占满主操作区（界面稿 §4.1：弹窗宽度装不下并排 diff） */
   const [versionsOpen, setVersionsOpen] = useState(false);
   const versions = useVersions((notice) => onToast(notice.message, notice.tone));
+  /** 编辑器句柄（M4-10：附件占位与最终片段都要改正文） */
+  const [editorHandle, setEditorHandle] = useState<EditorHandle | null>(null);
+  const attachments = useAttachments({
+    itemId: workspace.selectedId,
+    handle: editorHandle,
+    notify: (message, tone) => onToast(message, tone),
+  });
   const pendingTitle =
     workspace.allItems.find((item) => item.id === pendingDelete)?.title ??
     workspace.selected?.title ??
@@ -178,6 +187,17 @@ export function NotesPane({
             onLockAll: encryption.onLockAllItems,
           }}
           privacyLine={privacyLine}
+          attachments={
+            attachments.statusLabel === ""
+              ? null
+              : {
+                  label: attachments.statusLabel,
+                  tone: attachments.statusTone ?? "busy",
+                  onRetry: attachments.failedCount > 0 ? () => void attachments.retry() : undefined,
+                }
+          }
+          onFiles={(files) => void attachments.add(files)}
+          onEditorReady={setEditorHandle}
           onDelete={() => setPendingDelete(workspace.selectedId)}
           onOpenVersions={() => {
             if (!workspace.selectedId) return;

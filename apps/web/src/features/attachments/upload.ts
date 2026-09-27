@@ -21,7 +21,17 @@ export interface UploadDeps {
   /** 服务端的三段接口（与 `attachmentsApi` 同形，单测传替身） */
   api: {
     check(input: { sha256: string; size: number }): Promise<{ exists: boolean; pending: boolean }>;
-    putBlob(sha256: string, kind: "original" | "thumb", body: Blob, contentType: string): Promise<void>;
+    /**
+     * `Promise<unknown>` 而不是 `Promise<void>`：调用方不关心响应体，
+     * 但 `Promise<{key,size}>` 并不满足 `Promise<void>`（`void` 的特例不延伸到 `Promise<void>`），
+     * 写成 `unknown` 才能直接接上真实的 `attachmentsApi`。
+     */
+    putBlob(
+      sha256: string,
+      kind: "original" | "thumb",
+      body: Blob,
+      contentType: string,
+    ): Promise<unknown>;
     finalize(input: {
       sha256: string;
       size: number;

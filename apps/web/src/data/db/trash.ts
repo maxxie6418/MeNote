@@ -75,7 +75,7 @@ export async function purgeLocalItems(ids: readonly string[]): Promise<void> {
 
   await db.transaction(
     "rw",
-    [db.items, db.bodies, db.drafts, db.searchIndex, db.conflicts, db.outbox],
+    [db.items, db.bodies, db.drafts, db.searchIndex, db.conflicts, db.outbox, db.attachmentsMeta],
     async () => {
       await db.items.bulkDelete(list);
       await db.bodies.bulkDelete(list);
@@ -85,6 +85,8 @@ export async function purgeLocalItems(ids: readonly string[]): Promise<void> {
       await db.conflicts
         .filter((row) => list.includes(row.original_id) || list.includes(row.copy_id))
         .delete();
+      // 附件元数据也一起清（M4-10）：条目都没了，本地再留着它的附件行就是孤儿
+      await db.attachmentsMeta.where("item_id").anyOf(list).delete();
     },
   );
 }

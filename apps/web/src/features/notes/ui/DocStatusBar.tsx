@@ -42,11 +42,20 @@ export interface DocStatusBarProps {
     onLock?: () => void;
     lockLabel?: string;
   } | null;
+  /**
+   * 附件上传状态（M4-10；界面稿 §7.2）：**实时计数必须可见**，落在**既有**状态栏里，
+   * 不新增第二条状态栏。失败时给可见的「重试」次操作。
+   */
+  attachments?: {
+    label: string;
+    tone: "busy" | "warn";
+    onRetry?: () => void;
+  } | null;
   /** 便于测试固定"现在"；给了就不挂每秒定时器 */
   now?: number;
 }
 
-export function DocStatusBar({ snapshot, encryption, privacyLine, now }: DocStatusBarProps) {
+export function DocStatusBar({ snapshot, encryption, privacyLine, attachments, now }: DocStatusBarProps) {
   const { sizeLabel, sizeLevel, saveState } = snapshot;
   const locked = encryption?.encrypted === true && !encryption.unlocked;
 
@@ -86,6 +95,19 @@ export function DocStatusBar({ snapshot, encryption, privacyLine, now }: DocStat
       {locked ? null : (
         <span className={`doc-status__size doc-status__size--${sizeLevel}`}>{sizeLabel}</span>
       )}
+
+      {attachments && attachments.label !== "" && !locked ? (
+        <span
+          className={`doc-status__attach${attachments.tone === "warn" ? " doc-status__attach--warn" : ""}`}
+        >
+          {attachments.label}
+          {attachments.tone === "warn" && attachments.onRetry ? (
+            <button type="button" className="btn btn--sm" onClick={attachments.onRetry}>
+              重试
+            </button>
+          ) : null}
+        </span>
+      ) : null}
 
       {sizeLevel === "soft" && (
         <span className="doc-status__hint doc-status__hint--warn">

@@ -609,6 +609,37 @@ button {
   margin-left: auto;
 }
 
+/* 附件上传的实时状态（M4-10；界面稿 §7.2：实时计数必须可见，落在既有状态栏里） */
+.doc-status__attach {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.doc-status__attach--warn {
+  color: var(--amber);
+}
+
+/* 拖入时的落点提示（界面稿 §7.1：**可见的**虚线描边，而不是只改光标） */
+.editor--drop {
+  outline: 2px dashed var(--primary-line);
+  outline-offset: -2px;
+  background: var(--primary-soft, transparent);
+}
+
+/* 正文里的非图片附件：走链接样式（界面稿 §7.4：不用按钮冒充链接、不沿用正文色） */
+.attachment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.attachment-link--missing {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+
 .doc-status__save--synced {
   color: var(--green);
 }

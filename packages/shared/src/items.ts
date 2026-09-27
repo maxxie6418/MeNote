@@ -143,6 +143,18 @@ export const ItemMetaPatchSchema = v.object({
    * 服务端会核对"目标文件夹确实在空间里 / 确实不在空间里"，避免出现自相矛盾的行。
    */
   in_enc_space: v.optional(FlagSchema),
+  /**
+   * **单向**类型变更：只允许 `table → note`（M4-9 的「降级为普通笔记」，2026-09-27 按用户拍板加入）。
+   *
+   * 为什么是单向且取值受限：
+   * - 表格结构坏掉时需要"降级成普通笔记"保住正文——这是**逃生出口**，不是通用的改类型功能；
+   * - 反向（`note → table`）会让一篇普通笔记被塞进表格语义里，属于"新建时选错类型"的场景，
+   *   应该走"新建一张表 + 把内容贴过去"，不该由补丁悄悄改；
+   * - `memo` 不在允许范围（Memo 的类型由 `memo_at` 等字段决定，改它超出本补丁的语义）。
+   *
+   * 服务端还会拒绝：**加密空间内**或**单篇加密**的条目（类型变更会让门禁与正文渲染都对不上）。
+   */
+  type: v.optional(v.picklist(["note"])),
 });
 export type ItemMetaPatch = v.InferOutput<typeof ItemMetaPatchSchema>;
 

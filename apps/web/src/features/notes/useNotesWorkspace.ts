@@ -158,6 +158,13 @@ export interface NotesWorkspace {
   /** 置顶 / 收藏：都走元数据补丁（服务端白名单已含这两列） */
   togglePinned: (itemId: string) => Promise<void>;
   toggleStarred: (itemId: string) => Promise<void>;
+  /**
+   * **降级为普通笔记**（M4-9；`table → note` 单向）。
+   *
+   * **需要联网**（直连 API，不走 outbox——理由见 `useItemPatchActions.degradeToNote`），
+   * 离线时会把错误抛给调用方，由界面提示。
+   */
+  degradeToNote: (itemId: string) => Promise<void>;
   input: (text: string) => void;
   notifyUploaded: () => void;
   notifyFailed: () => void;
@@ -515,7 +522,14 @@ export function useNotesWorkspace(
   );
 
   /** 条目的元数据补丁动作（M3-8 起在 `useItemPatchActions` 里） */
-  const { patchItem, moveItemToFolder, setItemEncryption, togglePinned, toggleStarred } =
+  const {
+    patchItem,
+    moveItemToFolder,
+    setItemEncryption,
+    togglePinned,
+    toggleStarred,
+    degradeToNote,
+  } =
     useItemPatchActions({ refresh, onLocalWrite });
 
   /** 加密空间的作用域（M3-6）：派生值与空间内新建都在 `useVaultScope` 里 */
@@ -574,6 +588,7 @@ export function useNotesWorkspace(
       togglePinned,
       toggleStarred,
       setItemEncryption,
+      degradeToNote,
       remoteChanged,
       conflictCopy,
       openConflictCopy,
@@ -607,6 +622,7 @@ export function useNotesWorkspace(
       memos,
       memoContents,
       moveItemToFolder,
+      degradeToNote,
       open,
       publishMemo,
       refresh,

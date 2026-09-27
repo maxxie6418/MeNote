@@ -13,7 +13,8 @@
  */
 import { BATCH_MAX_OPS, isUlid, type BatchOp, type BatchResult } from "@menote/shared";
 import { DomainError } from "../errors";
-import { createItem, patchItemMeta, saveItemBody } from "./items";
+import { createItem, saveItemBody } from "./items";
+import { patchItemMeta } from "./item-meta";
 
 export async function applyBatch(
   db: D1Database,

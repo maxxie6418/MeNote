@@ -1,5 +1,8 @@
 /**
- * 条目服务：新建、取正文、全文保存、元数据补丁（口径见 `docs/modules/Menote-同步引擎设计-v1.md` §3.4）。
+ * 条目服务：新建、取正文、全文保存（口径见 `docs/modules/Menote-同步引擎设计-v1.md` §3.4）。
+ *
+ * **元数据补丁**在 `services/item-meta.ts`（2026-09-27 抽出：本文件顶到了 300 行预算，
+ * 而补丁的校验规则已自成一块，与"创建 / 取正文 / 保存正文"是两条独立的演进线）。
  *
  * 写路径统一是"预检读 → 一个 batch（主写入 + 正文/副作用 + 条件推进计数器）"，判定冲突读
  * `results[0].meta.changes`；冲突时整批不产生任何改动。
@@ -11,23 +14,16 @@ import {
   BODY_HARD_LIMIT_BYTES,
   countCodePoints,
   utf8ByteLength,
-  type ItemMetaPatch,
   type ItemType,
 } from "@menote/shared";
 import {
   SQL_BUMP_SYNC_SEQ_ON_ITEM_BODY,
   SQL_BUMP_SYNC_SEQ_ON_ITEM_CREATE,
-  SQL_BUMP_SYNC_SEQ_ON_ITEM_META,
   SQL_INSERT_ITEM,
-  SQL_SELECT_FOLDER_BY_ID,
   SQL_SELECT_ITEM_BODY,
-  SQL_SELECT_ITEM_META_BASE,
-  SQL_SELECT_USER_CRYPTO,
   SQL_SELECT_ITEM_REV,
   SQL_UPDATE_ITEM_BODY,
   SQL_UPSERT_ITEM_BODY,
-  buildUpdateItemMeta,
-  type ItemMetaField,
 } from "../db/tables";
 import { DomainError } from "../errors";
 
@@ -226,139 +222,3 @@ export async function saveItemBody(
 }
 
 /** 元数据补丁（`PATCH /api/items/:id/meta`）：按 `meta_rev` 乐观锁，不生成冲突副本 */
-export async function patchItemMeta(
-  db: D1Database,
-  userId: string,
-  id: string,
-  patch: ItemMetaPatch,
-  now: number,
-): Promise<{ id: string; meta_rev: number }> {
-  const base = await db
-    .prepare(SQL_SELECT_ITEM_META_BASE)
-    .bind(id, userId)
-    .first<{ type: string; meta_rev: number }>();
-  if (!base) throw new DomainError("not_found", "条目不存在");
-  if (base.meta_rev !== patch.base_meta_rev) {
-    throw new DomainError("meta_conflict", "条目已在其他设备更新", { meta_rev: base.meta_rev });
-  }
-  if (patch.title === null && base.type !== "memo") {
-    throw new DomainError("invalid", "笔记与表格必须有标题");
-  }
-
-  const fields: ItemMetaField[] = [];
-  const values: unknown[] = [];
-  /** 目标文件夹（若本次补丁要改 `folder_id`）：`null` = 根目录，`undefined` = 没给 */
-  let targetFolder: { id: string; is_enc_space: number; in_enc_space: number } | null = null;
-  if (patch.title !== undefined) {
-    fields.push("title");
-    values.push(patch.title);
-  }
-  if (patch.folder_id !== undefined) {
-    if (patch.folder_id !== null) {
-      const folder = await db
-        .prepare(SQL_SELECT_FOLDER_BY_ID)
-        .bind(patch.folder_id, userId)
-        .first<{ id: string; is_enc_space: number; in_enc_space: number }>();
-      if (!folder) throw new DomainError("invalid", "目标文件夹不存在");
-      targetFolder = folder;
-    }
-    fields.push("folder_id");
-    values.push(patch.folder_id);
-  }
-  if (patch.tags !== undefined) {
-    fields.push("tags");
-    values.push(JSON.stringify(patch.tags));
-  }
-  if (patch.pinned !== undefined) {
-    fields.push("pinned");
-    values.push(patch.pinned);
-  }
-  if (patch.starred !== undefined) {
-    fields.push("starred");
-    values.push(patch.starred);
-  }
-  if (patch.enc_self !== undefined) {
-    /**
-     * 单篇加密（M3-7）。两条硬约束都在这里挡：
-     * - **Memo 不做单篇**（Memo 在隐私范围内时的门禁由隐私锁负责；表上也有 CHECK 兜底）；
-     * - **必须先启用隐私锁**：没有门禁材料时设 `enc_self = 1`，等于把内容"锁在一个没有门的房间里"，
-     *   客户端事后无法解锁。所以宁可 422 也不接受。
-     */
-    if (patch.enc_self === 1) {
-      if (base.type === "memo") {
-        throw new DomainError("invalid", "Memo 不支持单篇加密");
-      }
-      const crypto = await db
-        .prepare(SQL_SELECT_USER_CRYPTO)
-        .bind(userId)
-        .first<{ user_id: string }>();
-      if (!crypto) {
-        throw new DomainError("invalid", "还没有启用隐私锁，无法给单篇加密", {
-          reason: "privacy_not_enabled",
-        });
-      }
-    }
-    fields.push("enc_self");
-    values.push(patch.enc_self);
-  }
-  if (patch.in_enc_space !== undefined) {
-    /**
-     * 移入 / 移出加密空间（M3-8，《隐私锁设计》§6.3）。四条校验：
-     * 1. **必须同时给 `folder_id`**：移入空间 = `folder_id` 指向空间行/空间内文件夹；
-     *    两条一起写才不会出现"标记在空间里、却挂在普通文件夹下"这种自相矛盾的行；
-     * 2. **移入时目标必须是空间的**（空间根或空间内文件夹）；
-     * 3. **移出时目标不能在空间里**（否则等于没移出）；
-     * 4. 移入还要求：不是 Memo、且已启用隐私锁（与单篇加密同一套理由）。
-     */
-    if (patch.folder_id === undefined) {
-      throw new DomainError("invalid", "移入或移出加密空间时必须同时给出目标文件夹");
-    }
-    const inSpace = targetFolder !== null && (targetFolder.is_enc_space === 1 || targetFolder.in_enc_space === 1);
-
-    if (patch.in_enc_space === 1) {
-      if (base.type === "memo") {
-        throw new DomainError("invalid", "Memo 不能放进加密空间");
-      }
-      if (!inSpace) {
-        throw new DomainError("invalid", "移入加密空间的目标必须是空间根或空间内文件夹");
-      }
-      const crypto = await db
-        .prepare(SQL_SELECT_USER_CRYPTO)
-        .bind(userId)
-        .first<{ user_id: string }>();
-      if (!crypto) {
-        throw new DomainError("invalid", "还没有启用隐私锁，无法移入加密空间", {
-          reason: "privacy_not_enabled",
-        });
-      }
-    } else if (inSpace) {
-      throw new DomainError("invalid", "移出加密空间的目标不能在空间内");
-    }
-
-    fields.push("in_enc_space");
-    values.push(patch.in_enc_space);
-  }
-
-  if (fields.length === 0) {
-    return { id, meta_rev: patch.base_meta_rev };
-  }
-
-  const results = await db.batch([
-    db
-      .prepare(buildUpdateItemMeta(fields))
-      .bind(...values, now, userId, id, userId, patch.base_meta_rev),
-    db.prepare(SQL_BUMP_SYNC_SEQ_ON_ITEM_META).bind(userId, id, patch.base_meta_rev + 1, now),
-  ]);
-
-  if ((results[0]?.meta.changes ?? 0) !== 1) {
-    const after = await db
-      .prepare(SQL_SELECT_ITEM_META_BASE)
-      .bind(id, userId)
-      .first<{ meta_rev: number }>();
-    throw new DomainError("meta_conflict", "条目已在其他设备更新", {
-      meta_rev: after?.meta_rev ?? patch.base_meta_rev,
-    });
-  }
-
-  return { id, meta_rev: patch.base_meta_rev + 1 };
-}

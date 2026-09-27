@@ -219,6 +219,20 @@ export function NotesPane({
               ? "先解锁这一篇，才能看版本历史"
               : undefined
           }
+          /*
+            「降级为普通笔记」（M4-9）：**需要联网**（直连 API，不走 outbox），
+            失败（离线 / 服务端拒绝）要给可见提示，别让按钮点了没反应。
+          */
+          onDegrade={() => {
+            const id = workspace.selectedId;
+            if (!id) return;
+            void workspace
+              .degradeToNote(id)
+              .then(() => onToast("已降级为普通笔记；原文已封存为一个版本", "success"))
+              .catch((error: unknown) => {
+                onToast(error instanceof Error ? error.message : "降级失败，请稍后重试", "error");
+              });
+          }}
         />
       }
       />

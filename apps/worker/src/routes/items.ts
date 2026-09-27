@@ -21,7 +21,9 @@ import * as v from "valibot";
 import { DomainError } from "../errors";
 import { requireSession } from "../middleware/session";
 import { applyBatch } from "../services/batch";
-import { createItem, getItemBody, patchItemMeta, saveItemBody } from "../services/items";
+import { createItem, getItemBody, saveItemBody } from "../services/items";
+import { patchItemMeta } from "../services/item-meta";
+import { sealVersion } from "../services/versions";
 import type { AppEnv } from "../types";
 import { readJsonBody } from "../validation";
 
@@ -132,8 +134,43 @@ app.patch("/items/:id/meta", requireSession, async (c) => {
   const id = requireUlid(c.req.param("id"));
   const parsed = v.safeParse(ItemMetaPatchSchema, await readJsonBody(c));
   if (!parsed.success) throw new DomainError("invalid", "请求内容不合法");
+  const userId = c.get("user").id;
 
-  const result = await patchItemMeta(c.env.DB, c.get("user").id, id, parsed.output, Date.now());
+  /*
+    **降级前封存**（M4-9「降级为普通笔记」；设计 §4.1 的 `pre_convert` 触发）：
+    类型一变，正文的解读方式就变了（表格 → 普通 Markdown），所以先按当前内容封一条版本——
+    用户若后悔，还能从版本历史里拿回"它还是表格时"的样子。
+    放在路由层做：封存要写 R2（`sealVersion` 需要 `c.env`），而服务层只拿 `db`。
+  */
+  if (parsed.output.type !== undefined) {
+    const item = await c.env.DB.prepare(
+      "SELECT rev, title, content_hash, size_bytes FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+    )
+      .bind(id, userId)
+      .first<{ rev: number; title: string | null; content_hash: string; size_bytes: number }>();
+    const bodyRow = await c.env.DB.prepare("SELECT body FROM item_bodies WHERE item_id = ?")
+      .bind(id)
+      .first<{ body: string }>();
+    if (item && bodyRow) {
+      await sealVersion(
+        c.env,
+        userId,
+        id,
+        {
+          reason: "pre_convert",
+          keep: true,
+          body: bodyRow.body,
+          contentHash: item.content_hash,
+          title: item.title,
+          sizeBytes: item.size_bytes,
+          rev: item.rev,
+        },
+        Date.now(),
+      );
+    }
+  }
+
+  const result = await patchItemMeta(c.env.DB, userId, id, parsed.output, Date.now());
   const response: ItemMetaWriteResponse = result;
   return c.json(response);
 });

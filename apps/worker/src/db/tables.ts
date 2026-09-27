@@ -125,7 +125,7 @@ export const SQL_SELECT_ITEM_META_REV = "SELECT meta_rev FROM items WHERE id = ?
 
 /** 元数据补丁前的预检：需要知道类型（Memo 才允许无标题）与当前 meta_rev */
 export const SQL_SELECT_ITEM_META_BASE =
-  "SELECT type, meta_rev FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
+  "SELECT type, meta_rev, enc_self, in_enc_space FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
 
 /** 元数据补丁允许更新的列（白名单；列名一律来自常量，绝不来自请求） */
 export type ItemMetaField =
@@ -135,7 +135,9 @@ export type ItemMetaField =
   | "pinned"
   | "starred"
   | "enc_self"
-  | "in_enc_space";
+  | "in_enc_space"
+  /** **单向**类型变更（只允许 table → note；服务层已校验，见 `patchItemMeta`） */
+  | "type";
 
 /** 组装元数据补丁语句：`SET` 子句由白名单列拼出（服务层不写 SQL 字面量） */
 export function buildUpdateItemMeta(fields: readonly ItemMetaField[]): string {

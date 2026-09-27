@@ -94,6 +94,11 @@ export interface NoteWorkspaceProps {
    * "列表可见、内容打码"的中间态明确不做。
    */
   onOpenVersions?: () => void;
+  /**
+   * 「降级为普通笔记」（M4-9）：**单向** `table → note`，服务端会先封存一个版本再改类型。
+   * 组件只负责弹确认框与报事件，**不碰网络**——接线在 `NotesPane`（→ 工作区 `degradeToNote`）。
+   */
+  onDegrade?: () => void;
   /** 版本历史入口为什么不可用（锁定态时给原因，`DESIGN.md` §6.1） */
   versionsDisabledReason?: string;
   /**
@@ -130,6 +135,7 @@ export function NoteWorkspace({
   privacyLine,
   onDelete,
   onOpenVersions,
+  onDegrade,
   versionsDisabledReason,
   attachments,
   onFiles,
@@ -452,7 +458,14 @@ export function NoteWorkspace({
             <Button variant="secondary" size="sm" onClick={() => setDegradeOpen(false)}>
               取消
             </Button>
-            <Button variant="danger" size="sm" disabled title="需要更新条目类型（接口变更），待排期">
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                setDegradeOpen(false);
+                onDegrade?.();
+              }}
+            >
               降级
             </Button>
           </>

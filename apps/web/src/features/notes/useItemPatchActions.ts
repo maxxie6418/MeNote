@@ -12,6 +12,7 @@
 import { useCallback } from "react";
 import { db, enqueueMetaPatch, getLocalItem } from "../../data/db";
 import type { LocalItem } from "../../data/db";
+import { itemsApi } from "../../data/api/endpoints";
 
 /** 补丁允许改的列（与服务端白名单对应） */
 export type ItemPatchFields = Partial<
@@ -73,5 +74,39 @@ export function useItemPatchActions(input: UseItemPatchActionsInput) {
     [patchItem],
   );
 
-  return { patchItem, moveItemToFolder, setItemEncryption, togglePinned, toggleStarred };
+  /**
+   * **降级为普通笔记**（M4-9；`table → note` 单向，2026-09-27 按用户拍板加入）。
+   *
+   * 为什么不走 outbox（其它补丁都走）：outbox 行**不带 payload**，补丁是在推送时从本地行重建的——
+   * 而 `type` 不能"每次都发"（服务端只接受"当前是表格"的降级请求，给普通笔记发 `type` 会被拒）。
+   * 所以这一条**直连 API**：成功才改本地，失败原样报错。代价是**需要联网**——
+   * 但降级本身就是一次要确认的破坏性动作（会封存一个版本再改类型），要求在线是合理的。
+   */
+  const degradeToNote = useCallback(
+    async (itemId: string) => {
+      const item = await getLocalItem(itemId);
+      if (!item || item.type !== "table") return;
+      const result = await itemsApi.patchMeta(itemId, {
+        base_meta_rev: item.meta_rev,
+        type: "note",
+      });
+      // 服务端已改类型：本地跟着改（`meta_rev` 用服务端回的，别自己加）
+      await db.items.update(itemId, {
+        type: "note",
+        meta_rev: result.meta_rev,
+        updated_at: Date.now(),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return {
+    patchItem,
+    moveItemToFolder,
+    setItemEncryption,
+    togglePinned,
+    toggleStarred,
+    degradeToNote,
+  };
 }

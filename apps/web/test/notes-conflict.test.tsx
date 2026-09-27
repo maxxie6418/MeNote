@@ -17,6 +17,7 @@ import {
   listConflicts,
   recordConflict,
 } from "../src/data/db";
+import { noPrivacyGate } from "@menote/shared";
 import { useNotesWorkspace } from "../src/features/notes/useNotesWorkspace";
 
 const ORIGINAL = "01JCX000000000000000000AA";
@@ -56,7 +57,7 @@ describe("工作区的冲突提示与处理", () => {
   it("打开有副本的条目 → 暴露 conflictCopy（带副本标题）", async () => {
     await seedConflict();
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await result.current.open(ORIGINAL);
     });
@@ -69,7 +70,7 @@ describe("工作区的冲突提示与处理", () => {
   it("「保留我的版本」：副本内容写回原条目并清掉关联", async () => {
     await seedConflict();
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await result.current.open(ORIGINAL);
     });
@@ -89,7 +90,7 @@ describe("工作区的冲突提示与处理", () => {
   it("「保留服务端版本」：只清关联，原条目正文不动，副本仍在", async () => {
     await seedConflict();
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await result.current.open(ORIGINAL);
     });

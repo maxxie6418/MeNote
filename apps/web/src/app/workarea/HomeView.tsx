@@ -7,13 +7,15 @@
 import { TwoPane } from "./TwoPane";
 import { HomePanel } from "../../features/home/ui/HomePanel";
 import type { LocalItem } from "../../data/db";
+import type { PrivacyGate } from "@menote/shared";
 
 export interface HomeViewProps {
   items: readonly LocalItem[];
   memos: readonly LocalItem[];
   folders: ReadonlyArray<{ id: string; name: string }>;
   titles: Readonly<Record<string, string>>;
-  memoLocked?: boolean;
+  /** 隐私门禁（M3-5）：首页据此决定 Memo 派生预览是否占位、最近动态是否列出空间内条目 */
+  gate: PrivacyGate;
   onNewNote: () => void;
   onFocusComposer: (mode: "memo" | "task") => void;
   onFocusSearch: () => void;
@@ -34,7 +36,7 @@ export function HomeView(props: HomeViewProps) {
           memos={props.memos}
           folders={props.folders}
           titles={props.titles}
-          memoLocked={props.memoLocked}
+          gate={props.gate}
           onNewNote={props.onNewNote}
           onFocusComposer={props.onFocusComposer}
           onFocusSearch={props.onFocusSearch}

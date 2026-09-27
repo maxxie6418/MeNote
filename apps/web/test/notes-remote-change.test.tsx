@@ -9,6 +9,7 @@ import "fake-indexeddb/auto";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalNote, db, getDraft } from "../src/data/db";
+import { noPrivacyGate } from "@menote/shared";
 import { useNotesWorkspace } from "../src/features/notes/useNotesWorkspace";
 
 const ITEM = "01JCX0000000000000000000A";
@@ -22,7 +23,7 @@ describe("跨标签页改动的事前提示", () => {
   it("打开时无提示；别处改过（hash 变了）后刷新出现提示", async () => {
     await createLocalNote(ITEM, "标题", "原始正文", 1000);
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await result.current.open(ITEM);
     });
@@ -41,7 +42,7 @@ describe("跨标签页改动的事前提示", () => {
   it("自己保存成功后不误报（基准跟到新内容）", async () => {
     await createLocalNote(ITEM, "标题", "原始正文", 1000);
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await result.current.open(ITEM);
     });
@@ -68,7 +69,7 @@ describe("跨标签页改动的事前提示", () => {
   it("重新载入后提示清除，且正文回到最新内容", async () => {
     await createLocalNote(ITEM, "标题", "原始正文", 1000);
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await result.current.open(ITEM);
     });
@@ -89,7 +90,7 @@ describe("跨标签页改动的事前提示", () => {
   it("没打开任何条目时不提示", async () => {
     await createLocalNote(ITEM, "标题", "原始正文", 1000);
 
-    const { result } = renderHook(() => useNotesWorkspace());
+    const { result } = renderHook(() => useNotesWorkspace({ gate: noPrivacyGate() }));
     await act(async () => {
       await db.items.update(ITEM, { content_hash: "changed", sync_seq: 5 });
       await result.current.refresh();

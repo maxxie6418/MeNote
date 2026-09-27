@@ -9,6 +9,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { noPrivacyGate, privacyGateFrom } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { HomePanel } from "../src/features/home/ui/HomePanel";
 
@@ -71,6 +72,7 @@ function renderPanel(overrides: Partial<Parameters<typeof HomePanel>[0]> = {}) {
       memos={MEMOS}
       folders={[{ id: "f1", name: "学习" }]}
       titles={{ m1: "交物业费" }}
+      gate={noPrivacyGate()}
       onNewNote={onNewNote}
       onFocusComposer={onFocusComposer}
       onFocusSearch={onFocusSearch}
@@ -124,7 +126,9 @@ describe("概括预览", () => {
   });
 
   it("**门禁锁定时 Memo 部分以「已锁定」占位**，统计数字口径不变（Q7）", () => {
-    const { container } = renderPanel({ memoLocked: true });
+    const { container } = renderPanel({
+      gate: privacyGateFrom({ scope: { memo: true }, search_bodies_when_unlocked: true }, "locked"),
+    });
 
     // 统计照旧（含 Memo 数字）
     const numbers = [...container.querySelectorAll(".home-stat__n")].map((el) => el.textContent);

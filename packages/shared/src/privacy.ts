@@ -45,6 +45,27 @@ export const DEFAULT_PRIVACY_SCOPE: PrivacyScope = { memo: true };
 /** 加密空间内置行的默认名称（可重命名；服务端补建时用，客户端展示时也用） */
 export const ENC_SPACE_DEFAULT_NAME = "加密空间";
 
+/** 无门禁 gate 的**单例**：必须是稳定引用，否则调用方（如列表的 `useMemo`）每渲染都重算 */
+const NO_PRIVACY_GATE = Object.freeze({
+  lockState: "disabled",
+  scope: Object.freeze({ ...DEFAULT_PRIVACY_SCOPE }),
+  unlockedItems: new Set<string>(),
+  searchBodiesWhenUnlocked: true,
+}) as PrivacyGate;
+
+/**
+ * **无门禁**的 gate（等价于"未启用隐私锁"）。
+ *
+ * 给两类调用点用：① 单元测试里不关心门禁的场景；② 明确知道此刻没有隐私内容的调用点。
+ * 语义是显式的——**不要在业务代码里默认用它**，否则等于把门禁关掉。
+ *
+ * 返回的是**同一个冻结对象**：门禁常被放进 `useMemo`/`useEffect` 的依赖数组，
+ * 每次新建对象会让列表与检索每渲染重算一遍（`notes-hook` 的引用稳定性用例会报红）。
+ */
+export function noPrivacyGate(): PrivacyGate {
+  return NO_PRIVACY_GATE;
+}
+
 /** 带隐私标记的条目（空间内或单篇） */
 export function isPrivacyItem(item: {
   enc_self: 0 | 1;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { noPrivacyGate } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { homeStats, openTaskPreview, recentPreview, topTags } from "../src/features/home/model";
+
+/** 门禁：未启用（无门禁）。门禁自己的行为在 `privacy-model` / `search-index` 用例里覆盖 */
+const GATE = noPrivacyGate();
 
 function item(id: string, extra: Partial<LocalItem> = {}): LocalItem {
   return {
@@ -77,6 +81,7 @@ describe("今日待办预览", () => {
         item("notTask"),
       ],
       titles,
+      GATE,
     );
 
     expect(preview.map((task) => task.id)).toEqual(["t2", "t1", "t3"]);
@@ -84,11 +89,11 @@ describe("今日待办预览", () => {
   });
 
   it("没有未完成待办时返回空数组（空态文案在卡片里）", () => {
-    expect(openTaskPreview([item("done", { is_task: 1, task_status: "done" })], {})).toEqual([]);
+    expect(openTaskPreview([item("done", { is_task: 1, task_status: "done" })], {}, GATE)).toEqual([]);
   });
 
   it("标题缺失时给占位名", () => {
-    expect(openTaskPreview([item("x", { is_task: 1 })], {})[0]?.title).toBe("未命名");
+    expect(openTaskPreview([item("x", { is_task: 1 })], {}, GATE)[0]?.title).toBe("未命名");
   });
 });
 
@@ -98,19 +103,19 @@ describe("最近动态", () => {
       item("old", { updated_at: 1 }),
       item("new", { updated_at: 9 }),
       item("mid", { updated_at: 5 }),
-    ]);
+    ], GATE);
     expect(entries.map((entry) => entry.id)).toEqual(["new", "mid", "old"]);
   });
 
   it("没有标题时给占位名；类型带出去（图标用）", () => {
-    expect(recentPreview([item("t", { title: null, type: "table" })])[0]).toMatchObject({
+    expect(recentPreview([item("t", { title: null, type: "table" })], GATE)[0]).toMatchObject({
       title: "未命名笔记",
       type: "table",
     });
   });
 
   it("空数组返回空（卡片显示空态）", () => {
-    expect(recentPreview([])).toEqual([]);
+    expect(recentPreview([], GATE)).toEqual([]);
   });
 });
 

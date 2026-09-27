@@ -7,8 +7,18 @@
  * 文件夹的领域规则（两层限制、可移动目标）在 `folders.ts`。
  * M2 的边界：`首页` / `Memo` / `待办` 三个视图分别在 M2-8 / M2-4 / M2-5 落地，
  * 在那之前导航项按"禁用并说明原因"呈现，不做空入口。
+ *
+ * M3-5：列表过滤接上**隐私门禁**（`filterByView` 的第三个参数）——判定本身在
+ * `@menote/shared` 的 `privacy.ts`，这里只调用。
  */
+import { canShowInList, type PrivacyGate } from "@menote/shared";
 export interface ViewableItem {
+  id: string;
+  type: "note" | "table" | "memo";
+  /** 隐私标记：列表过滤要用（M3 起由 `canShowInList` 统一判定） */
+  enc_self: 0 | 1;
+  in_enc_space: 0 | 1;
+  deleted_at: number | null;
   starred: number;
   tags: string[];
   updated_at: number;
@@ -43,21 +53,32 @@ export function viewTitle(view: NotesView): string {
   }
 }
 
-/** 按视图过滤（输入已按最近编辑倒序，见 `listLocalItems`） */
-export function filterByView<T extends ViewableItem>(items: readonly T[], view: NotesView): T[] {
+/**
+ * 按视图过滤（输入已按最近编辑倒序，见 `listLocalItems`）。
+ *
+ * **先过隐私门禁**（M3）：`canShowInList` 决定这一条此刻能不能出现在列表里——
+ * 锁定时空间内条目直接不出现；单篇加密条目留在原位（标题明文）。
+ * 标签云与文件夹计数**不经过这里**（统计一律计入全部内容，见《隐私锁设计》§4.7）。
+ */
+export function filterByView<T extends ViewableItem>(
+  items: readonly T[],
+  view: NotesView,
+  gate: PrivacyGate,
+): T[] {
+  const visible = items.filter((item) => canShowInList(item, gate));
   switch (view.kind) {
     case "starred":
-      return items.filter((item) => item.starred === 1);
+      return visible.filter((item) => item.starred === 1);
     case "tag":
-      return items.filter((item) => item.tags.includes(view.tag));
+      return visible.filter((item) => item.tags.includes(view.tag));
     case "notebook":
       // 选中某个文件夹时只显示它直接包含的条目；未选中（根目录/全部）显示全部
       return view.folderId
-        ? items.filter((item) => (item.folder_id ?? null) === view.folderId)
-        : [...items];
+        ? visible.filter((item) => (item.folder_id ?? null) === view.folderId)
+        : visible;
     case "recent":
     default:
-      return [...items];
+      return visible;
   }
 }
 

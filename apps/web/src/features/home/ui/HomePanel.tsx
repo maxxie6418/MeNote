@@ -9,6 +9,7 @@
  * 只改传参，界面逻辑已经在位、也已有用例覆盖两条分支。
  */
 import type { LocalItem } from "../../../data/db";
+import { isMemoVisible, type PrivacyGate } from "@menote/shared";
 import { Icon } from "../../../app/ui/Icon";
 import { homeStats, openTaskPreview, recentPreview, topTags } from "../model";
 import { QuickNav } from "./QuickNav";
@@ -25,8 +26,11 @@ export interface HomePanelProps {
   folders: ReadonlyArray<{ id: string; name: string }>;
   /** 条目正文首行（待办预览的标题来源） */
   titles: Readonly<Record<string, string>>;
-  /** Memo 门禁是否锁着（M2 恒 false；M3 接门禁后传真实状态） */
-  memoLocked?: boolean;
+  /**
+   * 隐私门禁（M3-5）。"已锁定"占位由它推出：`memoLocked = !isMemoVisible(gate)`。
+   * **统计不区分锁定状态**（算的是"总共有多少"），只有 Memo 派生的预览会占位。
+   */
+  gate: PrivacyGate;
   onNewNote: () => void;
   onFocusComposer: (mode: "memo" | "task") => void;
   onFocusSearch: () => void;
@@ -41,7 +45,7 @@ export function HomePanel({
   memos,
   folders,
   titles,
-  memoLocked = false,
+  gate,
   onNewNote,
   onFocusComposer,
   onFocusSearch,
@@ -50,9 +54,10 @@ export function HomePanel({
   onOpenFolder,
   onOpenTag,
 }: HomePanelProps) {
+  const memoLocked = !isMemoVisible(gate);
   const stats = homeStats([...items, ...memos]);
-  const tasks = openTaskPreview(memos, titles);
-  const recent = recentPreview(items);
+  const tasks = openTaskPreview(memos, titles, gate);
+  const recent = recentPreview(items, gate);
   const tags = topTags(items, 6);
 
   return (

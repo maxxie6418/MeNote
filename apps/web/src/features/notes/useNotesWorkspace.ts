@@ -42,6 +42,7 @@ import {
   type NotesView,
 } from "./views";
 import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
+import type { PrivacyGate } from "@menote/shared";
 
 const DEFAULT_TITLE = "未命名笔记";
 
@@ -140,7 +141,18 @@ export interface NotesWorkspace {
   refreshEditorState: () => Promise<void>;
 }
 
-export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): NotesWorkspace {
+export function useNotesWorkspace(
+  options: {
+    onLocalWrite?: () => void;
+    /**
+     * 隐私门禁（M3-5）：列表过滤要用；由 `App` 从隐私锁组装层传进来。
+     *
+     * **必须是稳定引用**（`usePrivacyLock` 返回的 `gate` 是 memo 过的）：它会进 `items` 的
+     * `useMemo` 依赖，每次新建对象都会让列表每渲染重算（`notes-hook` 有用例钉住这一点）。
+     */
+    gate: PrivacyGate;
+  },
+): NotesWorkspace {
   const [allItems, setAllItems] = useState<LocalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -163,6 +175,7 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
 
   const editorRef = useRef<NoteEditorController | null>(null);
   const onLocalWrite = options.onLocalWrite;
+  const gate = options.gate;
 
   /**
    * 冲突提示的取值（M2-9 对比 UI）：按本地 `conflicts` 关联算出"当前条目有没有副本"。
@@ -309,7 +322,7 @@ export function useNotesWorkspace(options: { onLocalWrite?: () => void } = {}): 
     [onLocalWrite, refresh, selectedId],
   );
 
-  const items = useMemo(() => filterByView(allItems, view), [allItems, view]);
+  const items = useMemo(() => filterByView(allItems, view, gate), [allItems, view, gate]);
   const tags = useMemo(() => collectTags(allItems), [allItems]);
   const selected = items.find((item) => item.id === selectedId) ?? null;
 

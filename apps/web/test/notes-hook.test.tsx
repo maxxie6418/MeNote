@@ -2,6 +2,7 @@
 import "fake-indexeddb/auto";
 import { render, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { noPrivacyGate } from "@menote/shared";
 import { useNotesWorkspace, type NotesWorkspace } from "../src/features/notes/useNotesWorkspace";
 
 /**
@@ -12,7 +13,7 @@ import { useNotesWorkspace, type NotesWorkspace } from "../src/features/notes/us
  * 10 秒内发了 35 次 `GET /api/sync`。
  */
 function Harness({ capture }: { capture: (value: NotesWorkspace) => void }) {
-  const workspace = useNotesWorkspace({});
+  const workspace = useNotesWorkspace({ gate: noPrivacyGate() });
   capture(workspace);
   return <div data-testid="count">{workspace.items.length}</div>;
 }

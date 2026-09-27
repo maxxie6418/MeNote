@@ -7,7 +7,14 @@
  *    它是"我总共有多少东西"，不是"我现在能看多少"。受门禁影响的只有**来自 Memo 的内容预览**
  *    （今日待办、最近动态里的 Memo 部分），那些在锁定时以"已锁定"占位（Q7）。
  */
+import { canShowInList, type PrivacyGate } from "@menote/shared";
 import type { LocalItem } from "../../data/db";
+
+/** 判定只需要这几个隐私字段（结构化取用，便于用例构造） */
+type PrivacyFields = Pick<
+  LocalItem,
+  "id" | "type" | "enc_self" | "in_enc_space" | "deleted_at"
+>;
 
 export interface HomeStats {
   notes: number;
@@ -40,13 +47,22 @@ export interface TaskPreview {
  * 今日待办预览：未完成的清单 Memo，最多 `limit` 条。
  *
  * 排序复用待办视图的规则（有截止在前 → 优先级 → 最近更新），避免首页与待办页给出不同顺序。
+ *
+ * **门禁（M3-5）**：Memo 属于隐私范围且锁定时**返回空**——待办是 Memo 派生的，
+ * 与 Memo 同生共死；界面据 `memoLocked` 显示"已锁定"占位（而不是"没有待办"）。
  */
 export function openTaskPreview(
-  items: readonly Pick<LocalItem, "id" | "is_task" | "task_status" | "task_due" | "task_priority" | "updated_at">[],
+  items: readonly (Pick<
+    LocalItem,
+    "id" | "is_task" | "task_status" | "task_due" | "task_priority" | "updated_at"
+  > &
+    PrivacyFields)[],
   titles: Readonly<Record<string, string>>,
+  gate: PrivacyGate,
   limit = 4,
 ): TaskPreview[] {
   return items
+    .filter((item) => canShowInList(item, gate))
     .filter((item) => item.is_task === 1 && item.task_status !== "done")
     .sort(compareByDueThenPriority)
     .slice(0, limit)
@@ -83,12 +99,19 @@ export interface RecentEntry {
   updated_at: number;
 }
 
-/** 最近动态：按最近更新倒序的前若干条（笔记 + 表格；Memo 由调用方单独拼接） */
+/**
+ * 最近动态：按最近更新倒序的前若干条（笔记 + 表格；Memo 由调用方单独拼接）。
+ *
+ * **门禁（M3-5）**：锁定时**不列**空间内条目（它的标题在锁定态本来就不可见）——
+ * 这里是"列表"，与"统计计数一律计入"是两回事（《隐私锁设计》§3.3 的结论）。
+ */
 export function recentPreview(
-  items: readonly Pick<LocalItem, "id" | "title" | "type" | "updated_at">[],
+  items: readonly (Pick<LocalItem, "id" | "title" | "type" | "updated_at"> & PrivacyFields)[],
+  gate: PrivacyGate,
   limit = 4,
 ): RecentEntry[] {
   return [...items]
+    .filter((item) => canShowInList(item, gate))
     .sort((a, b) => b.updated_at - a.updated_at)
     .slice(0, limit)
     .map((item) => ({

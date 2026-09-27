@@ -14,7 +14,7 @@ import { AuthLoading, AuthScreens } from "./AuthScreens";
 import { NoteList } from "../features/notes/ui/NoteList";
 import { NoteWorkspace } from "../features/notes/ui/NoteWorkspace";
 import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
-import { useNotesWorkspace } from "../features/notes/useNotesWorkspace";
+import { useNotesWorkspace, type NotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { changeLoginPassword } from "../features/settings/model";
 import { SettingsPanel } from "../features/settings/ui/SettingsPanel";
 import { useUserSettings } from "../features/settings/useUserSettings";
@@ -77,12 +77,69 @@ export default function App() {
     setPendingCount(await outboxCount());
   }, []);
 
+  /**
+   * 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎。
+   * 放在最前面：待办视图的日期口径、隐私锁的默认档位与范围都来自它。
+   *
+   * `onLoaded` 里应用**启动视图**（M2-8）：设置是异步从本地库读出来的，所以在读到的这一刻
+   * 决定进入哪个视图；只在首次读盘时生效一次，之后用户的导航不再被覆盖。
+   */
+  const startViewApplied = useRef(false);
+
+  const userSettings = useUserSettings({
+    onWrite: () => {
+      engineRef.current?.notifyLocalWrite();
+      void refreshPending();
+    },
+    onLoaded: (loaded) => {
+      if (startViewApplied.current) return;
+      startViewApplied.current = true;
+
+      if (loaded.start_view === "home") {
+        setBrowse("home");
+        return;
+      }
+      setBrowse(null);
+      workspaceRef.current?.setView(
+        loaded.start_view === "starred" ? { kind: "starred" } : { kind: "recent" },
+      );
+    },
+  });
+  const patchSettings = useCallback(
+    (partial: Partial<UserSettings>) => {
+      void userSettings.patch(partial);
+    },
+    [userSettings],
+  );
+
+  /**
+   * 隐私锁（M3-4）：材料缓存、门禁状态、档位计时与跨标签一致都在这里；
+   * `privacy.gate` 交给各视图（列表、搜索、首页、Memo、编辑器）——判定只此一处。
+   */
+  const privacy = usePrivacyLock({
+    authenticated: auth.snapshot.user != null,
+    config: userSettings.settings.privacy,
+  });
+
+  /** `onLoaded` 里要调 workspace 的方法，但 workspace 在下面才建：用 ref 顶一下 */
+  const workspaceRef = useRef<NotesWorkspace | null>(null);
+
   const workspace = useNotesWorkspace({
+    gate: privacy.gate,
     onLocalWrite: () => {
       engineRef.current?.notifyLocalWrite();
       void refreshPending();
     },
   });
+
+  /**
+   * `onLoaded`（设置读完的那一刻）要调 `workspace.setView`，但那个回调在 workspace 之前创建——
+   * 用 ref 中转。**在 effect 里同步**（渲染期写 ref 会踩 React 的"不得在渲染期访问 ref"）。
+   * 时序上是安全的：设置是从本地库异步读出来的，读到时 effect 早已跑过。
+   */
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
 
   /**
    * 依赖里带上 `workspace` 是安全的：启动同步引擎的 effect **只依赖登录状态**，
@@ -109,48 +166,6 @@ export default function App() {
     input?.focus();
     input?.scrollIntoView({ block: "nearest" });
   }, []);
-
-  /**
-   * 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎。
-   * 放在"今天"之前：待办视图的日期口径要用它的时区；也放在隐私锁之前——门禁的默认档位与范围来自它。
-   *
-   * `onLoaded` 里应用**启动视图**（M2-8）：设置是异步从本地库读出来的，所以在读到的这一刻
-   * 决定进入哪个视图；只在首次读盘时生效一次，之后用户的导航不再被覆盖。
-   */
-  const startViewApplied = useRef(false);
-
-  const userSettings = useUserSettings({
-    onWrite: () => {
-      engineRef.current?.notifyLocalWrite();
-      void refreshPending();
-    },
-    onLoaded: (loaded) => {
-      if (startViewApplied.current) return;
-      startViewApplied.current = true;
-
-      if (loaded.start_view === "home") {
-        setBrowse("home");
-        return;
-      }
-      setBrowse(null);
-      workspace.setView(loaded.start_view === "starred" ? { kind: "starred" } : { kind: "recent" });
-    },
-  });
-  const patchSettings = useCallback(
-    (partial: Partial<UserSettings>) => {
-      void userSettings.patch(partial);
-    },
-    [userSettings],
-  );
-
-  /**
-   * 隐私锁（M3-4）：材料缓存、门禁状态、档位计时与跨标签一致都在这里；
-   * 判定用 `privacy.gate` 交给各视图（搜索、列表、Memo、编辑器）。
-   */
-  const privacy = usePrivacyLock({
-    authenticated: auth.snapshot.user != null,
-    config: userSettings.settings.privacy,
-  });
 
   /**
    * 搜索（M2-6）：整段接线在 `useSearch` 里（查询、筛选、本地检索、索引未建完时的服务端回退）。
@@ -421,6 +436,7 @@ export default function App() {
                 taskTitle(entry.content),
               ]),
             )}
+            gate={privacy.gate}
             onNewNote={() => {
               void workspace.createNote();
             }}

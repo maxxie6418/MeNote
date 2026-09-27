@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1.12（草案修订，待用户审核） |
-| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 修订）** |
+| 文档版本 | v1.13（M4 回写已并入；待用户审核） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 隐私锁回写、v1.13 M4 回写）** |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
@@ -25,6 +25,7 @@
 | v1.10 | 2026-09-26 | M1 收口回写【已定·用户确认 2026-09-26】：①§15.5 **删除 `wrangler.jsonc` 的 `"secrets": { "required": [...] }` 写法**——实测它是 deploy 硬门禁（机密未设即部署失败，而首次部署时 Worker 不存在、无法先设机密，等于堵死一键部署）；改为「Dashboard / `wrangler secret put` 设机密 + 运行时 `middleware/config-guard.ts` fail-closed（缺机密返回 503 并说明缺哪项）」；②§6.x `prelogin` 行补全确定盐口径（`HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:" + 用户名小写)[0..16]`，注册与改密沿用同一个盐，否则注册/改密后立即登不进去；附带收益是不泄露用户名是否存在），并补公开接口 `GET /api/auth/registration-state`（不受机密缺失影响）；③§2.3 目录树 `middleware/` 注释补 `config-guard` |
 | v1.11 | 2026-09-26 | M2 收口回写【已定·用户确认 2026-09-26】：①§2.3.2 Worker 侧补落点——`POST /api/batch`（`routes/items.ts` + `services/batch.ts`）、搜索兜底 `GET /api/search`（`routes/search.ts` + `services/search.ts`）、用户级设置 `GET/PUT /api/settings` 归 `routes/settings.ts`、迁移目录注明 0001 建表与 0002 任务字段约束触发器，并在同步行注明响应另带 `user_settings` 且**不参与游标**；②§2.3.2 Web 侧补落点——`data/sync/`（含 broadcast）与 `data/db/`（含 search / settings / conflicts）不属任何 feature、`features/notes/` 含文件夹与冲突处理、各 feature 的 `model.ts`/`actions.ts` 分工、搜索的 `useSearch.ts`，并**订正**「索引在 `workers/search.worker.ts`」为本地增量索引 `data/db/search.ts`（Worker 化未做，属 M2 已知偏离）、补 `packages/mdcore/` 一行；③`app/` 落点写明子目录（`ui/`、`fnbar/`、`topbar/`、`workarea/`、`theme/`） |
 | v1.12 | 2026-09-27 | 隐私锁设计 v1.3 回写【已定·用户确认 2026-09-27】：①**§7.1 门禁模型**补**隐私范围**（加密空间＝默认成员、恒在范围内、不可移出；Memo 及衍生的待办＝可配置开关、默认加入；另留扩展位）与**单篇加密＝与隐私锁正交的独立门禁**（逐篇解密、时效本次浏览器会话、可手动锁上），档位由四档改**三档**（本次会话 / N 分钟 / 当前设备长期）并删「仅本次查看」，补**统计计数一律计入全部隐私内容、不因锁定改变**与「空间内条目解锁期间进入最近编辑/收藏/标签、重锁即隐藏」；②**§7.2 / §5.1** 写入 `user_crypto` **权威列定义**与 BLOB 打包约定（`版本(1B) \|\| IV(12B) \|\| 密文 \|\| GCM 标签(16B)`、verifier 明文常量 `menote-verifier-v1`、迭代 600000、盐 16B、两份包裹的明文均为 32 字节 K）、**不加 `sync_seq`** 与四个专用端点（`GET/PUT /api/crypto`、`POST /api/crypto/reset`、`DELETE /api/crypto` 关闭时校验无隐私内容含回收站）；③**§7.5** 本地搜索索引口径改为「**标题（+标签）与正文分两段索引 + 查询时按门禁过滤**」，补**两套标识**（隐私锁态 / 单篇加密态）与本模型下**不再需要** `visibilitychange` 锁屏、SharedWorker、持久化 CryptoKey、撤销 `blob:`；④**§11 MCP** 补不变式 **I1/I2**（可见集合口径、与隐私锁状态无关；界面矩阵与 MCP 矩阵互不联动）与「条目数不含隐私内容、空间节点不进 MCP 文件夹树」；⑤**§12.4 / §13.2 / §15.5** `BACKUP_CRED_KEY` **由 M5 提前到 M3** 并注明派生（`SHA-256(机密字节)`）与轮换风险（换机密后需在解锁态重新包裹一次 K）。（应用版本 v0.3.2；修改模型ID：deepseek-v4.1-flash） |
+| v1.13 | 2026-09-27 | M4 设计 §九 回写【已定·用户确认 2026-09-27（授权两点之一）】：①**§5.1** 技术补充的 DDL **不再逐条重述**，权威落点改指《Menote-M4-设计-v1》§六（迁移 `0004_content_integrity`），六表清单写明并**新增 `pending_uploads`**（上传意图登记从 `r2_gc_queue` 的 `reason='pending_upload'` 拆出独立表：待删对象与待确认上传的生命周期不同）；②**§5.2** 缩略图键 `a/{uid}/{sha256}.t` **去掉【待核实】、标为定稿**，并写明原图与缩略图共用同一个 `sha256`、用 `kind` 区分；③**§八 + §2.3.2 + §2.3 目录树 + §3 分层图**：**删除 `workers/media.worker.ts` 落点**（缩略图改浏览器端生成，理由同 M2 砍 `search.worker.ts`），时序图参与者改为编辑器（浏览器）并改为"两段上传"（`check` → `blob` → `finalize`），写明**引用只在 `finalize` 时上报**、`X-Menote-Refs` **未实现**、集合对齐语句留 M6；④**§12.1 / §12.2 / §12.3**：补**游标键名**（`job:gc:cursor` / `job:maintenance:day` / `job:maintenance:step` / `job:sweep:item`）与"**不加锁、容忍重复**"的结论及理由，任务配额按实测定值（快照与备份标为接口位），补版本稀疏化的密度分档与回收站保留期接用户设置，§12.3 补"一次逻辑写共享一个 `sync_seq`"与"快照文件属 M5/M6、M4 只留接口位"。（应用版本 v0.5.0；修改模型ID：deepseek-v4.1-flash） |
 
 ### 标注约定
 
@@ -176,7 +177,7 @@ MeNote/
 │   │       ├── features/           # 每个功能一个目录（见 2.3.2 落点表）
 │   │       ├── data/               # Dexie 模式、仓储、outbox、同步引擎
 │   │       ├── crypto/             # 隐私门禁与备份导出加密（PBKDF2、信封）
-│   │       ├── workers/            # search.worker.ts / media.worker.ts（各自独立入口，见 2.3.1）
+│   │       ├── workers/            # search.worker.ts（独立入口，见 2.3.1）。【v1.13 修订 · M4】media.worker.ts 不再有：缩略图改在浏览器端生成（见 §八）
 │   │       └── sw/                 # Service Worker
 │   └── worker/                     # Cloudflare Worker
 │       └── src/
@@ -244,7 +245,11 @@ Web 侧（`apps/web/src/`，每个 feature 目录内 `ui/`（组件）+ `model.t
 | 待办（列表 / 看板） | `features/tasks/`（`model.ts` 排序筛选、`actions.ts` 改状态与去掉标记） |
 | 首页概括 | `features/home/` |
 | 搜索界面 | `features/search/`（`useSearch.ts` 接线、`model.ts` 检索纯函数、`ui/SearchPanel.tsx`）；本地索引在 `data/db/search.ts`。**`workers/search.worker.ts` 未做**（检索在纯函数模块里，M2 的已知偏离） |
-| 附件 / 媒体处理 | `features/attachments/`；哈希与缩略图在 `workers/media.worker.ts` |
+| 附件 / 媒体处理 | `features/attachments/`（`model.ts` 引用写法与文案、`thumbnail.ts` 缩略图、`upload.ts` 两段上传、`queue.ts` 上传队列、`useAttachments.ts` 接线）；【v1.13 修订 · M4】**哈希与缩略图在浏览器（`thumbnail.ts`），`workers/media.worker.ts` 这个落点已删除** |
+| 版本历史（前端）【M4】 | `features/versions/`（`model.ts` 行文案/行级 diff/恢复确认文案、`ui/VersionHistoryPanel.tsx`、`ui/VersionDiff.tsx`、`useVersions.ts`） |
+| 回收站（前端）【M4】 | `features/trash/`（`model.ts`、`ui/TrashPage.tsx`、`ui/PurgeConfirmDialog.tsx`、`useTrash.ts`）+ `data/db/trash.ts` |
+| 表格（前端）【M4】 | `features/tables/`（`model.ts` 全在纯函数里、`ui/TableEditor.tsx`、`ui/TableGrid.tsx`、`ui/GalleryView.tsx`、`ui/TableToolbar.tsx`、`ui/TableFilterBar.tsx`、`ui/TableColumnManager.tsx`、`ui/TableSizeBar.tsx`、`ui/useVirtualWindow.ts`） |
+| 附件 / 版本（服务端）【M4】 | `apps/worker/src/adapters/r2.ts`（对象键与读写的唯一适配层）、`services/attachments.ts`、`services/versions.ts`、`services/version-retention.ts`（保留与稀疏化单独一摊）、`routes/attachments.ts`、`routes/versions.ts`；后台任务在 `services/jobs.ts` + `jobs/maintenance.ts` |
 | 隐私门禁（解锁框、锁定清理、多设备 verifier） | `features/privacy/` + `crypto/keystore.ts` |
 | 备份导出（信封打包、外部解密工具说明） | `features/backup/` + `crypto/envelope.ts`（编解码调 packages/crypto-format） |
 | Markdown 核心（front matter 读写、标签与任务字段派生；前后端同一份实现）【M2 建】 | `packages/mdcore/`（零运行时依赖；**不得依赖 apps/**） |
@@ -328,8 +333,8 @@ flowchart TB
         T1["API 客户端：超时、退避、错误码映射"]
     end
     subgraph WK["独立线程"]
-        W3["search.worker：MiniSearch 索引"]
-        W4["media.worker：哈希、缩略图、压缩"]
+        W3["search.worker：MiniSearch 索引（M2 未做，检索在纯函数模块里）"]
+        W4["media.worker：哈希、缩略图、压缩（【v1.13 修订 · M4】已删除：改在浏览器主线程用 Canvas / OffscreenCanvas 生成，见 §八）"]
         W5["Service Worker：外壳与附件缓存"]
     end
     L1 --> L2
@@ -451,13 +456,18 @@ flowchart LR
 
 ### 5.1 D1 表结构
 
-**建表以新隐私模型的权威 DDL 为准**：`docs/modules/Menote-数据模型与迁移设计-v1.md` §3——即需求 18.2 去掉正文密文列、`title_enc`/`name_enc`/`key_id`、`data_keys`、`user_crypto` 密钥列，并**重写**受密文列影响的 `items`/`folders`/`item_bodies` 的 CHECK 约束（原文的三条 CHECK 引用了要删的列，不能直接照抄）。`items.last_edit_at`/`last_device` 已包含其中。该稿的结论会在需求文档 v7.5 同步时并入需求 18.2。实现时需要以下技术补充【待确认】，均不改变产品行为，只补足需求中已描述的机制所需的存储：
+**建表以新隐私模型的权威 DDL 为准**：`docs/modules/Menote-数据模型与迁移设计-v1.md` §3——即需求 18.2 去掉正文密文列、`title_enc`/`name_enc`/`key_id`、`data_keys`、`user_crypto` 密钥列，并**重写**受密文列影响的 `items`/`folders`/`item_bodies` 的 CHECK 约束（原文的三条 CHECK 引用了要删的列，不能直接照抄）。`items.last_edit_at`/`last_device` 已包含其中。该稿的结论会在需求文档 v7.5 同步时并入需求 18.2。
+
+**【v1.13 修订 · M4 已实现】技术补充的 DDL 已定稿**：下表的草案**不再逐条在本文件重述**，权威落点是《Menote-M4-设计-v1》§六（迁移 `0004_content_integrity`），运行时由自愈迁移建表（§15.5）。**六张表的清单**（与迁移文件导出的 `M4_TABLE_NAMES` 一致）：`attachments`、`attachment_refs`、`item_versions`、`tombstones`、`r2_gc_queue`、**`pending_uploads`**（新增：上传意图登记从 `r2_gc_queue` 的 `reason='pending_upload'` 拆出独立表，避免"待删对象"与"待确认上传"两类生命周期混在一张表里）。
+
+下表保留**原因与原委**（回答"为什么需要这些表"），**具体列与约束请看 §六**：
 
 | 补充 | 原因（对应需求） | 草案 |
 |---|---|---|
 | 新增 `tombstones` 表 | 需求 15.2 用 `deleted_at` 表示删除，但永久删除（14.4）会删掉 `items` 行，其他设备的增量同步收不到“已删除”信号，本地会残留条目 | `(user_id, entity, entity_id, sync_seq, deleted_at)`，索引 `(user_id, sync_seq)`；保留 180 天，过期清理 |
 | `users` 增加 `tombstone_floor` | 墓碑清理后，游标早于清理点的设备必须全量重同步 | 整数：已清理墓碑中最大的 `sync_seq`；客户端游标小于它时触发全量重建 |
 | 新增 `r2_gc_queue` 表 | 需求 14.4“登记待清理的 R2 对象，由 Cron 分批删除”，DDL 中没有这张表 | `(r2_key PRIMARY KEY, reason, due_at)`；也用作上传意图登记（见 5.3） |
+| 新增 `pending_uploads` 表 | 上传是"两次请求 + 一次落元数据"，中途可能断在任何一步；需要一个**只在服务端**的登记，用它把"登记了却没落元数据"的对象在下一轮当成孤儿清理（**不列举 R2**，需求 19.5） | `(r2_key PRIMARY KEY, user_id, created_at, due_at)`，`due_at = now + 24h` |
 | `user_settings`、`attachments` 增加 `sync_seq` | 需求 15.2 只列了条目和文件夹的增量同步；设置与附件元数据也需要在多设备间同步（v1.1：`data_keys` 表废弃，`user_crypto` 改存 verifier 与 K 的两份包裹，见 7.2） | 各加 `sync_seq` 列与 `(user_id, sync_seq)` 索引。**`user_crypto` 不加 `sync_seq`**：门禁材料不参与增量同步，走 7.2 的四个专用端点 |
 | `attachment_refs` 增加版本引用 | 需求 14.3 规定“保留中的历史版本”引用的附件不算孤儿，但 `attachment_refs` 只记录条目引用 | 增加 `version_id` 列（NULL 表示当前稿引用），主键改为 `(item_id, version_id, attachment_id)` 的等价唯一约束 |
 | 新增 `rate_counters` 表（条件启用） | 需求 17.3：Rate Limiting 绑定在免费版不可用时，用 D1 按分钟计数 | `(key, window_start, count)`；可用绑定时不建 |
@@ -475,13 +485,13 @@ flowchart LR
 
 【v1.1 注】`e/` 前缀（静态密文附件）不再使用——所有附件明文存储，隐私条目仅在出站备份时加密（7.3、7.4）。
 
-【待核实】需求 14.1 中缩略图的对象键没有单独约定；上表用 `.t` 后缀是架构草案。
+**【v1.13 修订 · M4 已实现】缩略图对象键已定稿**：`a/{uid}/{sha256}.t`（即上表第二行）。此前的【待核实】来自"需求 14.1 没单独约定缩略图键"；M4 设计 §3.1 已定稿，实现见 `apps/worker/src/adapters/r2.ts` 的 `attachmentKey()`（`kind='thumb'` 时加 `.t` 后缀），原图与缩略图共用同一个 `sha256`、`kind` 区分——所以"同一用户同一文件只存一份"对两者都成立。
 
 ### 5.3 R2 与 D1 的一致性【架构定】
 
 R2 与 D1 之间没有事务，采用“先登记、后操作、再确认”避免泄漏，且全程不需要列举 R2：
 
-- **上传**：Worker 先插入一行 `r2_gc_queue(r2_key, reason='pending_upload', due_at=now+24h)`；写 R2 成功后，在同一个 batch 中插入附件或版本元数据并删除这行登记。中途失败时，登记在 24 小时后到期，Cron 删除残留对象。
+- **上传**：Worker 先插入一行 `pending_uploads(r2_key, user_id, created_at, due_at = now + 24h)`；写 R2 成功后，在同一个 batch 中插入附件或版本元数据并删除这行登记。中途失败时，登记在 24 小时后到期，每日维护把它当成孤儿（登记了却没落元数据）清理——**不列举 R2**。（【v1.13 修订 · M4 已实现】原文写的是用 `r2_gc_queue` 的 `reason='pending_upload'` 登记，实现时拆成了独立表 `pending_uploads`：待删对象与待确认上传的**生命周期不同**（一个到期就删、一个要等 24 小时且可能被"续传"覆盖），混在一张表里会让清理逻辑要按 reason 分支。）
 - **删除**：在删除 D1 记录的同一个 batch 中登记 `r2_gc_queue(reason='delete', due_at=now)`；Cron 按 `due_at` 分批删除 R2 对象，删除成功后删登记。R2 删除是幂等的，重复执行无害。
 - 这一机制覆盖了需求 14.4 中“没有对应元数据的版本对象”这类残留的来源。需求 19.5 要求后台不调用 `ListObjects`，因此每日孤儿检查只核对 D1 内部的引用关系（附件引用、版本元数据、快照登记），不列举 R2。
 
@@ -657,29 +667,30 @@ sequenceDiagram
 
 ## 八、附件管线【依需求 14，接口为架构定】
 
+**【v1.13 修订 · M4 已实现】缩略图在浏览器端生成，`workers/media.worker.ts` 这个落点已删除**：原图与缩略图的 SHA-256、缩略图编码（最长边 400 px、WebP、目标 ≤40 KB）都发生在**编辑器所在的浏览器**里（`apps/web/src/features/attachments/thumbnail.ts`）。理由与 M2 砍掉 `search.worker.ts` 同例：省一次 Worker CPU 与子请求，而 Worker 只做"代理上传"这一件它必须做的事（架构 §14.2 的 CPU 预算）。因此下面的时序图里参与者从 `media.worker` 改为**编辑器（浏览器）**。
+
 ```mermaid
 sequenceDiagram
-    participant U as 编辑器
-    participant M as media.worker
+    participant U as 编辑器（浏览器）
     participant W as Worker
     participant R as R2
     participant D as D1
-    U->>M: 文件（粘贴或选择）
-    M->>M: SHA-256、缩略图（最长边约 400 px，WebP）
-    M-->>U: 本地 blob 地址先显示
-    U->>W: POST /api/attachments/check（一批哈希）
-    W->>D: 查已存在的哈希
-    W-->>U: 需要上传的列表
-    U->>W: PUT 原图与缩略图（流式请求体，附 SHA-256）
-    W->>D: 登记 pending_upload
-    W->>R: put(流, sha256 校验)
-    W->>D: 同一 batch：插入 attachments 行，删除登记
+    U->>U: 文件（粘贴 / 拖入 / 选择）→ 算 SHA-256、生成缩略图（最长边约 400 px，WebP）
+    U-->>U: 本地 blob 地址先显示（未传完一律用它预览）
+    U->>W: POST /api/attachments/check（sha256 + size）
+    W->>D: 查已存在的哈希（(user_id, sha256, kind)）
+    W-->>U: exists / pending
+    U->>W: PUT /api/attachments/blob?sha256=…（原图与缩略图**各一次请求**，流式请求体）
+    W->>D: 先登记 pending_uploads（due_at = now + 24h）
+    W->>R: put(流式，键 a/{uid}/{sha256} 与 .t)
+    W-->>U: 落元数据的凭据（键与大小）
+    U->>W: POST /api/attachments/finalize（元数据 + 可选 itemId 挂引用）
+    W->>D: 同一 batch：插 attachments 两行（thumb 的 parent_id 指原图），删 pending_uploads 登记
     W-->>U: 附件 ID
-    U->>W: 下次保存正文时上报引用（X-Menote-Refs）
 ```
 
-- 引用上报：服务端用两条语句完成集合更新，与引用数量无关：删除“当前稿引用中不在新列表里的”，再 `INSERT OR IGNORE ... SELECT FROM json_each(?)` 插入新增的；避免每条查询最多 100 个参数的限制。
-- 读取：`GET /api/attachments/h/:sha256`（明文，`immutable`）；先校验会话用户与附件归属，再从 R2 流式返回，支持 `Range`。隐私条目的附件在锁定时由前端门禁不渲染（v1.1：无密文附件路径）。
+- 引用上报【v1.13 修订 · M4 已实现】：**上传时的 `finalize` 带上 `itemId` 即落一条 `attachment_refs`**；正文里的引用写法由客户端定稿为 `![名](/api/attachments/h/<sha256>)`（图片）与 `[名](…)`（非图片），客户端用同一条正则就能把正文里的引用全抓出来。**M4 未做"保存正文时对齐引用集合"**（那要改 `PUT /api/items/:id/body` 的请求结构），期间由孤儿 30 天规则兜底；`X-Menote-Refs` 这条请求头**没有实现**，实现时用了 `finalize` 的字段。集合更新语句（`json_each` + `INSERT OR IGNORE`）留待 M6 附件管理页一并做。
+- 读取：`GET /api/attachments/h/:sha256`（明文，`immutable`）；先校验会话用户与附件归属，再从 R2 流式返回，支持 `Range`（**单段**；多段 Range 按规范回 200 全量，不假装支持）。隐私条目的附件在锁定时由前端门禁不渲染（v1.1：无密文附件路径）。
 - 孤儿标记：由每日维护任务按游标分批处理（见 12.2），保存路径上不做孤儿判断，保持保存请求轻量。
 
 ---
@@ -736,23 +747,25 @@ sequenceDiagram
 
 只配置一个 Cron：`*/15 * * * *`（免费版每账户最多 5 个，留给其他项目）。每次触发只有 10 ms CPU 和有限的子请求，因此每轮按固定配额依次推进各任务，配额以“处理条数”计（Workers 中 `Date.now()` 只在 I/O 之后推进，无法用于精确计时）：
 
-| 顺序 | 任务 | 每轮配额（草案，待实测调整） | 依据 |
+| 顺序 | 任务 | 每轮配额（**M4 已按实测定值**） | 依据 |
 |---|---|---|---|
 | 1 | 注册开关到期自动关闭 | 1 次条件更新 | 需求 5.2 |
-| 2 | R2 待删对象（`r2_gc_queue` 中已到期的） | 20 个对象 | 需求 14.4 |
-| 3 | 快照队列（`export_queue`） | 10 个文件 | 需求 16.3 |
-| 4 | idle 封存兜底（若确认启用） | 3 条 | 需求 12.2 |
-| 5 | 外部备份：轮到的一个目标 | 20 个文件（Git 目标一次提交最多 40 个） | 需求 16.3 |
-| 6 | 每日维护：推进一步 | 一个步骤 | 见 12.2 |
+| 2 | R2 待删对象（`r2_gc_queue` 中已到期的） | **20** 个对象 | 需求 14.4 |
+| 3 | 快照队列（`export_queue`） | **接口位**（快照文件属 M5/M6，M4 只在 `summary` 里如实报"跳过"） | 需求 16.3 |
+| 4 | idle 封存兜底 | **3** 条（**M4 已实现**） | 需求 12.2 |
+| 5 | 外部备份：轮到的一个目标 | **接口位**（备份状态机属 M5） | 需求 16.3 |
+| 6 | 每日维护：推进一步 | **一个步骤**（五步见 12.2） | 见 12.2 |
 
-各任务的进度游标存在 `app_meta`；一轮没做完的下一轮继续，重复执行无副作用。
+各任务的进度游标存在 `app_meta`，**键名（M4 已实现，与代码一致）**：`job:gc:cursor`（R2 GC）、`job:maintenance:day`（今天是否已走完一圈）、`job:maintenance:step`（圈内走到第几步）、`job:sweep:item`（版本稀疏化的条目游标）。一轮没做完的下一轮继续，重复执行无副作用。
+
+**【v1.13 修订 · M4 已实现】不加锁，容忍重复**：多 isolate 可能同时跑同一轮，实现上**刻意不加锁**，靠"配额 + 游标 + 幂等"容忍重复——永久删除按条件删、稀疏化按条件删、墓碑按 floor 推进，重复执行都不会更糟。加锁会引入一个"锁没释放就再也不跑"的故障模式，而这里的任务全都可以安全重放，不值得为它冒那个风险。（`schema` 自愈那次例外是**必须**互斥的：建表并发会撞 DDL，所以它有自己的迁移锁，见 §15.5。）
 
 ### 12.2 每日维护状态机【架构定】
 
 每天第一次进入维护窗口（凌晨，按实例所有者时区）时开始，之后每轮推进一步，一天之内做完：
 
-1. 回收站到期条目：取一小批，按 12.3 执行永久删除。
-2. 版本稀疏化：按条目游标处理跨越年龄档位的旧版本（需求 12.3）。
+1. 回收站到期条目：取一小批，按 12.3 执行永久删除。**【M4 已实现】保留期按用户设置**（`user_settings.version_trash.trash_retention_days`，默认 30 天）——设置页能改它，维护就必须读它；设置行损坏时退回默认值（维护任务不能因为一行脏数据停摆）。
+2. 版本稀疏化：按条目游标处理跨越年龄档位的旧版本（需求 12.3）。**【M4 已实现】密度分档**：24h 全留 / 1–7 天每 6 小时 / 7–30 天每天 / 30 天–1 年每周 / 1 年以上每月；`keep=1` 与手动版本不参与；另按用户设置裁"最长保留时长"与"条数上限"。
 3. 附件孤儿标记与到期删除（孤儿超过 30 天，需求 14.3）。
 4. 引用一致性检查：没有元数据的版本记录、所属条目已不存在的版本与快照登记（需求 14.4）。
 5. 清理：审计日志（90 天）、MCP 幂等记录（7 天）、过期会话、`auth_throttle` 过期行、墓碑（180 天，并推进 `tombstone_floor`）。
@@ -760,6 +773,8 @@ sequenceDiagram
 ### 12.3 永久删除【依需求 14.4】
 
 一个 D1 batch 内完成：删除 `items`、`item_bodies`、`attachment_refs`、`shares` / `share_items` 中的相关行，删除 `item_versions` 并把它们的 R2 键登记到 `r2_gc_queue`，写入墓碑，写入快照队列（删除快照文件，Memo 则重写月份文件）。不再被引用的附件由每日维护任务标记与删除。条目数量多（例如清空回收站）时，由客户端按每批 10 条分多个请求提交，保证每个请求的语句数在上限以内。
+
+**【v1.13 修订 · M4 已实现】**：①**一次逻辑写共享一个 `sync_seq`**——删条目、删正文、删引用、删版本、写墓碑这几组语句共用一个新序号，客户端按序号推进游标时不会看到"删了一半"的中间态；②**快照文件属 M5/M6**，M4 的永久删除**只在接口位留空**（不生成删除快照的队列项），因为 M4 还没有快照目录可删；③清空回收站按 `PERMANENT_DELETE_BATCH = 10` 分批，每批一个 batch。
 
 ### 12.4 快照与外部备份【依需求 16.3】
 

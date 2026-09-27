@@ -6,7 +6,7 @@
  * 这里负责把服务端答复落到本地，好让界面立刻反映出来。
  */
 import { db } from "./database";
-import type { LocalItem } from "./schema";
+import type { LocalFolder, LocalItem } from "./schema";
 
 /**
  * 回收站列表：**本地读**（离线也能看），按删除时间倒序。
@@ -23,6 +23,19 @@ export async function listTrashedItems(): Promise<LocalItem[]> {
 /** 回收站里还有多少条（设置页卡片头要的实时计数） */
 export async function countTrashedItems(): Promise<number> {
   return db.items.filter((row) => row.deleted_at !== null).count();
+}
+
+/**
+ * 回收站里的**文件夹**（M4-12 补；界面稿 §6.5 要求"加密空间内条目**或其文件夹**在回收站里"）。
+ *
+ * 与条目分开查、由模型层合成一张列表：两者的操作与图标不同（文件夹目前不能永久删除，
+ * 见 `TrashRowModel.purgeable`），在数据层就分开更不容易搞混。
+ */
+export async function listTrashedFolders(): Promise<LocalFolder[]> {
+  const rows = await db.folders.toArray();
+  return rows
+    .filter((row) => row.deleted_at !== null)
+    .sort((left, right) => (right.deleted_at ?? 0) - (left.deleted_at ?? 0));
 }
 
 /** 软删后的本地同步：只改这几列（`rev` 不动，与服务端口径一致） */

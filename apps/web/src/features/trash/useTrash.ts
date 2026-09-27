@@ -11,11 +11,13 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { PrivacyGate } from "@menote/shared";
-import type { LocalItem } from "../../data/db";
+import type { LocalFolder, LocalItem } from "../../data/db";
 import { trashApi } from "../../data/api/endpoints";
 import {
   countTrashedItems,
+  listTrashedFolders,
   listTrashedItems,
+  markFolderRestored,
   markItemRestored,
   markItemTrashed,
   purgeLocalItems,
@@ -59,6 +61,8 @@ export function useTrash(
   notify: (notice: TrashNotice) => void = () => undefined,
 ): UseTrashResult {
   const [items, setItems] = useState<LocalItem[]>([]);
+  /** 回收站里的文件夹（M4-12 补；界面稿 §6.5） */
+  const [folders, setFolders] = useState<LocalFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [progress, setProgress] = useState<PurgeProgress | null>(null);
@@ -66,8 +70,9 @@ export function useTrash(
   const [offline, setOffline] = useState(isOffline);
 
   const reload = useCallback(async () => {
-    const rows = await listTrashedItems();
+    const [rows, folderRows] = await Promise.all([listTrashedItems(), listTrashedFolders()]);
     setItems(rows);
+    setFolders(folderRows);
     setLoading(false);
   }, []);
 
@@ -75,9 +80,10 @@ export function useTrash(
   // 后者会触发级联渲染（lint 明确禁止），这也是仓库里其他读盘 hook 的统一写法
   useEffect(() => {
     let alive = true;
-    void listTrashedItems().then((rows) => {
+    void Promise.all([listTrashedItems(), listTrashedFolders()]).then(([rows, folderRows]) => {
       if (!alive) return;
       setItems(rows);
+      setFolders(folderRows);
       setLoading(false);
     });
     return () => {
@@ -115,8 +121,18 @@ export function useTrash(
   const restore = useCallback(
     async (ids: readonly string[]) => {
       let movedToRoot = false;
+      /** 这一次恢复里有文件夹（提示文案要说清"整夹连同内容"） */
+      let restoredFolders = 0;
       for (const id of ids) {
         try {
+          // 文件夹走文件夹的接口：`restoreItem` 对文件夹 id 会 404
+          if (folders.some((folder) => folder.id === id)) {
+            const result = await trashApi.restoreFolder(id);
+            await markFolderRestored(id, result.meta_rev, result.parent_id);
+            restoredFolders += 1;
+            if (result.parent_id === null) movedToRoot = true;
+            continue;
+          }
           const result = await trashApi.restoreItem(id);
           await markItemRestored(id, result.meta_rev, result.folder_id);
           if (result.folder_id === null) movedToRoot = true;
@@ -133,13 +149,15 @@ export function useTrash(
       notify({
         message: movedToRoot
           ? "已恢复到根目录（原文件夹已不存在）"
-          : ids.length > 1
-            ? `已恢复 ${ids.length} 条到原位置`
-            : "已恢复到原位置",
+          : restoredFolders > 0
+            ? `已恢复 ${restoredFolders} 个文件夹（含其中的内容）`
+            : ids.length > 1
+              ? `已恢复 ${ids.length} 条到原位置`
+              : "已恢复到原位置",
         tone: "success",
       });
     },
-    [notify, reload],
+    [folders, notify, reload],
   );
 
   const runBatches = useCallback(
@@ -209,7 +227,7 @@ export function useTrash(
   }, [failures, runBatches]);
 
   return {
-    rows: trashRows(items, now(), gate),
+    rows: trashRows(items, now(), gate, undefined, folders),
     loading,
     offline,
     selected,

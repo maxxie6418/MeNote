@@ -7,12 +7,19 @@
  */
 import { PERMANENT_DELETE_BATCH, TRASH_RETENTION_DAYS_DEFAULT, DAY_MS } from "@menote/shared";
 import { isMemoVisible, isSpaceUnlocked, type PrivacyGate } from "@menote/shared";
-import type { LocalItem } from "../../data/db";
+import type { LocalFolder, LocalItem } from "../../data/db";
 
 /** 回收站里的一行 */
 export interface TrashRowModel {
   id: string;
-  type: LocalItem["type"];
+  /**
+   * 行是什么：`item`（笔记 / 表格 / Memo）还是 `folder`。
+   *
+   * **为什么要区分**：界面稿 §6.5 写明"加密空间内条目（**或其文件夹**）在回收站里"，
+   * 所以文件夹也要出现在这张列表里；而两者的 `type` 语义、图标与不可用的操作都不同。
+   */
+  kind: "item" | "folder";
+  type: LocalItem["type"] | "folder";
   /** 显示用标题：加密空间条目在锁定时是占位文字（不泄露真实标题） */
   title: string;
   /** 标题是否被占位（界面据此加锁图标） */
@@ -27,6 +34,14 @@ export interface TrashRowModel {
   remainingDays: number;
   /** ≤3 天：走警告色**并加"即将永久删除"文字**（颜色不单独表意） */
   urgent: boolean;
+  /**
+   * 能否**永久删除**这一行。
+   *
+   * 文件夹目前**不能**：服务端的永久删除只认条目（`permanentDeleteItems` 的 SQL 只扫 `items`），
+   * 关掉它是为了让界面别给一个点了会报错的入口——真正缺的是服务端能力，已登记为待办
+   * （收口复核 §七）。
+   */
+  purgeable: boolean;
 }
 
 /** 保留期换算：`deleted_at + 保留天数 × 一天` */
@@ -68,6 +83,7 @@ export function trashRow(
 
   return {
     id: item.id,
+    kind: "item",
     type: item.type,
     // 锁定态**不显示真实标题**；解锁期间显示真实标题并带"加密空间"标注
     title: locked ? "加密空间内条目" : (item.title ?? "（无标题）"),
@@ -77,20 +93,59 @@ export function trashRow(
     deletedAt,
     remainingDays: remain,
     urgent: remain <= URGENT_REMAINING_DAYS,
+    purgeable: true,
   };
 }
 
-/** 回收站列表：按删除时间倒序（刚删的在上面） */
+/**
+ * 文件夹行（界面稿 §6.5 要求文件夹也出现在回收站）。
+ *
+ * 与条目行的两点不同：①**标题就是文件夹名**（文件夹名按明文存储，没有单篇加密这回事）；
+ * ②在加密空间里的文件夹按隐私锁口径藏名字（与条目一致）。
+ */
+export function trashFolderRow(
+  folder: LocalFolder,
+  now: number,
+  gate: PrivacyGate,
+  retentionDays = TRASH_RETENTION_DAYS_DEFAULT,
+): TrashRowModel {
+  const inEncSpace = folder.in_enc_space === 1 || folder.is_enc_space === 1;
+  const locked = gate.lockState !== "disabled" && inEncSpace && !isSpaceUnlocked(gate);
+  const deletedAt = folder.deleted_at ?? 0;
+  const remain = remainingDays(deletedAt, now, retentionDays);
+
+  return {
+    id: folder.id,
+    kind: "folder",
+    type: "folder",
+    title: locked ? "加密空间内文件夹" : folder.name,
+    titleHidden: locked,
+    inEncSpace,
+    encSelf: false,
+    deletedAt,
+    remainingDays: remain,
+    urgent: remain <= URGENT_REMAINING_DAYS,
+    // 服务端还没有文件夹的永久删除（见 `TrashRowModel.purgeable` 的说明）
+    purgeable: false,
+  };
+}
+
+/** 回收站列表：**条目 + 文件夹**，按删除时间倒序（刚删的在上面） */
 export function trashRows(
   items: readonly LocalItem[],
   now: number,
   gate: PrivacyGate,
   retentionDays = TRASH_RETENTION_DAYS_DEFAULT,
+  folders: readonly LocalFolder[] = [],
 ): TrashRowModel[] {
-  return items
+  const itemRows = items
     .filter((item) => item.deleted_at !== null)
-    .map((item) => trashRow(item, now, gate, retentionDays))
-    .sort((left, right) => right.deletedAt - left.deletedAt);
+    .map((item) => trashRow(item, now, gate, retentionDays));
+  const folderRows = folders
+    .filter((folder) => folder.deleted_at !== null)
+    .map((folder) => trashFolderRow(folder, now, gate, retentionDays));
+
+  return [...itemRows, ...folderRows].sort((left, right) => right.deletedAt - left.deletedAt);
 }
 
 // ——————————————————————————— 永久删除的分批编排 ———————————————————————————

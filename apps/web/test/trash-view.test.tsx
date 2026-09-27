@@ -17,6 +17,7 @@ afterEach(cleanup);
 function row(overrides: Partial<TrashRowModel> = {}): TrashRowModel {
   return {
     id: "i1",
+    kind: "item",
     type: "note",
     title: "被删的笔记",
     titleHidden: false,
@@ -25,6 +26,7 @@ function row(overrides: Partial<TrashRowModel> = {}): TrashRowModel {
     deletedAt: Date.UTC(2026, 8, 20, 10, 0, 0),
     remainingDays: 23,
     urgent: false,
+    purgeable: true,
     ...overrides,
   };
 }

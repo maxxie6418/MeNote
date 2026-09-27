@@ -24,6 +24,7 @@ const TYPE_LABELS: Readonly<Record<TrashRowModel["type"], string>> = {
   note: "笔记",
   table: "表格",
   memo: "Memo",
+  folder: "文件夹",
 };
 
 export interface TrashPageProps {
@@ -159,7 +160,10 @@ export function TrashPage({
                 />
 
                 <span className={`trashrow__icon trashrow__icon--${row.type}`} aria-hidden="true">
-                  <Icon name={row.type === "table" ? "table" : "note"} size={13} />
+                  <Icon
+                    name={row.kind === "folder" ? "folder" : row.type === "table" ? "table" : "note"}
+                    size={13}
+                  />
                 </span>
 
                 <span className="trashrow__title">
@@ -196,12 +200,21 @@ export function TrashPage({
                   >
                     恢复
                   </Button>
+                  {/*
+                    文件夹行不给「永久删除」：服务端的永久删除只认条目（`permanentDeleteItems` 的 SQL
+                    只扫 `items`），点了必然报错。**禁用并写明原因**，而不是藏掉按钮——
+                    藏掉会让人以为"文件夹不会永久删除"。
+                  */}
                   <Button
                     variant="danger"
                     size="sm"
                     onClick={() => setPending({ kind: "purge", ids: [row.id] })}
-                    disabled={offline}
-                    title={blockedTitle}
+                    disabled={offline || !row.purgeable}
+                    title={
+                      !row.purgeable
+                        ? "文件夹的永久删除暂未开放（服务端只支持条目），先恢复或等保留期到期"
+                        : blockedTitle
+                    }
                   >
                     永久删除
                   </Button>

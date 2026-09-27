@@ -13,6 +13,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_USER_SETTINGS } from "@menote/shared";
 import { fnbarWiring } from "../src/app/NavPanels";
 import { SettingsPanel } from "../src/features/settings/ui/SettingsPanel";
 import type { NotesWorkspace } from "../src/features/notes/useNotesWorkspace";
@@ -110,24 +111,12 @@ describe("设置页的可见出口", () => {
     role: "owner",
     themeMode: "system",
     onThemeMode: vi.fn(),
-    userSettings: {
-      start_view: "home",
-      timezone: "Asia/Shanghai",
-      editor_mode: "split",
-      quick_menu: [],
-      privacy: {
-        scope: { memo: true },
-        tier: "minutes",
-        minutes: 5,
-        search_bodies_when_unlocked: true,
-      },
-      version_trash: {
-        seal_idle_minutes: 10,
-        versions_keep: 100,
-        versions_max_age_days: 0,
-        trash_retention_days: 30,
-      },
-    },
+    /*
+      夹具直接铺 `DEFAULT_USER_SETTINGS` 再改要改的那些：此前是把整份形状抄一遍，
+      于是每加一个设置字段（M3 的 privacy、M4 的 version_trash、v0.5.2 的 task_view）
+      这里都要跟着抄一次，漏了就报 `Cannot read properties of undefined`。
+    */
+    userSettings: { ...DEFAULT_USER_SETTINGS, quick_menu: [] },
     onPatchSettings: vi.fn(),
     registrationOpen: false,
     onToggleRegistration: vi.fn(),

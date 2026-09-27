@@ -62,17 +62,28 @@ const TASKS = [
 
 const TITLES = { t1: "交物业费", t2: "写周报", t3: "买牛奶", notTask: "随手一记" };
 
+/** 正文（详情浮层的「描述」用它；这里给一条带换行的，顺便钉住"保留换行"的渲染） */
+const BODIES = {
+  t1: "交物业费\n9 月 20 日前",
+  t2: "写周报",
+  t3: "买牛奶",
+};
+
 function renderPanel(overrides: Partial<Parameters<typeof TaskPanel>[0]> = {}) {
   const onStatusChange = vi.fn();
   const onClearMarker = vi.fn();
   const onUnlock = vi.fn();
+  const onAdd = vi.fn();
   const { container } = render(
     <TaskPanel
       tasks={TASKS}
       titles={TITLES}
+      bodies={BODIES}
       today={TODAY}
       gate={noPrivacyGate()}
       onUnlock={onUnlock}
+      onAdd={onAdd}
+      filterForm="capsules"
       onStatusChange={onStatusChange}
       onClearMarker={onClearMarker}
       {...overrides}
@@ -81,7 +92,7 @@ function renderPanel(overrides: Partial<Parameters<typeof TaskPanel>[0]> = {}) {
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）——看板卡片上的状态按钮最容易漏名字
   assertLabelledControls(container, { buttons: 1 });
   assertSinglePrimaryAction(container);
-  return { container, onStatusChange, onClearMarker, onUnlock };
+  return { container, onStatusChange, onClearMarker, onUnlock, onAdd };
 }
 
 /** 按文本取卡片（卡片上还有按钮，直接按 data 属性更稳） */
@@ -307,5 +318,196 @@ describe("清单行的结构（原型 `.tkrow`；v0.4.50 从卡片改成横向�
     expect(row?.querySelector('use[href="#i-more"]')).not.toBeNull();
     // 此前这里是 `⋯` 这个文本字符（v0.5.1 换掉）——字形与字号都不受控，且全仓其余「更多」都走 sprite
     expect(row?.textContent ?? "").not.toContain("⋯");
+  });
+});
+
+describe("页头与筛选条（v0.5.2 按定稿 2026-09-27 调整）", () => {
+  it("页头收成一条：标题 · 说明 ⓘ · 概览 · 视图切换 · 添加待办，同在一个 `.tkhead__main` 里", () => {
+    const { container } = renderPanel();
+    const head = container.querySelector(".tkhead__main");
+    expect(head).not.toBeNull();
+    expect(head?.querySelector(".memopanel__title")?.textContent).toBe("待办");
+    expect(head?.querySelector(".infohint__btn")).not.toBeNull(); // 说明收进 InfoHint，不平铺
+    expect(head?.querySelector(".tksum")).not.toBeNull(); // 实时计数仍然**可见**
+    expect(head?.querySelector('[aria-label="待办视图切换"]')).not.toBeNull();
+    expect(within(head as HTMLElement).getByRole("button", { name: "添加待办" })).toBeTruthy();
+  });
+
+  it("「添加待办」把请求交回组合根（切录入框的待办档并聚焦，M07-01 入口二）", async () => {
+    const user = userEvent.setup();
+    const { onAdd } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "添加待办" }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("筛选条移进滚动容器（不再占页头一行），三个组名都在", () => {
+    const { container } = renderPanel();
+
+    // 位置：在滚动容器里（原型 `.page--task .page__scroll` 的第一个孩子）
+    expect(container.querySelector(".taskpanel__body > .tkhead__dock > .taskfilter")).not.toBeNull();
+    // 它不在页头里
+    expect(container.querySelector(".tkhead__main .taskfilter")).toBeNull();
+    // 组名（原型 `.tkhead__gl`）
+    const labels = [...container.querySelectorAll(".tkhead__gl")].map((node) => node.textContent);
+    expect(labels).toEqual(["状态", "优先级", "截止"]);
+  });
+
+  it("两种形态：胶囊横排是基线，悬浮小组件只多一个修饰类（样式在 CSS 里）", () => {
+    const { container: capsules } = renderPanel({ filterForm: "capsules" });
+    expect(capsules.querySelector(".tkhead__dock--float")).toBeNull();
+
+    cleanup();
+    const { container: floating } = renderPanel({ filterForm: "floating" });
+    expect(floating.querySelector(".tkhead__dock--float .taskfilter")).not.toBeNull();
+  });
+
+  it("「隐藏已完成」开关与已完成分组头的收起按钮是**同一份状态**（定稿要求）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    // 初始：已完成分组有行、开关未打开
+    expect(container.querySelector('[data-task-id="t3"]')).not.toBeNull();
+    expect(screen.getByRole("switch", { name: "隐藏已完成" }).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+
+    // 点分组头的收起按钮 → 行收起来，但**分组头与计数还在**（不让人以为数据没了）
+    await user.click(screen.getByRole("button", { name: "收起已完成" }));
+    expect(container.querySelector('[data-task-id="t3"]')).toBeNull();
+    expect(container.textContent).toContain("已完成");
+    // 顶部开关跟着变（同一份状态）
+    expect(screen.getByRole("switch", { name: "隐藏已完成" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+
+    // 再用开关展开回来
+    await user.click(screen.getByRole("switch", { name: "隐藏已完成" }));
+    expect(container.querySelector('[data-task-id="t3"]')).not.toBeNull();
+    expect(screen.getByRole("button", { name: "收起已完成" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+  });
+
+  it("分组头有一条分隔线（原型 `.tkgrp__rule`）", () => {
+    const { container } = renderPanel();
+    const head = container.querySelector(".tasklist__head");
+    expect(head?.querySelector(".tasklist__rule")).not.toBeNull();
+  });
+
+  it("看板下收起状态筛选与「隐藏已完成」（列头已承载状态与计数）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "看板" }));
+
+    const labels = [...container.querySelectorAll(".tkhead__gl")].map((node) => node.textContent);
+    expect(labels).toEqual(["优先级", "截止"]);
+    expect(screen.queryByRole("switch", { name: "隐藏已完成" })).toBeNull();
+    // 看板里三列照旧都在（隐藏已完成**不作用于看板**）
+    expect(container.querySelectorAll(".kanban__col")).toHaveLength(3);
+  });
+});
+
+describe("详情浮层（v0.5.2；原型 `.tdetail`）", () => {
+  it("点清单行标题打开详情：面板出现、这一条被标为选中、标题按钮 aria-expanded 为真", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    expect(container.querySelector(".tdetail")).toBeNull();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+
+    const detail = container.querySelector(".tdetail");
+    expect(detail).not.toBeNull();
+    // 详情在**滚动容器之外**（不推挤、也没把列表包住）——原型是绝对定位盖在界面上
+    expect(container.querySelector(".taskpanel__wrap > .tdetail")).not.toBeNull();
+    expect(card(container, "t1").getAttribute("data-open")).toBe("true");
+    expect(
+      within(card(container, "t1")).getByRole("button", { name: "交物业费" }).getAttribute(
+        "aria-expanded",
+      ),
+    ).toBe("true");
+    // 选中标记是"正在看的那条"，不改变别的行的状态
+    expect(card(container, "t2").getAttribute("data-open")).toBe("false");
+    // 单独断言详情区域里只有一个主操作（它和页头的「添加待办」是**两个区域**）
+    assertSinglePrimaryAction(detail as HTMLElement);
+  });
+
+  it("详情给出标题、属性、描述与底部动作（描述保留正文换行）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    const detail = container.querySelector(".tdetail") as HTMLElement;
+
+    expect(within(detail).getByText("交物业费")).toBeTruthy();
+    expect(within(detail).getByText(/截止 2026-09-20/)).toBeTruthy();
+    expect(within(detail).getByText(/高/)).toBeTruthy();
+    expect(within(detail).getByText("待办")).toBeTruthy();
+    // 描述 = Memo 正文**原文**（换行保留——`textContent` 按原样比对，不走 testing-library 的空白归一化）
+    expect(detail.querySelector(".tdetail__p")?.textContent).toBe("交物业费\n9 月 20 日前");
+    expect(within(detail).getByRole("button", { name: "开始" })).toBeTruthy();
+    expect(within(detail).getByRole("button", { name: "去掉清单标记" })).toBeTruthy();
+  });
+
+  it("详情里的推进按钮与行内是同一口径（同一个目标状态）", async () => {
+    const user = userEvent.setup();
+    const { container, onStatusChange } = renderPanel();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    const detail = container.querySelector(".tdetail") as HTMLElement;
+    await user.click(within(detail).getByRole("button", { name: "开始" }));
+
+    expect(onStatusChange).toHaveBeenCalledWith("t1", "doing");
+  });
+
+  it("点同一条再点一次收起；点另一条直接切过去（原型：不铺遮罩才能这么用）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    expect(container.querySelector(".tdetail")).toBeNull();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    await user.click(within(card(container, "t2")).getByRole("button", { name: "写周报" }));
+    expect(card(container, "t2").getAttribute("data-open")).toBe("true");
+    expect(card(container, "t1").getAttribute("data-open")).toBe("false");
+    expect(
+      container.querySelector(".tdetail")?.textContent,
+    ).toContain("写周报");
+  });
+
+  it("`Esc` 与关闭按钮都能收起（DESIGN.md §6.3 的 Esc 关闭链里有侧滑详情）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    await user.keyboard("{Escape}");
+    expect(container.querySelector(".tdetail")).toBeNull();
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    await user.click(screen.getByRole("button", { name: "关闭详情" }));
+    expect(container.querySelector(".tdetail")).toBeNull();
+  });
+
+  it("看板卡片的标题也能打开详情（两处入口同一套）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "看板" }));
+    await user.click(within(card(container, "t2")).getByRole("button", { name: "写周报" }));
+
+    expect(container.querySelector(".tdetail")).not.toBeNull();
+    expect(card(container, "t2").getAttribute("data-open")).toBe("true");
+  });
+
+  it("正文没缓存到时说明为什么空（不写一句「暂无」了事）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel({ bodies: {} });
+
+    await user.click(within(card(container, "t1")).getByRole("button", { name: "交物业费" }));
+    expect(container.querySelector(".tdetail")?.textContent).toContain("还没有正文");
   });
 });

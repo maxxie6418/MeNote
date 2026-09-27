@@ -4,6 +4,9 @@
  * 三列固定顺序：待办 / 进行中 / 已完成。**改状态用卡片上的文字按钮**（"开始 / 完成 / 重开"）——
  * 需求里写的是"点卡片改状态**或**拖到另一列"，按钮这条路是无障碍友好、且不依赖拖拽实现的那一条；
  * 拖拽留待移动端适配时再补（DESIGN.md 禁止项 #16：不把拖拽当唯一入口）。
+ *
+ * 【v0.5.2】卡片标题可点开右侧详情（与清单行同一套入口）；「隐藏已完成」不影响看板——
+ * 三列本身就是状态的全貌，列头已经写着状态与条数（定稿口径）。
  */
 import type { LocalItem } from "../../../data/db";
 import type { TaskStatus } from "@menote/mdcore";
@@ -14,6 +17,9 @@ export interface TaskKanbanProps {
   tasks: readonly LocalItem[];
   titles: Readonly<Record<string, string>>;
   today: string;
+  /** 正打开详情的那一条（`null` = 没有） */
+  openId: string | null;
+  onOpen: (itemId: string) => void;
   onStatusChange: (itemId: string, status: TaskStatus) => void;
   onClearMarker: (itemId: string) => void;
 }
@@ -22,6 +28,8 @@ export function TaskKanban({
   tasks,
   titles,
   today,
+  openId,
+  onOpen,
   onStatusChange,
   onClearMarker,
 }: TaskKanbanProps) {
@@ -45,6 +53,8 @@ export function TaskKanban({
                   task={task}
                   title={titles[task.id] ?? "未命名"}
                   today={today}
+                  open={openId === task.id}
+                  onOpen={onOpen}
                   onStatusChange={onStatusChange}
                   onClearMarker={onClearMarker}
                 />

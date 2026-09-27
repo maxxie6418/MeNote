@@ -1449,7 +1449,7 @@ button {
   color: var(--muted);
 }
 
-/* —— 待办：面板与筛选条（原型 `.tkhead` / `.tkhead__bar`）—— */
+/* —— 待办：面板与页头（原型 `.tkhead` / `.tkhead__main`）—— */
 .taskpanel {
   display: flex;
   flex-direction: column;
@@ -1457,6 +1457,42 @@ button {
   min-height: 0;
   /* `min-width` 原本只写在文件末尾的旧块里（清理后并入本块，避免丢声明） */
   min-width: 0;
+  /*
+    列表与筛选条的**共同内容上限**（原型 `.page--task{--cap:920px}`，看板下取消）。
+    只在本屏用，所以写成容器上的局部变量，不升成全局令牌（DESIGN.md §2.3 的表里没有待办这一屏）。
+  */
+  --task-cap: 920px;
+}
+
+/* 页头：一条收齐（标题 · 说明 · 概览 · 视图切换 · 添加待办），原型 `.tkhead` */
+.tkhead {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.tkhead__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+}
+
+/* 把右侧那组（视图切换 + 添加）推到行尾；悬浮形态下隐藏（见 `.tkhead__dock--float`） */
+.tkhead__spacer {
+  flex: 1;
+}
+
+/*
+  滚动容器外壳：**详情浮层绝对定位在它里面**（原型 `.page--task .page-body{position:relative}`）——
+  所以外壳自己不滚动（`.taskpanel__body` 才是那唯一一层滚动容器，DESIGN.md §2.7）。
+*/
+.taskpanel__wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
 }
 
 .taskpanel__body {
@@ -1467,14 +1503,102 @@ button {
   padding: var(--sp-5);
 }
 
+/* 看板：把**滚动容器**收到主操作区的 80% 并居中（原型 `body[data-taskview="kanban"] .page__scroll`）
+   —— 看板三列与筛选条一起跟着对齐，不各算一套宽度。 */
+.taskpanel--board .taskpanel__body {
+  width: 80%;
+  margin: 0 auto;
+}
+
+/*
+  筛选条的外壳（原型 `.tkhead__dock`）：胶囊形态下只是个普通块，造型全在 `.taskfilter` 上；
+  它现在**在滚动容器里**（第一个子元素），所以宽度与列表同一个上限、同样居中。
+*/
+.tkhead__dock {
+  flex: none;
+}
+
 .taskfilter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   /* 原型 `.tkhead__bar`：单值 sp-2 */
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-5);
-  border-bottom: 1px solid var(--line);
+  width: 100%;
+  max-width: var(--task-cap);
+  margin: 0 auto;
+  /* 不再占页头一行、也不再是满宽横带：只留下与列表之间的那点间距（原型 `0 0 sp-2`） */
+  padding: 0 0 var(--sp-2);
+}
+
+/* 看板下取消上限，铺满收窄后的容器（与三列同宽） */
+.taskpanel--board .taskfilter {
+  max-width: none;
+}
+
+/* 组名（状态 / 优先级 / 截止）：胶囊不靠外壳成组，用一行微标点明组意（原型 `.tkhead__gl`） */
+.tkhead__gl {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  margin-right: var(--sp-1);
+}
+
+/* 「隐藏已完成」开关（与已完成分组头的收起按钮共用同一份状态） */
+.taskfilter__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.taskfilter__switch-label {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/*
+  形态二 · 悬浮小组件（原型 `body[data-tkhead="float"]` 那几条）：
+  外壳零高度 + sticky（占位为零，列表仍从顶部开始，卡片本身常驻在滚动容器顶）；
+  本体收成左上角的小卡片。**只在列表模式出现**——看板列头已经承载状态与计数。
+*/
+.tkhead__dock--float {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 0;
+}
+
+.tkhead__dock--float .taskfilter {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+
+.tkhead__dock--float .tkhead__gl {
+  margin: var(--sp-3) 0 2px;
+}
+
+.tkhead__dock--float .tkhead__gl:first-child {
+  margin-top: 0;
+}
+
+.tkhead__dock--float .tkhead__spacer {
+  display: none;
+}
+
+.tkhead__dock--float .taskfilter__switch {
+  margin-top: var(--sp-3);
+}
+
+.taskpanel--board .tkhead__dock--float {
+  display: none;
 }
 
 /* 待办概览（原型 `.tksum`）：细进度条 + 「共 N 条 · 已完成 M 条（P%）」
@@ -1549,6 +1673,11 @@ button {
   font-weight: 600;
 }
 
+/* 看板列头把计数推到最右（原型 `.tkkan__n`）；列表分组头不推——那里由分隔线占满剩余宽度 */
+.kanban__head .tasklist__count {
+  margin-left: auto;
+}
+
 .kanban__body {
   display: flex;
   flex: 1;
@@ -1573,6 +1702,10 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+  /* 与筛选条同一个内容上限、同样居中（定稿：筛选条与列表同一上限） */
+  width: 100%;
+  max-width: var(--task-cap);
+  margin: 0 auto;
 }
 
 .tasklist__group {
@@ -1591,15 +1724,26 @@ button {
 }
 
 .tasklist__count {
-  margin-left: auto;
   padding: 1px var(--sp-2);
   border-radius: var(--radius-pill);
   background: var(--panel);
   color: var(--text-2);
   font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
-  /* 分组头是 h3（600），计数得自己降回常规字重——原本只在文件末尾的旧块里写着（清理后并入本块） */
+  /* 分组头是 h3（600），计数得自己降回常规字重（原型 `.tkgrp__n` 也是常规字重） */
   font-weight: 400;
+}
+
+/* 分组头分隔线（原型 `.tkgrp__rule`）：占满剩余宽度的一条 1px 细线 */
+.tasklist__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* 「已完成」分组的收起 / 展开按钮：收起时箭头转向（原型里也是同一个字形） */
+.tasklist__collapse[aria-expanded="false"] .ic {
+  transform: rotate(-90deg);
 }
 
 /* 分组圆点（原型 `.tkgrp__dot`；状态由模板拼 `--todo / --doing / --done`）
@@ -1643,9 +1787,19 @@ button {
   background: var(--panel-2);
 }
 
-/* 逾期：左侧一条红边（原型 `.tkrow.is-open` 用的是主色，这里按"逾期"语义用红） */
+/* 逾期：左侧一条红边（原型 `.tkrow--late`） */
 .taskrow[data-overdue="true"] {
   box-shadow: inset 2.5px 0 0 var(--red);
+}
+
+/*
+  详情正开着的那一条（原型 `.tkrow.is-open`：主色浅底 + 主色刻线）。
+  写在"逾期"之后——两者都用 `box-shadow` 画左刻线，同一行既要逾期又要选中时，
+  **选中态赢**（正在看的那条更该被指出），这与原型的写法一致。
+*/
+.taskrow[data-open="true"] {
+  background: var(--panel-2);
+  box-shadow: inset 2.5px 0 0 var(--primary);
 }
 
 .taskrow__check {
@@ -1656,14 +1810,31 @@ button {
   accent-color: var(--green);
 }
 
+/*
+  标题是**按钮**（v0.5.2）：原型里点标题打开右侧详情，原型注释也写明"真实实现里应换成真按钮"。
+  所以这里把按钮的外观抹平成一行文字（背景 / 描边 / 内边距 / 字族全部复位），
+  只留指针与省略号——焦点环走全局 `:focus-visible`，**不抹**（DESIGN.md 禁止项 #11）。
+*/
 .taskrow__title {
+  display: block;
   min-width: 0;
-  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text);
+  font-family: inherit;
   font-size: var(--fs-body);
   line-height: 1.5;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.taskrow__title:hover {
+  color: var(--primary-ink);
 }
 
 .taskrow[data-status="done"] .taskrow__title {
@@ -1743,6 +1914,12 @@ button {
   text-decoration-color: var(--line-2);
 }
 
+/* 详情正开着的那张卡（原型 `.tkcard.is-open`：主色描边 + 主色浅底光圈） */
+.taskcard[data-open="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
 .taskcard__main {
   display: flex;
   flex: 1;
@@ -1751,10 +1928,24 @@ button {
   min-width: 0;
 }
 
+/* 标题同样是**按钮**（v0.5.2，理由见 `.taskrow__title`）：外观抹平，长标题换行不截断（原型如此） */
 .taskcard__title {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text);
+  font-family: inherit;
   font-size: var(--fs-body-lg);
   line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.taskcard__title:hover {
+  color: var(--primary-ink);
 }
 
 .taskcard__meta {
@@ -1772,10 +1963,174 @@ button {
   margin-top: var(--sp-1);
 }
 
-/* 窄屏（原型 `@media (max-width:1080px)`）：看板转单列 */
+/* —— 待办：详情浮层（原型 `.tdetail*`）—— */
+.tdetail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  /* DESIGN.md §2.2 / §2.4：侧滑详情 390px，≤1080px 时 330px */
+  width: 390px;
+  border-left: 1px solid var(--line);
+  background: var(--bg-soft);
+  box-shadow: var(--shadow-3);
+  /* §6.8：侧滑详情 260ms；减弱动效由文件顶部的全局 `prefers-reduced-motion` 块兜住 */
+  animation: tdetail-in 260ms ease;
+}
+
+/*
+  滑入：用挂载动画而不是"先挂 translateX(100%) 再切类"——后者要多一个状态与一次 rAF，
+  而这个面板的打开/关闭本来就是挂载/卸载（面板不占位，没有"关闭动画"要等）。
+*/
+@keyframes tdetail-in {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.tdetail__hd {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.tdetail__t {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 650;
+}
+
+.tdetail__spacer {
+  flex: 1;
+}
+
+.tdetail__scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+
+.tdetail__blk + .tdetail__blk {
+  margin-top: var(--sp-5);
+}
+
+.tdetail__k {
+  margin: 0 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.tdetail__ttl {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.tdetail__props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.tdetail__p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+  /* 正文是 Markdown 原文（我们不再解析一遍）；保留换行，长行按容器宽度折 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tdetail__acts {
+  display: flex;
+  flex: none;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+/* —— 说明提示 `InfoHint`（app/ui/InfoHint.tsx；DESIGN.md §5.4-1 的唯一出口）—— */
+.infohint {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+/* 图标按钮（§2.2：24×24）；命中区在触屏上加到 44（§2.4-3，视觉尺寸不变——它本来就是透明底） */
+.infohint__btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.infohint__btn:hover {
+  color: var(--text);
+}
+
+@media (hover: none) {
+  .infohint__btn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/*
+  气泡：悬停、键盘聚焦（`:focus-within`）、点击展开（`aria-expanded`）三种都能出。
+  **不是**唯一入口——触屏靠点击那一路（禁止项 #17）。
+*/
+.infohint__pop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: 260px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+}
+
+.infohint:hover .infohint__pop,
+.infohint:focus-within .infohint__pop,
+.infohint__btn[aria-expanded="true"] + .infohint__pop {
+  display: block;
+}
+
+/* 窄屏（原型 `@media (max-width:1080px)`）：看板转单列、详情收窄 */
 @media (max-width: 1080px) {
   .kanban {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tdetail {
+    width: 330px;
   }
 }
 

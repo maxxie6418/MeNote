@@ -29,7 +29,8 @@ export type IconName =
   | "tag"
   | "lock"
   | "table"
-  | "more";
+  | "more"
+  | "close";
 
 export function IconSprite() {
   return (
@@ -117,6 +118,10 @@ export function IconSprite() {
       <symbol id="i-table" viewBox="0 0 16 16">
         <rect x="2.6" y="3.4" width="10.8" height="9.2" rx="1.4" />
         <path d="M2.6 6.6h10.8M6.6 6.6v6M10.2 6.6v6" />
+      </symbol>
+      {/* 「关闭」（原型 `#i-x`）：用在待办详情浮层的关闭按钮上（侧滑详情与菜单一样要有明确出口） */}
+      <symbol id="i-close" viewBox="0 0 16 16">
+        <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" />
       </symbol>
     </svg>
   );

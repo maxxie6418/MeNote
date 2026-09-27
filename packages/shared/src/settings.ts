@@ -121,6 +121,33 @@ export { VERSIONS_KEEP_MAX, VERSIONS_KEEP_MIN };
 export const VERSION_KEEP_DENSITY_HINT =
   "24 小时内全留 / 1–7 天每 6 小时 / 7–30 天每天 / 30 天–1 年每周 / 1 年以上每月";
 
+/**
+ * 待办筛选条的**形态**取值（用户 2026-09-27 拍板：两种都留，让用户在设置里自选）。
+ *
+ * 定稿（`prototype/menote-framework.html` 07 待办）原话是"两者都保留，将来在「设置」里让用户自选"，
+ * 所以它是一条**用户偏好**而不是写死的实现选择——这也是它进这份契约（跟随账号同步）的原因：
+ * 换设备后筛选条该长什么样是用户预期的一部分。
+ *
+ * - `capsules`：基线，胶囊横排（与列表同一个内容上限、同样居中）；
+ * - `floating`：收成左侧顶部的紧凑卡片（零高度 sticky 外壳），且只在列表模式出现。
+ *
+ * 取值清单**只在这里写一份**（`v.picklist` 直接引用它）：契约与设置页选项各写一遍迟早漂移
+ * ——本仓此前 `VERSIONS_MIN/MAX` 就吃过这个亏（v0.4.34 合并过一次）。
+ */
+export const TASK_FILTER_FORMS = ["capsules", "floating"] as const;
+
+export const TaskFilterFormSchema = v.picklist(TASK_FILTER_FORMS);
+export type TaskFilterForm = v.InferOutput<typeof TaskFilterFormSchema>;
+
+export const TaskViewSettingsSchema = v.object({
+  filter_form: TaskFilterFormSchema,
+});
+export type TaskViewSettings = v.InferOutput<typeof TaskViewSettingsSchema>;
+
+export const DEFAULT_TASK_VIEW_SETTINGS: TaskViewSettings = {
+  filter_form: "capsules",
+};
+
 export const UserSettingsSchema = v.object({
   start_view: StartViewSchema,
   timezone: v.string(),
@@ -139,6 +166,11 @@ export const UserSettingsSchema = v.object({
    * 部署窗口内旧客户端 PUT 设置（不带该字段）不会被 422，输出类型里它必有。
    */
   version_trash: v.optional(VersionTrashSettingsSchema, DEFAULT_VERSION_TRASH_SETTINGS),
+  /**
+   * 待办视图的偏好（v0.5.2）。同样 **optional + 默认值**：旧客户端 PUT 设置不带该字段不会被 422，
+   * 服务端读旧 JSON 时由 schema 补默认值（**不需要迁移**：设置是整份 JSON）。
+   */
+  task_view: v.optional(TaskViewSettingsSchema, DEFAULT_TASK_VIEW_SETTINGS),
 });
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
@@ -151,6 +183,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   ),
   privacy: DEFAULT_PRIVACY_SETTINGS,
   version_trash: DEFAULT_VERSION_TRASH_SETTINGS,
+  task_view: DEFAULT_TASK_VIEW_SETTINGS,
 };
 
 /** `GET /api/settings` 与同步响应里的设置载荷 */

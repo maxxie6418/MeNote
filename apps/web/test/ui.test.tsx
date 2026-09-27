@@ -483,6 +483,23 @@ describe("设置壳", () => {
     expect(onPatchSettings).toHaveBeenCalledWith({ quick_menu: ["theme", "lock", "search"] });
   });
 
+  it("通用页：待办筛选条的两形态可选，默认是基线「胶囊横排」（v0.5.2）", async () => {
+    const user = userEvent.setup();
+    const onPatchSettings = vi.fn();
+
+    render(<SettingsPanel {...baseProps} page="general" onPatchSettings={onPatchSettings} />);
+
+    const group = screen.getByRole("group", { name: "待办筛选条形态" });
+    // 两档都来自契约 `TASK_FILTER_FORMS`（不是这里另写一份清单）
+    expect(within(group).getAllByRole("button")).toHaveLength(2);
+    expect(within(group).getByRole("button", { name: "胶囊横排" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+
+    await user.click(within(group).getByRole("button", { name: "悬浮小组件" }));
+    expect(onPatchSettings).toHaveBeenCalledWith({ task_view: { filter_form: "floating" } });
+  });
+
   it("编辑器页：三档可选，第四档「即时渲染」置灰并说明原因", async () => {
     const user = userEvent.setup();
     const onPatchSettings = vi.fn();

@@ -40,6 +40,26 @@ export function statusOf(task: TaskLike): TaskStatus {
     : "todo";
 }
 
+/**
+ * 状态推进按钮的文字与目标状态：待办 → 进行中 → 已完成 →（重开）待办。
+ *
+ * **列表行 / 看板卡片 / 详情面板三处共用同一份**——三处各写一遍迟早漂移
+ * （改状态这条路必须一致，否则同一张卡在不同位置点出不同结果）。
+ */
+export function taskAdvance(status: TaskStatus): { label: string; next: TaskStatus } {
+  if (status === "todo") return { label: "开始", next: "doing" };
+  if (status === "doing") return { label: "完成", next: "done" };
+  return { label: "重开", next: "todo" };
+}
+
+/**
+ * 逾期判定：有截止、已过期、且**还没完成**（已完成的不该继续标红）。
+ * 卡片与行都靠它决定要不要挂 `data-overdue`（样式见原型 `.tkrow--late` / `.tkcard--late`）。
+ */
+export function isOverdue(task: TaskLike, today: string): boolean {
+  return task.task_due !== null && task.task_due < today && statusOf(task) !== "done";
+}
+
 /** 优先级权重：高 → 中 → 低；未设置排最后 */
 function priorityWeight(priority: string | null): number {
   const index = (TASK_PRIORITIES as readonly string[]).indexOf(priority ?? "");

@@ -231,8 +231,9 @@ export default function App() {
     await userSettings.reload();
   }, [refreshPending, userSettings, workspace]);
 
-  /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
-  const focusComposer = useCallback(() => {
+  /** 「添加 / 记一条」类入口：**给了档位就切档**，再把焦点送回功能栏的录入框（M07-01 入口二） */
+  const focusComposer = useCallback((mode?: ComposerMode) => {
+    if (mode) setComposerMode(mode);
     const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="快速录入"]');
     input?.focus();
     input?.scrollIntoView({ block: "nearest" });
@@ -502,10 +503,7 @@ export default function App() {
             onNewNote={() => {
               void workspace.createNote();
             }}
-            onFocusComposer={(mode) => {
-              setComposerMode(mode);
-              focusComposer();
-            }}
+            onFocusComposer={focusComposer}
             onFocusSearch={() => {
               document.getElementById("search-input")?.focus();
             }}
@@ -544,6 +542,9 @@ export default function App() {
             today={today}
             gate={privacy.gate}
             onUnlock={requestUnlock}
+            /* 页头「添加待办」= M07-01 入口二：切到待办档再聚焦（同一个函数，别处不必再抄一遍） */
+            onAdd={() => focusComposer("task")}
+            filterForm={userSettings.settings.task_view.filter_form}
             onStatusChange={(id, status) => {
               void setTaskStatus(id, status).then(() => workspace.refresh());
             }}
@@ -578,7 +579,7 @@ export default function App() {
               setBrowse(null);
               void workspace.open(noteId);
             }}
-            onAdd={focusComposer}
+            onAdd={() => focusComposer()}
             onDelete={(id) => {
               // 删除 Memo（M4-12）：与笔记/文件夹同一套（软删走服务端，本地记账后再刷新）
               void moveToTrash(id)

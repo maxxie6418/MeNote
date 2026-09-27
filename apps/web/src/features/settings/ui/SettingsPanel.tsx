@@ -5,7 +5,8 @@
  * 「实例管理」仅 owner 可见。
  */
 import { useState, type FormEvent, type ReactNode } from "react";
-import type { EditorMode, StartView, UserSettings } from "@menote/shared";
+import type { EditorMode, StartView, TaskFilterForm, UserSettings } from "@menote/shared";
+import { TASK_FILTER_FORMS } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
 import type { ThemeMode } from "../../../app/theme/useTheme";
 import { SETTINGS_PAGES, type SettingsPageId } from "../../../app/router";
@@ -55,6 +56,17 @@ const EDITOR_MODE_OPTIONS: ReadonlyArray<{ id: EditorMode; label: string; desc: 
   { id: "edit", label: "仅编辑", desc: "只显示编辑区" },
   { id: "preview", label: "仅预览", desc: "只显示预览区" },
 ];
+
+/**
+ * 待办筛选条的两形态（用户 2026-09-27 拍板：两种都留，在设置里自选——定稿原话如此）。
+ *
+ * **取值顺序来自契约 `TASK_FILTER_FORMS`**，这里只给标签与说明；用 `Record<TaskFilterForm, …>`
+ * 收口，所以契约里加一种形态而这里忘了写文案，TypeScript 会直接报错（不是等界面上少一个按钮才发现）。
+ */
+const TASK_FILTER_FORM_LABELS: Record<TaskFilterForm, { label: string; desc: string }> = {
+  capsules: { label: "胶囊横排", desc: "筛选条与待办列表同宽、随内容滚动，默认" },
+  floating: { label: "悬浮小组件", desc: "收成左上角常驻的小卡片，不占横排空间" },
+};
 
 const THEME_OPTIONS: ReadonlyArray<{ id: ThemeMode; label: string; desc: string }> = [
   { id: "light", label: "浅色", desc: "默认" },
@@ -213,6 +225,28 @@ export function SettingsPanel({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* 待办筛选条的形态（v0.5.2；定稿：两种都留，让用户自选） */}
+              <div className="setrow">
+                <div className="setrow__label">
+                  <span className="setrow__name">待办筛选条</span>
+                  <span className="setrow__desc">待办页顶部那排筛选怎么摆</span>
+                </div>
+                <div className="radioset" role="group" aria-label="待办筛选条形态">
+                  {TASK_FILTER_FORMS.map((form) => (
+                    <button
+                      key={form}
+                      type="button"
+                      className="radioset__item"
+                      aria-pressed={userSettings.task_view.filter_form === form}
+                      title={TASK_FILTER_FORM_LABELS[form].desc}
+                      onClick={() => onPatchSettings({ task_view: { filter_form: form } })}
+                    >
+                      {TASK_FILTER_FORM_LABELS[form].label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 

@@ -1,36 +1,43 @@
 /**
- * 待办卡片（列表与看板共用同一张卡，避免两套渲染逻辑）。
+ * 待办卡片（**看板**用；原型 `.tkcard` 也是卡片，所以两种形态各有其位）。
  *
  * 显示：正文首行（标题）、截止、优先级、状态按钮；操作：切换状态、清除清单标记（Q23）。
- * 状态用**文字按钮**而不是只有颜色的小圆点（DESIGN.md 禁止项 #4：状态不能只靠颜色）。
+ * 状态用**文字按钮**而不是只有颜色的小圆点（`DESIGN.md` 禁止项 #4：状态不能只靠颜色）。
+ *
+ * 【v0.5.2】标题从 `<span>` 改成 `<button>`：原型里点标题打开右侧详情。类名不变
+ * （`.taskcard__title`），`aria-expanded` 反映这一条的详情开着没有。
  */
 import type { LocalItem } from "../../../data/db";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
 import { DropdownMenu } from "../../../app/ui/Menu";
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, type TaskStatus } from "@menote/mdcore";
-import { statusOf } from "../model";
-
-/** 卡片上那个按钮的文字：推进到下一个状态，已完成则重开 */
-function nextAction(status: TaskStatus): { label: string; next: TaskStatus } {
-  if (status === "todo") return { label: "开始", next: "doing" };
-  if (status === "doing") return { label: "完成", next: "done" };
-  return { label: "重开", next: "todo" };
-}
+import { isOverdue, statusOf, taskAdvance } from "../model";
 
 export interface TaskCardProps {
   task: LocalItem;
   /** 正文首行（没有就退回"未命名"） */
   title: string;
   today: string;
+  /** 这一条的详情是否正开着（选中标记 + `aria-expanded`） */
+  open: boolean;
+  onOpen: (itemId: string) => void;
   onStatusChange: (itemId: string, status: TaskStatus) => void;
   onClearMarker: (itemId: string) => void;
 }
 
-export function TaskCard({ task, title, today, onStatusChange, onClearMarker }: TaskCardProps) {
+export function TaskCard({
+  task,
+  title,
+  today,
+  open,
+  onOpen,
+  onStatusChange,
+  onClearMarker,
+}: TaskCardProps) {
   const status = statusOf(task);
-  const action = nextAction(status);
-  const overdue = task.task_due !== null && task.task_due < today && status !== "done";
+  const action = taskAdvance(status);
+  const overdue = isOverdue(task, today);
 
   return (
     <article
@@ -39,9 +46,18 @@ export function TaskCard({ task, title, today, onStatusChange, onClearMarker }: 
       data-status={status}
       /* 逾期标记：样式按原型给左侧一条红边（`data-overdue` 只作展示标记，不改数据） */
       data-overdue={overdue ? "true" : "false"}
+      data-open={open ? "true" : "false"}
     >
       <div className="taskcard__main">
-        <span className="taskcard__title">{title}</span>
+        <button
+          type="button"
+          className="taskcard__title"
+          aria-expanded={open}
+          title="查看详情"
+          onClick={() => onOpen(task.id)}
+        >
+          {title}
+        </button>
         <div className="taskcard__meta">
           {task.task_due ? (
             <Chip variant="compact" tone={overdue ? "red" : "neutral"}>

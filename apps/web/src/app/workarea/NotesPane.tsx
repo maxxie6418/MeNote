@@ -19,6 +19,7 @@ import { NoteWorkspace } from "../../features/notes/ui/NoteWorkspace";
 import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPanel";
 import { useVersions } from "../../features/versions/useVersions";
 import { useAttachments } from "../../features/attachments/useAttachments";
+import { LEFTOVER_HINT } from "../../features/attachments/model";
 import type { EditorHandle } from "../editor/Editor";
 import { TwoPane } from "./TwoPane";
 
@@ -193,7 +194,14 @@ export function NotesPane({
               : {
                   label: attachments.statusLabel,
                   tone: attachments.statusTone ?? "busy",
-                  onRetry: attachments.failedCount > 0 ? () => void attachments.retry() : undefined,
+                  // 只有**实时队列**里的失败能就地重试（文件还在手上）；
+                  // 上次留下的未完成项要重新选文件，所以给的是说明而不是一个点了没用的按钮
+                  onRetry:
+                    attachments.failedCount > 0 ? () => void attachments.retry() : undefined,
+                  hint:
+                    attachments.failedCount === 0 && attachments.leftoverCount > 0
+                      ? LEFTOVER_HINT
+                      : undefined,
                 }
           }
           onFiles={(files) => void attachments.add(files)}

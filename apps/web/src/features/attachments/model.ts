@@ -116,6 +116,20 @@ export function uploadPercentLabel(progress: UploadProgress): string {
 /** 秒传（同一用户里已经有同一个文件）：不发第二次请求，轻提示说清"复用了同一份" */
 export const REUSED_NOTICE = "已复用同一文件";
 
+/**
+ * **上次离开时没传完**的状态栏文案（界面稿 §7.2）。
+ *
+ * 文案要如实说清"为什么不能自动续传"：上传队列与文件对象只在本机内存里（设计 §3.2-6），
+ * 刷新后文件已经不在手上——续传靠重新选一次文件，而**已经传上去的会秒传**。
+ */
+export function leftoverLabel(count: number): string {
+  if (count <= 0) return "";
+  return count === 1 ? "有 1 个附件没传完" : `有 ${count} 个附件没传完`;
+}
+
+/** 未完成项的悬停说明（把"怎么办"讲清楚，不放在主文案里挤占状态栏） */
+export const LEFTOVER_HINT = "上次离开时没传完：重新选择一次同一个文件即可续传（已传上去的会秒传）";
+
 // ——————————————————————————— 本地预览的生命周期 ———————————————————————————
 
 /**

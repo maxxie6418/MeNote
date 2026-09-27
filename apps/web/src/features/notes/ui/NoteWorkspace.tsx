@@ -99,7 +99,13 @@ export interface NoteWorkspaceProps {
   /**
    * 附件上传状态（M4-10；界面稿 §7.2）：状态栏只**显示**，上传流程在 `features/attachments`。
    */
-  attachments?: { label: string; tone: "busy" | "warn"; onRetry?: () => void } | null;
+  attachments?: {
+    label: string;
+    tone: "busy" | "warn";
+    onRetry?: () => void;
+    /** 补充说明（如"上次没传完，重新选一次文件即可续传"），走 `title` 不占状态栏宽度 */
+    hint?: string;
+  } | null;
   /** 粘贴/拖入文件（M4-10；界面稿 §7.1）：编辑器把文件交出来，上传由调用方负责 */
   onFiles?: (files: File[]) => void;
   /** 这一篇已知的附件（`sha256 -> { size, hasThumb }`）：预览补大小、标"不可用"用 */

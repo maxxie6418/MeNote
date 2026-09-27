@@ -14,7 +14,7 @@ import { newUlid } from "@menote/shared";
 import type { EditorHandle } from "../../app/editor/Editor";
 import { attachmentsApi } from "../../data/api/endpoints";
 import { findAttachment, listItemAttachments, markAttachmentUploaded, putAttachmentMeta } from "../../data/db";
-import { createPreviewStore, isImageMime, uploadStatusLabel, type UploadProgress } from "./model";
+import { createPreviewStore, isImageMime, leftoverLabel, uploadStatusLabel, type UploadProgress } from "./model";
 import { createAttachmentQueue, pendingPlaceholder, progressOf, type AttachmentQueue, type QueueTask } from "./queue";
 import { browserUploadDeps } from "./upload";
 
@@ -31,6 +31,16 @@ export interface UseAttachmentsResult {
   statusLabel: string;
   statusTone: "busy" | "warn" | null;
   failedCount: number;
+  /**
+   * **上次离开时没传完**的附件数（从本地 `attachmentsMeta` 读，界面稿 §7.2：
+   * "上传中离开页面……回来时从状态栏/清单条上能看到未完成项"）。
+   *
+   * 为什么只能"看到"、不能自动续传：上传队列与 `File` 对象**只在本机内存里**
+   * （设计 §3.2-6 的取舍），刷新后文件已经不在手上了；文件内容本身没有落库，
+   * 落库等于把 20MB 的图片再存一份。所以这里给出数量与提示，续传靠**重新选一次文件**
+   * （命中哈希就秒传，见 `REUSED_NOTICE`）。
+   */
+  leftoverCount: number;
   /**
    * 这一篇已知的附件（`sha256 -> { size, hasThumb }`）：预览用它补大小、
    * 并标出"引用在、对象不在"的那种（界面稿 §7.4）。
@@ -53,6 +63,13 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
   const optionsRef = useRef(options);
   const previews = useMemo(() => createPreviewStore(), []);
   const queueRef = useRef<AttachmentQueue | null>(null);
+
+  /** 读这一篇"上次没传完"的附件数（纯读，与 `readKnown` 同一套写法） */
+  const readLeftover = useCallback(async (target: string | null): Promise<number> => {
+    if (!target) return 0;
+    const rows = await listItemAttachments(target);
+    return rows.filter((row) => row.status === "pending" || row.status === "failed").length;
+  }, []);
 
   /** 读这一篇的附件元数据（**纯读**：只返回数据，写状态由调用方决定，免得两处各写一遍） */
   const readKnown = useCallback(
@@ -146,31 +163,48 @@ export function useAttachments(options: UseAttachmentsOptions): UseAttachmentsRe
     await queueRef.current?.retryAll(optionsRef.current.itemId);
   }, []);
 
+  /**
+   * **上次离开时没传完**的附件（界面稿 §7.2：回来时要能看到）。
+   *
+   * 从本地 `attachmentsMeta` 的 `status` 读（`pending` / `failed`），与实时队列**分开**：
+   * 队列是本机内存里的"正在传"，这里是"上次留下的"。两者都会进状态栏文案。
+   */
+  const [leftoverCount, setLeftoverCount] = useState(0);
+
   // 卸载时撤销所有本地预览地址（锁定或离开即撤销；这里只撤销地址，不碰 React 状态）
   useEffect(() => () => previews.revokeAll(), [previews]);
 
-  // 切条目时重读附件元数据（`.then` 里 setState：不在 effect 里同步 setState）
+  // 切条目时重读附件元数据与"未完成"计数（`.then` 里 setState：不在 effect 里同步 setState）
   useEffect(() => {
     let alive = true;
     void readKnown(itemId).then((next) => {
       if (alive) setKnown(next);
     });
+    void readLeftover(itemId).then((next) => {
+      if (alive) setLeftoverCount(next);
+    });
     return () => {
       alive = false;
     };
-  }, [itemId, readKnown]);
+  }, [itemId, readKnown, readLeftover]);
 
   const mine = tasks.filter((task) => task.itemId === itemId);
   const progress: UploadProgress[] = progressOf(mine);
   const failedCount = mine.filter(
     (task) => task.status === "failed" || task.status === "rejected",
   ).length;
-  const statusLabel = uploadStatusLabel(progress);
+  /**
+   * 状态栏文案＝**实时队列**（正在传 / 刚失败）＋**上次留下的未完成**（界面稿 §7.2）。
+   * 队列为空但本地还留着未完成项时，也要显示——否则"回来时看不到未完成项"。
+   */
+  const liveLabel = uploadStatusLabel(progress);
+  const statusLabel = liveLabel !== "" ? liveLabel : leftoverLabel(leftoverCount);
 
   return {
     statusLabel,
-    statusTone: failedCount > 0 ? "warn" : statusLabel === "" ? null : "busy",
+    statusTone: failedCount > 0 || leftoverCount > 0 ? "warn" : statusLabel === "" ? null : "busy",
     failedCount,
+    leftoverCount,
     known,
     add,
     retry,

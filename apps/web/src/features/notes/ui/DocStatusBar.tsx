@@ -50,6 +50,8 @@ export interface DocStatusBarProps {
     label: string;
     tone: "busy" | "warn";
     onRetry?: () => void;
+    /** 补充说明（如"上次没传完，重新选一次文件即可续传"），走 `title` 不占状态栏宽度 */
+    hint?: string;
   } | null;
   /** 便于测试固定"现在"；给了就不挂每秒定时器 */
   now?: number;
@@ -99,6 +101,7 @@ export function DocStatusBar({ snapshot, encryption, privacyLine, attachments, n
       {attachments && attachments.label !== "" && !locked ? (
         <span
           className={`doc-status__attach${attachments.tone === "warn" ? " doc-status__attach--warn" : ""}`}
+          title={attachments.hint}
         >
           {attachments.label}
           {attachments.tone === "warn" && attachments.onRetry ? (

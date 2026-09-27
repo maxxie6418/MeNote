@@ -274,6 +274,34 @@ export async function moveLocalFolder(
   await enqueueFolderPatch(folderId, folder.meta_rev, now);
 }
 
+/**
+ * 整夹移入 / 移出加密空间（M3-8；《隐私锁设计》§6.3、§8）。
+ *
+ * 与 `moveLocalFolder` 的差别只有一处：**同时改 `in_enc_space`**——
+ * 设计明确要求"先标文件夹行，再批量标内部条目"，且标记与父级必须落在同一条补丁里，
+ * 否则中途会出现"父级已经在空间里、这一行还标着不在"的裂缝。
+ *
+ * 深度仍由调用方算好传入（空间根是 depth 0，所以移入后是 1；两层限制照旧）。
+ */
+export async function moveLocalFolderToVault(
+  folderId: string,
+  parentId: string | null,
+  depth: number,
+  inEncSpace: 0 | 1,
+  now: number,
+): Promise<void> {
+  const folder = await db.folders.get(folderId);
+  if (!folder) return;
+
+  await db.folders.update(folderId, {
+    parent_id: parentId,
+    depth,
+    in_enc_space: inEncSpace,
+    updated_at: now,
+  });
+  await enqueueFolderPatch(folderId, folder.meta_rev, now);
+}
+
 /** 某个文件夹下直接包含的条目数（含未上传的）——删除确认框与树上的计数都用它 */
 export async function countItemsInFolder(folderId: string | null): Promise<number> {
   const rows = await db.items.filter((row) => row.deleted_at === null).toArray();

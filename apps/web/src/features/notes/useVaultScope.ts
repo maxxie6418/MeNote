@@ -12,9 +12,16 @@
  */
 import { useCallback, useMemo } from "react";
 import type { LocalFolder, LocalItem } from "../../data/db";
-import { createLocalFolder, createLocalItem } from "../../data/db";
+import {
+  createLocalFolder,
+  createLocalItem,
+  db,
+  enqueueMetaPatch,
+  moveLocalFolderToVault,
+} from "../../data/db";
 import { newUlid, ENC_SPACE_DEFAULT_NAME } from "@menote/shared";
 import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
+import { runBatch, type BatchProgress, type BatchResult } from "./batch";
 import {
   findVaultRoot,
   notebookFolders,
@@ -22,6 +29,23 @@ import {
   vaultSubtree,
 } from "../privacy/vault";
 import type { NotesView } from "./views";
+
+/**
+ * 这个文件夹**及其直接子夹**里的条目（整夹标记的对象）。
+ *
+ * 两层限制让这件事很简单：深度 2 的文件夹不可能有子文件夹，所以最多展开一层。
+ */
+function innerItemsOf(
+  folderId: string,
+  folders: readonly LocalFolder[],
+  items: readonly LocalItem[],
+): LocalItem[] {
+  const ids = new Set<string>([folderId]);
+  for (const folder of folders) {
+    if (folder.parent_id === folderId && folder.deleted_at === null) ids.add(folder.id);
+  }
+  return items.filter((item) => item.deleted_at === null && ids.has(item.folder_id ?? ""));
+}
 
 export interface VaultDescriptor {
   /** 空间根文件夹 id；服务端补建完成前可能为 null */
@@ -62,6 +86,16 @@ export interface VaultScope {
   moveItemToVault: (itemId: string, folderId: string | null) => Promise<void>;
   /** 移出加密空间（`folderId = null` = 根目录） */
   moveItemOutOfVault: (itemId: string, folderId: string | null) => Promise<void>;
+  /** 整夹移入加密空间（含内部条目批量打标）；返回失败清单供「重试」 */
+  moveFolderToVault: (
+    folderId: string,
+    options?: { onProgress?: (progress: BatchProgress) => void },
+  ) => Promise<BatchResult<LocalItem>>;
+  /** 整夹移出加密空间 */
+  moveFolderOutOfVault: (
+    folderId: string,
+    options?: { onProgress?: (progress: BatchProgress) => void },
+  ) => Promise<BatchResult<LocalItem>>;
 }
 
 export function useVaultScope(input: VaultScopeInput): VaultScope {
@@ -151,6 +185,76 @@ export function useVaultScope(input: VaultScopeInput): VaultScope {
   );
 
   /**
+   * 整夹移入加密空间（M3-8；设计 §8）：**先标文件夹行，再批量标内部条目**。
+   *
+   * 三个要点：
+   * 1. 文件夹这一行必须"父级 + 空间标记"一条补丁写完（`moveLocalFolderToVault`）；
+   * 2. 内部条目**逐条**打标（`runBatch`）：单条失败跳过并记进失败清单，不做全成功或全失败；
+   * 3. 进度逐条回报（界面显示"处理中 12 / 40"），**中断不影响**——每条 patch 各自入队 outbox。
+   *
+   * 返回失败清单供界面「重试」（重试 = 再跑一遍同样的批量）。
+   */
+  const moveFolderToVault = useCallback(
+    async (
+      folderId: string,
+      options: { onProgress?: (progress: BatchProgress) => void } = {},
+    ): Promise<BatchResult<LocalItem>> => {
+      const folder = folders.find((row) => row.id === folderId);
+      if (!folder) throw new Error("文件夹不存在");
+      if (folder.is_enc_space === 1) throw new Error("加密空间本身不能移动");
+      if (!vaultRoot) throw new Error("加密空间还没同步下来，请稍后重试");
+
+      const now = Date.now();
+      // 空间根 depth 0 → 这个文件夹成为空间内第 1 层；它原有的子夹仍是第 2 层（两层上限不变）
+      await moveLocalFolderToVault(folderId, vaultRoot.id, 1, 1, now);
+
+      const inner = innerItemsOf(folderId, folders, allItems);
+      const result = await runBatch({
+        items: inner,
+        run: async (item) => {
+          await db.items.update(item.id, { in_enc_space: 1, updated_at: Date.now() });
+          await enqueueMetaPatch(item.id, item.meta_rev, Date.now());
+        },
+        onProgress: options.onProgress,
+      });
+
+      await refresh();
+      onLocalWrite?.();
+      return result;
+    },
+    [allItems, folders, onLocalWrite, refresh, vaultRoot],
+  );
+
+  /** 整夹移出加密空间：父级回到根目录、摘掉空间标记，内部条目同样批量摘标记 */
+  const moveFolderOutOfVault = useCallback(
+    async (
+      folderId: string,
+      options: { onProgress?: (progress: BatchProgress) => void } = {},
+    ): Promise<BatchResult<LocalItem>> => {
+      const folder = folders.find((row) => row.id === folderId);
+      if (!folder) throw new Error("文件夹不存在");
+      if (folder.is_enc_space === 1) throw new Error("加密空间本身不能移动");
+
+      await moveLocalFolderToVault(folderId, null, 1, 0, Date.now());
+
+      const inner = innerItemsOf(folderId, folders, allItems);
+      const result = await runBatch({
+        items: inner,
+        run: async (item) => {
+          await db.items.update(item.id, { in_enc_space: 0, updated_at: Date.now() });
+          await enqueueMetaPatch(item.id, item.meta_rev, Date.now());
+        },
+        onProgress: options.onProgress,
+      });
+
+      await refresh();
+      onLocalWrite?.();
+      return result;
+    },
+    [allItems, folders, onLocalWrite, refresh],
+  );
+
+  /**
    * **必须 memo**：`useNotesWorkspace` 会把这个对象放进它自己的 memo 依赖，
    * 每次新建对象会让 workspace 的返回值身份每次都变 → 调用方 effect（同步引擎）反复重建
    * → 请求风暴（M1-11 实测过；`notes-hook` 的引用稳定性用例专门盯这一点）。
@@ -164,10 +268,14 @@ export function useVaultScope(input: VaultScopeInput): VaultScope {
       createNoteInVault,
       moveItemToVault,
       moveItemOutOfVault,
+      moveFolderToVault,
+      moveFolderOutOfVault,
     }),
     [
       createNoteInVault,
       createVaultFolder,
+      moveFolderOutOfVault,
+      moveFolderToVault,
       moveItemOutOfVault,
       moveItemToVault,
       notebookCounts,

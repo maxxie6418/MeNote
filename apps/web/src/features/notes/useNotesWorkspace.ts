@@ -42,6 +42,8 @@ import {
 import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
 import { useNoteCreation } from "./useNoteCreation";
 import { useVaultScope } from "./useVaultScope";
+import { useItemPatchActions } from "./useItemPatchActions";
+import type { BatchProgress, BatchResult } from "./batch";
 import type { PrivacyGate } from "@menote/shared";
 
 /** 列表是否等价：只比对界面真正用到的字段 */
@@ -137,6 +139,16 @@ export interface NotesWorkspace {
   moveItemToVault: (itemId: string, folderId: string | null) => Promise<void>;
   /** 移出加密空间（`folderId = null` = 根目录） */
   moveItemOutOfVault: (itemId: string, folderId: string | null) => Promise<void>;
+  /** 整夹移入加密空间（含内部条目批量打标）；返回失败清单供「重试」 */
+  moveFolderToVault: (
+    folderId: string,
+    options?: { onProgress?: (progress: BatchProgress) => void },
+  ) => Promise<BatchResult<LocalItem>>;
+  /** 整夹移出加密空间 */
+  moveFolderOutOfVault: (
+    folderId: string,
+    options?: { onProgress?: (progress: BatchProgress) => void },
+  ) => Promise<BatchResult<LocalItem>>;
   /**
    * 单篇加密开关（M3-7）：`true` = 给这一篇加锁（**锁定态也能开**，Q25），
    * `false` = 取消加密（调用方必须先确认该篇已解锁）。
@@ -466,63 +478,9 @@ export function useNotesWorkspace(
     [folders, onLocalWrite, refresh],
   );
 
-  const patchItem = useCallback(
-    async (
-      itemId: string,
-      patch: Partial<
-        Pick<LocalItem, "folder_id" | "pinned" | "starred" | "enc_self" | "in_enc_space">
-      >,
-    ) => {
-      const item = await getLocalItem(itemId);
-      if (!item) return;
-      await db.items.update(itemId, { ...patch, updated_at: Date.now() });
-      await enqueueMetaPatch(itemId, item.meta_rev, Date.now());
-      await refresh();
-      onLocalWrite?.();
-    },
-    [onLocalWrite, refresh],
-  );
-
-  /**
-   * 单篇加密开关（M3-7）。三条约束在这里挡（服务端同样挡，客户端只是提前给反馈）：
-   * - **Memo 不做单篇**；
-   * - **开启前必须已启用隐私锁**（否则没有门禁材料，锁上就再也解不开）；
-   * - **取消必须先解锁**——取消加密意味着要处理明文，不能让"锁定态下悄悄解密"发生。
-   */
-  const setItemEncryption = useCallback(
-    async (itemId: string, encrypted: boolean) => {
-      const item = await getLocalItem(itemId);
-      if (!item) return;
-      if (item.type === "memo") {
-        throw new Error("Memo 不支持单篇加密");
-      }
-      await patchItem(itemId, { enc_self: encrypted ? 1 : 0 });
-    },
-    [patchItem],
-  );
-
-  const moveItemToFolder = useCallback(
-    (itemId: string, folderId: string | null) => patchItem(itemId, { folder_id: folderId }),
-    [patchItem],
-  );
-
-  const togglePinned = useCallback(
-    async (itemId: string) => {
-      const item = await getLocalItem(itemId);
-      if (!item) return;
-      await patchItem(itemId, { pinned: item.pinned === 1 ? 0 : 1 });
-    },
-    [patchItem],
-  );
-
-  const toggleStarred = useCallback(
-    async (itemId: string) => {
-      const item = await getLocalItem(itemId);
-      if (!item) return;
-      await patchItem(itemId, { starred: item.starred === 1 ? 0 : 1 });
-    },
-    [patchItem],
-  );
+  /** 条目的元数据补丁动作（M3-8 起在 `useItemPatchActions` 里） */
+  const { patchItem, moveItemToFolder, setItemEncryption, togglePinned, toggleStarred } =
+    useItemPatchActions({ refresh, onLocalWrite });
 
   /** 加密空间的作用域（M3-6）：派生值与空间内新建都在 `useVaultScope` 里 */
   const vaultScope = useVaultScope({
@@ -575,6 +533,8 @@ export function useNotesWorkspace(
       moveItemToFolder,
       moveItemToVault: vaultScope.moveItemToVault,
       moveItemOutOfVault: vaultScope.moveItemOutOfVault,
+      moveFolderToVault: vaultScope.moveFolderToVault,
+      moveFolderOutOfVault: vaultScope.moveFolderOutOfVault,
       togglePinned,
       toggleStarred,
       setItemEncryption,

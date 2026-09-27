@@ -157,16 +157,21 @@ export const SQL_SELECT_FOLDER_BY_ID =
 export const SQL_COUNT_FOLDER_CHILDREN =
   "SELECT COUNT(*) AS count FROM folders WHERE user_id = ? AND parent_id = ? AND deleted_at IS NULL";
 
-/** 新建文件夹：ID 由客户端生成，depth 由服务层按父节点算好传入 */
+/**
+ * 新建文件夹：ID 由客户端生成，depth 由服务层按父节点算好传入。
+ *
+ * `in_enc_space`（M3-8）也由**服务层按父节点推导**：父在空间里，新文件夹就在空间里——
+ * 不让客户端随便指定，避免出现"父在空间、子不在"的裂缝。
+ */
 export const SQL_INSERT_FOLDER = `INSERT INTO folders (id, user_id, parent_id, is_enc_space, in_enc_space, name, depth, position, meta_rev, sync_seq, created_at, updated_at, deleted_at)
-SELECT ?, ?, ?, 0, 0, ?, ?, 0, 1, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, NULL
+SELECT ?, ?, ?, 0, ?, ?, ?, 0, 1, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, NULL
  WHERE NOT EXISTS (SELECT 1 FROM folders WHERE id = ?)`;
 
 export const SQL_BUMP_SYNC_SEQ_ON_FOLDER_CREATE = `UPDATE users SET sync_seq = sync_seq + 1
  WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND meta_rev = 1 AND created_at = ?)`;
 
 /** 文件夹补丁允许更新的列（白名单） */
-export type FolderField = "name" | "parent_id" | "depth";
+export type FolderField = "name" | "parent_id" | "depth" | "in_enc_space";
 
 export function buildUpdateFolder(fields: readonly FolderField[]): string {
   const sets = fields.map((field) => `${field} = ?`).join(", ");

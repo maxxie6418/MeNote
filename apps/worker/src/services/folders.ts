@@ -14,6 +14,7 @@ import {
   SQL_INSERT_FOLDER,
   SQL_SELECT_ENC_SPACE,
   SQL_SELECT_FOLDER_BY_ID,
+  SQL_SELECT_USER_CRYPTO,
   buildUpdateFolder,
   type FolderField,
 } from "../db/tables";
@@ -27,6 +28,13 @@ interface FolderRow {
   parent_id: string | null;
   depth: number;
   meta_rev: number;
+  is_enc_space: number;
+  in_enc_space: number;
+}
+
+/** 这一行是不是"在加密空间里"（空间根自己也算） */
+function isInSpace(row: { is_enc_space: number; in_enc_space: number } | null): boolean {
+  return row !== null && (row.is_enc_space === 1 || row.in_enc_space === 1);
 }
 
 /** 读父节点；不存在或不属于当前用户都按"父文件夹不存在"处理 */
@@ -104,7 +112,18 @@ export async function createFolder(
   const results = await db.batch([
     db
       .prepare(SQL_INSERT_FOLDER)
-      .bind(input.id, userId, input.parentId, input.name, depth, userId, now, now, input.id),
+      .bind(
+        input.id,
+        userId,
+        input.parentId,
+        isInSpace(parent) ? 1 : 0,
+        input.name,
+        depth,
+        userId,
+        now,
+        now,
+        input.id,
+      ),
     db.prepare(SQL_BUMP_SYNC_SEQ_ON_FOLDER_CREATE).bind(userId, input.id, now),
   ]);
 
@@ -137,9 +156,49 @@ export async function patchFolder(
   const fields: FolderField[] = [];
   const values: unknown[] = [];
 
+  /**
+   * 加密空间**根行本身**不能被移动、也不能改空间标记（它永不可删、永不可移，设计 §6.2）；
+   * 但**改名是允许的**（§6.3 的重命名空间）。
+   */
+  const movesRow =
+    patch.parent_id !== undefined || patch.in_enc_space !== undefined;
+  if (current.is_enc_space === 1 && movesRow) {
+    throw new DomainError("invalid", "加密空间本身不能移动");
+  }
+
   if (patch.name !== undefined) {
     fields.push("name");
     values.push(patch.name);
+  }
+
+  if (patch.in_enc_space !== undefined) {
+    /**
+     * 整夹移入 / 移出（M3-8）：
+     * - 必须与 `parent_id` 一起给（同条目口径）；
+     * - `parent_id` 作为"新父级"在下面的分支里统一校验层级与自身关系。
+     */
+    if (patch.parent_id === undefined) {
+      throw new DomainError("invalid", "移入或移出加密空间时必须同时给出目标父级");
+    }
+    const targetParent = patch.parent_id === null ? null : await loadParent(db, userId, patch.parent_id);
+    if (patch.in_enc_space === 1) {
+      if (!isInSpace(targetParent)) {
+        throw new DomainError("invalid", "移入加密空间的目标父级必须在空间内");
+      }
+      const crypto = await db
+        .prepare(SQL_SELECT_USER_CRYPTO)
+        .bind(userId)
+        .first<{ user_id: string }>();
+      if (!crypto) {
+        throw new DomainError("invalid", "还没有启用隐私锁，无法移入加密空间", {
+          reason: "privacy_not_enabled",
+        });
+      }
+    } else if (isInSpace(targetParent)) {
+      throw new DomainError("invalid", "移出加密空间的目标父级不能是空间行");
+    }
+    fields.push("in_enc_space");
+    values.push(patch.in_enc_space);
   }
 
   if (patch.parent_id !== undefined) {

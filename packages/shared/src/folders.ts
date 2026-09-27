@@ -22,6 +22,12 @@ export const FolderPatchSchema = v.object({
   base_meta_rev: IntSchema,
   name: v.optional(NameSchema),
   parent_id: v.optional(v.nullable(v.string())),
+  /**
+   * 整个文件夹移入 / 移出加密空间（M3-8）。与条目同一条口径：
+   * **必须与 `parent_id` 一起给**，服务端核对"目标父级确实在空间里 / 确实不在空间里"。
+   * 内部条目由客户端批量打标（设计 §8：整夹移入 = 先标文件夹行，再批量标内部条目）。
+   */
+  in_enc_space: v.optional(v.picklist([0, 1])),
 });
 export type FolderPatch = v.InferOutput<typeof FolderPatchSchema>;
 

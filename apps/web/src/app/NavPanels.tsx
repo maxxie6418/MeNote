@@ -56,6 +56,18 @@ export function navPanels(input: NavPanelsInput): {
       onCreateFolder={workspace.createFolder}
       onRenameFolder={workspace.renameFolder}
       onMoveFolder={workspace.moveFolder}
+      vault={{
+        enabled,
+        locked: !isScopeGateOpen(gate),
+        isInVault: (folder) => isInVault(workspace.folders, folder.id),
+        // 两层限制：只有第 1 层、且**没有子文件夹**（否则移进去会超过两层）才允许整夹移入
+        canMoveIn: (folder) =>
+          folder.depth === 1 && !workspace.folders.some((row) => row.parent_id === folder.id),
+        moveInReason: "只有第 1 层、且没有子文件夹的文件夹能整夹移入（移入后仍守两层限制）",
+        onMoveIn: (folder, onProgress) => workspace.moveFolderToVault(folder.id, { onProgress }),
+        onMoveOut: (folder, onProgress) =>
+          workspace.moveFolderOutOfVault(folder.id, { onProgress }),
+      }}
     />
   );
 

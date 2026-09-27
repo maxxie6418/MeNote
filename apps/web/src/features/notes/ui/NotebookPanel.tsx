@@ -14,7 +14,8 @@
  * 4. 计数与 `待上传` 标记直接来自本地状态。
  */
 import { useState } from "react";
-import type { LocalFolder } from "../../../data/db";
+import type { LocalFolder, LocalItem } from "../../../data/db";
+import { progressLabel, type BatchProgress, type BatchResult } from "../batch";
 import { Icon } from "../../../app/ui/Icon";
 import { Modal } from "../../../app/ui/Modal";
 import { NavItem } from "../../../app/ui/NavItem";
@@ -32,6 +33,25 @@ export interface NotebookPanelProps {
   onCreateFolder: (name: string, parentId: string | null) => Promise<void>;
   onRenameFolder: (folderId: string, name: string) => Promise<void>;
   onMoveFolder: (folderId: string, parentId: string | null) => Promise<void>;
+  /**
+   * 整夹移入 / 移出加密空间（M3-8）。动作返回**失败清单**（逐条独立判定，不做全成功或全失败），
+   * 面板负责显示进度与失败清单，并提供「重试」。
+   */
+  vault?: {
+    enabled: boolean;
+    locked: boolean;
+    isInVault: (folder: LocalFolder) => boolean;
+    canMoveIn: (folder: LocalFolder) => boolean;
+    moveInReason?: string;
+    onMoveIn: (
+      folder: LocalFolder,
+      onProgress: (progress: BatchProgress) => void,
+    ) => Promise<BatchResult<LocalItem>>;
+    onMoveOut: (
+      folder: LocalFolder,
+      onProgress: (progress: BatchProgress) => void,
+    ) => Promise<BatchResult<LocalItem>>;
+  };
 }
 
 export function NotebookPanel({
@@ -42,11 +62,51 @@ export function NotebookPanel({
   onCreateFolder,
   onRenameFolder,
   onMoveFolder,
+  vault,
 }: NotebookPanelProps) {
   const [creatingIn, setCreatingIn] = useState<{ parentId: string | null } | null>(null);
   const [draftName, setDraftName] = useState("");
   const [renaming, setRenaming] = useState<LocalFolder | null>(null);
   const [moving, setMoving] = useState<{ folder: LocalFolder; targets: MoveTarget[] } | null>(null);
+  /** 整夹移入/移出的进度与失败清单（M3-8）：进度显示"处理中 12 / 40" */
+  const [batch, setBatch] = useState<{
+    folder: LocalFolder;
+    direction: "in" | "out";
+    progress: BatchProgress | null;
+    failures: BatchResult<LocalItem>["failures"];
+  } | null>(null);
+
+  async function runFolderMove(folder: LocalFolder, direction: "in" | "out"): Promise<void> {
+    const action = direction === "in" ? vault?.onMoveIn : vault?.onMoveOut;
+    if (!action) return;
+
+    setBatch({ folder, direction, progress: { done: 0, total: 0 }, failures: [] });
+    try {
+      const result = await action(folder, (progress) => {
+        setBatch((current) => (current ? { ...current, progress } : current));
+      });
+      setBatch((current) =>
+        current ? { ...current, progress: null, failures: result.failures } : current,
+      );
+    } catch (error) {
+      // 整夹动作整体失败（没启用隐私锁、空间行缺失等）：当作一条失败显示，仍可重试
+      setBatch((current) =>
+        current
+          ? {
+              ...current,
+              progress: null,
+              failures: [
+                {
+                  // 失败清单里只需要一个可读的名字
+                  item: { id: folder.id, title: folder.name } as LocalItem,
+                  reason: error instanceof Error ? error.message : "操作失败",
+                },
+              ],
+            }
+          : current,
+      );
+    }
+  }
 
   const selectedFolderId = view.kind === "notebook" ? (view.folderId ?? null) : null;
   const totalCount = Object.values(counts).reduce((sum, value) => sum + value, 0);
@@ -121,7 +181,43 @@ export function NotebookPanel({
         onRename={(folder) => setRenaming(folder)}
         onMove={(folder) => setMoving({ folder, targets: folderMoveTargets(folders, folder.id) })}
         onCreateChild={(folder) => beginCreate(folder)}
+        vault={
+          vault
+            ? {
+                enabled: vault.enabled,
+                locked: vault.locked,
+                isInVault: vault.isInVault,
+                canMoveIn: vault.canMoveIn,
+                moveInReason: vault.moveInReason,
+                onMoveIn: (folder) => void runFolderMove(folder, "in"),
+                onMoveOut: (folder) => void runFolderMove(folder, "out"),
+              }
+            : undefined
+        }
       />
+
+      {batch?.progress ? (
+        <div className="setrow__desc" role="status">
+          {batch.direction === "in" ? "移入" : "移出"}「{batch.folder.name}」：
+          {progressLabel(batch.progress)}
+        </div>
+      ) : null}
+
+      {batch && batch.progress === null && batch.failures.length > 0 ? (
+        <div className="banner banner--warn" role="status">
+          <span>
+            {batch.failures.length} 条没能处理：{batch.failures[0]?.reason}
+            {batch.failures.length > 1 ? `（共 ${batch.failures.length} 条）` : ""}
+          </span>
+          <button
+            type="button"
+            className="btn btn--sm"
+            onClick={() => void runFolderMove(batch.folder, batch.direction)}
+          >
+            重试
+          </button>
+        </div>
+      ) : null}
 
       {renaming ? (
         <FolderRenameModal

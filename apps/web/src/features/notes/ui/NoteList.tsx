@@ -7,6 +7,7 @@
  * 这个文件只管**列表外壳**（提示条 / 表头 / 骨架 / 空状态 / 行循环）；
  * 单行的结构与它的渲染成本守卫在 `NoteRow.tsx`（那一层必须 `memo`，否则整表重渲染）。
  */
+import { memo } from "react";
 import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
@@ -91,7 +92,7 @@ function emptyCopy(title: string): { title: string; hint: string } {
   };
 }
 
-export function NoteList({
+export function NoteListView({
   items,
   title,
   selectedId,
@@ -168,3 +169,17 @@ export function NoteList({
     </section>
   );
 }
+
+/**
+ * 列表外壳（`memo`）。
+ *
+ * 为什么还要在**外壳**上 memo（行已经有 `NoteRow.memo` 了）：外壳每次渲染都要
+ * `items.map()` 铺一遍 N 个元素、React 也要走一遍这 N 个 children——
+ * 2000 篇时这一趟就是几十毫秒。它的 props 在"只是换了别的状态"时全都不变
+ * （`items` / `summaries` / `folders` / 回调都由 `useNotesWorkspace` 与 `NotesPane` 保证身份稳定），
+ * 于是这类提交可以整块跳过。
+ *
+ * 谁依赖这一点：正文区"正在打开…"占位的那次提交（B 步）——它**故意不动 `selectedId`**，
+ * 就为了让列表这次完全不重渲染（见 `useNotesWorkspace.open` 与 `openingId` 的注释）。
+ */
+export const NoteList = memo(NoteListView);

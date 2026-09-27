@@ -106,6 +106,21 @@ export interface NotesWorkspace {
   /** 列表行的摘要（取自已缓存正文的第一行） */
   summaries: Record<string, string>;
   initialBody: string;
+  /**
+   * **当前选中项的正文还没到**（`true` = 正文区该显示"正在打开"）。
+   *
+   * 服务于"点下去立刻有反馈"：`open()` 会**同步**落选中态（列表高亮立刻动），
+   * 正文则要等本地缓存读到 / 正文不在本机时去服务端补拉一次（一次网络往返）——
+   * 这段时间就是 `true`，界面据此给占位，而不是"看起来根本没点动"。
+   * 首次进页面（还没成功打开过任何条目）恒为 `false`：那时没有选中项，走空状态。
+   */
+  docLoading: boolean;
+  /**
+   * **正文版本号**：每有一份正文到位（打开、重新载入同一篇）就 +1；还没开过任何条目时为 `0`。
+   *
+   * 正文区拿它当重载信号——同一篇被重新打开时 `selectedId` 不变，光看 id 认不出"正文换了"。
+   */
+  docEpoch: number;
   snapshot: NoteEditorSnapshot | null;
   refresh: () => Promise<void>;
   open: (id: string) => Promise<void>;
@@ -202,6 +217,23 @@ export function useNotesWorkspace(
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [initialBody, setInitialBody] = useState("");
+  /**
+   * 已到位的正文版本（`null` = 还没成功打开过任何条目，此时 `selectedId` 也是 null）。
+   * `id` + `epoch` 一起给界面用：前者判"当前选中项的正文到了没"，后者当重载信号（见 `docEpoch`）。
+   */
+  const [docVersion, setDocVersion] = useState<{ id: string; epoch: number } | null>(null);
+  /**
+   * **正在打开的那一篇**（B 步：把"选中"与"读正文"解耦）。
+   *
+   * 为什么是**独立的**一个标记、而不是从"`selectedId` 与 `docVersion` 不一致"推出来：
+   * 那样必须在读完正文**之前**就抬 `selectedId`，而它在笔记页所在的整棵树里是"列表选中项"——
+   * 抬它会让**整张列表（2000 行）连同 App 整棵树多提交一次**。实测（隔离环境 + 真实 Chrome，
+   * 2000 篇、dev 构建）：缓存命中路径中位从 72ms 涨到 250ms，而正文本来只要 1–5ms 就到。
+   *
+   * 所以早反馈由**正文区占位**承担（那次提交很便宜：列表 props 全不变，`NoteList` 被 `memo` 跳过），
+   * `selectedId` 与正文在同一次提交里落地——缓存命中路径回到"一次提交"。
+   */
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<NoteEditorSnapshot | null>(null);
   const [view, setView] = useState<NotesView>(DEFAULT_VIEW);
   const [folders, setFolders] = useState<LocalFolder[]>([]);
@@ -219,6 +251,11 @@ export function useNotesWorkspace(
   );
 
   const editorRef = useRef<NoteEditorController | null>(null);
+  /**
+   * 当前"显示的这一篇"的 id（`open` 阶段 1 落，供 `notifyUploaded` 判定回调归属）：
+   * 编辑器回调可能迟到，上一篇的迟到回调不该改掉这一篇的打开基准（见 `notifyUploaded`）。
+   */
+  const editorIdRef = useRef<string | null>(null);
   const gate = options.gate;
 
   /**
@@ -360,7 +397,20 @@ export function useNotesWorkspace(
 
   const open = useCallback(
     async (id: string) => {
+      /*
+        —— 阶段 1：**同步**给"点到了"的反馈，不发任何 await ——
+
+        只抬 `openingId`（正文区换"正在打开…"占位）。**故意不在这里抬 `selectedId`**：
+        它是整张列表的选中项，抬它会让列表与 App 整棵树多提交一次；而正文通常 1–5ms 就到，
+        那次提交纯属白花（实测缓存命中路径 72ms → 250ms）。选中项与正文在同一次提交里落地。
+      */
       editorRef.current?.stop();
+      editorRef.current = null; // 旧控制器立即失效：这一帧旧正文区正在卸载，避免它的回调写进新条目
+      setOpeningId(id);
+      setRemoteChanged(false);
+      setConflictCopy(null); // 上一篇的冲突提示不该残留到这一篇
+
+      // —— 阶段 2：异步读正文；读完再做"是否已被更晚的点击取代"的检查 ——
       const editor = createNoteEditor({
         itemId: id,
         notifySync: notifyLocalWrite,
@@ -369,12 +419,20 @@ export function useNotesWorkspace(
         fetchBody: fetchBodyFromServer,
       });
       editorRef.current = editor;
+      editorIdRef.current = id; // 供 notifyUploaded 判定"这个回调属于当前显示的这一篇"
       const body = await editor.load();
+      if (editorRef.current !== editor) {
+        editor.stop();
+        return; // 已被更晚的 open 取代：不写基准、不落选中、不启动
+      }
       // initialBody 就是"打开时的基准"（跨标签页提示用它比对），所以这里必须先设
       applyInitialBody(body);
       applySelectedId(id);
-      setRemoteChanged(false);
+      setDocVersion((previous) => ({ id, epoch: (previous?.epoch ?? 0) + 1 }));
+      // 只清"自己这一次"的占位：更晚的 open 已经抬起新的 openingId 时不要动它
+      setOpeningId((previous) => (previous === id ? null : previous));
       await syncConflictState(id);
+      if (editorRef.current !== editor) return;
       editor.start();
     },
     [
@@ -454,6 +512,13 @@ export function useNotesWorkspace(
   const items = useMemo(() => filterByView(allItems, view, gate), [allItems, view, gate]);
   const tags = useMemo(() => collectTags(allItems), [allItems]);
   const selected = items.find((item) => item.id === selectedId) ?? null;
+  /**
+   * "正文还没到"：由**显式的 `openingId`** 决定，而不是"`selectedId` 与 `docVersion` 不一致"——
+   * 后者要求在读完正文前就抬 `selectedId`，会让整张列表多提交一次（见 `openingId` 的注释）。
+   * 正文到位的那次提交里 `openingId` 被清掉、`selectedId` 与正文同时落地，界面不会闪两次。
+   */
+  const docLoading = openingId !== null;
+  const docEpoch = docVersion?.epoch ?? 0;
 
   /** 选中文件夹时用文件夹名当列表标题（`viewTitle` 是纯函数，不认识文件夹数据） */
   const title = useMemo(() => {
@@ -541,6 +606,8 @@ export function useNotesWorkspace(
       createVaultFolder: vaultScope.createVaultFolder,
       summaries,
       initialBody,
+      docLoading,
+      docEpoch,
       snapshot,
       refresh,
       open,
@@ -570,14 +637,15 @@ export function useNotesWorkspace(
       input: (text: string) => editorRef.current?.onInput(text),
       notifyUploaded: () => {
         editorRef.current?.notifyUploaded();
-        // 自己保存成功不是"别处改的"：把基准跟到自己刚写下的内容，并清掉提示（state 与 ref 同步）
-        const current = selectedIdRef.current;
-        if (current !== null) {
-          void getDraft(current).then((draft) => {
-            if (draft) applyInitialBody(draft.body);
+        const id = editorIdRef.current;
+        // 迟到的回调可能来自上一篇：只在"上传的就是当前显示的这篇"时更新基准与清提示
+        if (id !== null && id === selectedIdRef.current) {
+          // 自己保存成功不是"别处改的"：把基准跟到自己刚写下的内容，并清掉提示（state 与 ref 同步）
+          void getDraft(id).then((draft) => {
+            if (draft && id === selectedIdRef.current) applyInitialBody(draft.body);
           });
+          setRemoteChanged(false);
         }
-        setRemoteChanged(false);
       },
       notifyFailed: () => editorRef.current?.notifyFailed(),
       notifyConflict: () => editorRef.current?.notifyConflict(),
@@ -589,6 +657,8 @@ export function useNotesWorkspace(
       changeTitle,
       createFolder,
       createNote,
+      docEpoch,
+      docLoading,
       folderCounts,
       folders,
       initialBody,

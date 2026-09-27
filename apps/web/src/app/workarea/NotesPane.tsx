@@ -189,18 +189,34 @@ export function NotesPane({
         />
       }
       doc={
-        /* key 用条目 id：切换条目必须重挂载正文区，否则新条目会沿用上一篇的文本 */
-        <NoteWorkspace
-          key={workspace.selectedId ?? "none"}
-          item={selected}
-          initialBody={workspace.initialBody}
-          snapshot={workspace.snapshot}
-          initialMode={editorMode}
-          remoteChanged={workspace.remoteChanged}
-          conflict={workspace.conflictCopy}
-          onOpenConflictCopy={() => {
-            void workspace.openConflictCopy();
-          }}
+        workspace.docLoading ? (
+          /*
+            **正文还没到：只给占位，不挂正文区**（B 步：把"选中"与"读正文"解耦）。
+            - 点下去的那一帧，列表行高亮已经在 `open()` 的同步阶段落好了——用户先看到"点到了"；
+            - 不把上一篇的正文与标题留在屏上：那会让人以为"点了没反应"，甚至对着旧内容敲字
+              （旧编辑器此刻会被卸载，它的自动保存定时器也停了）。
+            文案沿用正文区既有的占位口径（`docpane__center`，与编辑器的 Suspense 兜底同一处）。
+          */
+          <div className="docpane">
+            <div className="docpane__center">正在打开…</div>
+          </div>
+        ) : (
+          /*
+            key 用 **条目 id + 正文代数**：切换条目必须重挂载（否则新条目会沿用上一篇的文本）；
+            同一篇"按最新内容重新载入"时 id 不变、`docEpoch` 会 +1，同样重挂一次，
+            从而真的拿到新正文（此前 id 不变就不重挂，编辑器里还是旧内容）。
+          */
+          <NoteWorkspace
+            key={`${workspace.selectedId ?? "none"}:${workspace.docEpoch}`}
+            item={selected}
+            initialBody={workspace.initialBody}
+            snapshot={workspace.snapshot}
+            initialMode={editorMode}
+            remoteChanged={workspace.remoteChanged}
+            conflict={workspace.conflictCopy}
+            onOpenConflictCopy={() => {
+              void workspace.openConflictCopy();
+            }}
           onResolveConflict={(keep) => {
             void workspace.resolveConflict(keep).then(() => {
               onToast(keep === "mine" ? "已保留你的版本" : "已保留服务端版本", "success");
@@ -276,6 +292,7 @@ export function NotesPane({
               });
           }}
         />
+        )
       }
       />
       )}

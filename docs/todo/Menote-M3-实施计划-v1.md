@@ -21,6 +21,7 @@
 | v1.6 | v0.3.7 | 2026-09-27 | **M3-5 前半完成**：搜索索引拆标题/正文两段（Dexie v6）、`searchLocal` 按门禁过滤、`useSearch` 与 `App` 接线；按授权拆出 `app/AuthScreens.tsx` 守住入口行数预算；全套 553 通过 | deepseek-v4.1-flash |
 | v1.7 | v0.3.8 | 2026-09-27 | **M3-5 后半（一）**：`filterByView`/`recentPreview`/`openTaskPreview` 接门禁、`HomePanel` 用 gate 取代 `memoLocked`、`noPrivacyGate()` 冻结单例（修掉"门禁对象每渲染重建"的引用稳定性陷阱）；全套 556 通过；Memo/待办占位与解锁框一并排入界面批次 | deepseek-v4.1-flash |
 | v1.8 | v0.3.9 | 2026-09-27 | **M3-5 完成 + 界面批次（一）**：`LockedPlaceholder`、`UnlockModal`（含逐次加等待）、`PrivacyCapsule`（三态与菜单）、Memo/待办占位；按授权再拆 `App.tsx`（`PrivacySlot`/`MemoView`/`TaskView`）；全套 570 通过；M3-10 标部分完成（缺 VaultNode / ItemRow / 编辑器状态栏 / 文案红线），胶囊开锁字形待确认 | deepseek-v4.1-flash |
+| v1.9 | v0.3.10 | 2026-09-27 | **M3-9 完成**：`PrivacySettingsPage`（启用/关闭/改密/重置 + 档位 + 范围）、组装层 `changePassword`/`resetPassword`（都不改 K）、`PRIVACY_MINUTES_OPTIONS` 同源常量、`SettingsPanel` 插槽、按授权拆 `app/SettingsView.tsx`；全套 584 通过；线上四条流程走查归 M3-12（需端上配好 BACKUP_CRED_KEY） | deepseek-v4.1-flash |
 
 ---
 
@@ -102,7 +103,10 @@
 - **涉及文件**：`apps/web/src/features/notes/*`（"移动到…"的目标集合：加密空间节点）、`apps/web/src/data/db/repository.ts`（`patch_meta` 的标记变更）、批量走 `POST /api/batch` 与 outbox（M2 已有）、进度与失败清单 UI。
 - **验收**：锁定态单篇只能移到空间根、目标菜单不展开空间内文件夹；整夹移入/移出受两层限制校验；批量进度"处理中 12/40"、单条失败跳过并列失败清单 + 重试；中断后重开继续（outbox 未清）。
 
-### M3-9 设置页「隐私锁」分类
+### M3-9 设置页「隐私锁」分类 —— ✅ **完成（2026-09-27，v0.3.10）**
+
+> 已完成：`PrivacySettingsPage`（状态与关闭 / 档位与 N 分钟 / 范围与搜索 / 改密与重置）+ 组装层的 `changePassword` 与 `resetPassword`（**都不改内容密钥 K**）+ `PRIVACY_MINUTES_OPTIONS` 同源常量 + `SettingsPanel` 的 `privacyPage` 插槽 + 按授权拆出的 `app/SettingsView.tsx`。
+> **未验证**：四条流程的**线上**逐条走查（启用需要 Cloudflare 端配好 `BACKUP_CRED_KEY`，属 M3-12 的线上验收项）；界面侧契约有 14 个用例覆盖，加密与请求路径另有用例。
 
 - **涉及文件**：`apps/web/src/features/settings/ui/SettingsPanel.tsx`（分类进导航）、新增分类页组件、`features/settings/model.ts`（读改 `privacy` 设置）、`useUserSettings`（即时生效 + 同步）。
 - **验收**：启用 / 关闭 / 改密 / 重置四条流程各走一次（含联网前置与失败提示）；关闭被拒时给出"先取消单篇标记并清空空间"的原因；范围配置改动立即影响 Memo 门禁；三档与 N 分钟写入并同步到其他设备。

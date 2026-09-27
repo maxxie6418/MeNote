@@ -128,7 +128,14 @@ export const SQL_SELECT_ITEM_META_BASE =
   "SELECT type, meta_rev FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
 
 /** 元数据补丁允许更新的列（白名单；列名一律来自常量，绝不来自请求） */
-export type ItemMetaField = "title" | "folder_id" | "tags" | "pinned" | "starred" | "enc_self";
+export type ItemMetaField =
+  | "title"
+  | "folder_id"
+  | "tags"
+  | "pinned"
+  | "starred"
+  | "enc_self"
+  | "in_enc_space";
 
 /** 组装元数据补丁语句：`SET` 子句由白名单列拼出（服务层不写 SQL 字面量） */
 export function buildUpdateItemMeta(fields: readonly ItemMetaField[]): string {
@@ -145,7 +152,7 @@ export const SQL_BUMP_SYNC_SEQ_ON_ITEM_META = `UPDATE users SET sync_seq = sync_
 // —— folders ——
 
 export const SQL_SELECT_FOLDER_BY_ID =
-  "SELECT id, parent_id, depth, meta_rev FROM folders WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
+  "SELECT id, parent_id, depth, meta_rev, is_enc_space, in_enc_space FROM folders WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
 
 export const SQL_COUNT_FOLDER_CHILDREN =
   "SELECT COUNT(*) AS count FROM folders WHERE user_id = ? AND parent_id = ? AND deleted_at IS NULL";

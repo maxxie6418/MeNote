@@ -133,6 +133,10 @@ export interface NotesWorkspace {
   moveFolder: (folderId: string, parentId: string | null) => Promise<void>;
   /** 把条目移入文件夹（`null` = 根目录） */
   moveItemToFolder: (itemId: string, folderId: string | null) => Promise<void>;
+  /** 移入加密空间（`folderId = null` = 空间根；锁定态只有这一个目标可用） */
+  moveItemToVault: (itemId: string, folderId: string | null) => Promise<void>;
+  /** 移出加密空间（`folderId = null` = 根目录） */
+  moveItemOutOfVault: (itemId: string, folderId: string | null) => Promise<void>;
   /**
    * 单篇加密开关（M3-7）：`true` = 给这一篇加锁（**锁定态也能开**，Q25），
    * `false` = 取消加密（调用方必须先确认该篇已解锁）。
@@ -465,7 +469,9 @@ export function useNotesWorkspace(
   const patchItem = useCallback(
     async (
       itemId: string,
-      patch: Partial<Pick<LocalItem, "folder_id" | "pinned" | "starred" | "enc_self">>,
+      patch: Partial<
+        Pick<LocalItem, "folder_id" | "pinned" | "starred" | "enc_self" | "in_enc_space">
+      >,
     ) => {
       const item = await getLocalItem(itemId);
       if (!item) return;
@@ -526,6 +532,7 @@ export function useNotesWorkspace(
     refresh,
     open,
     setView,
+    patchItem,
     onLocalWrite,
   });
 
@@ -566,6 +573,8 @@ export function useNotesWorkspace(
       renameFolder,
       moveFolder,
       moveItemToFolder,
+      moveItemToVault: vaultScope.moveItemToVault,
+      moveItemOutOfVault: vaultScope.moveItemOutOfVault,
       togglePinned,
       toggleStarred,
       setItemEncryption,
@@ -618,11 +627,12 @@ export function useNotesWorkspace(
       snapshot,
       summaries,
       tags,
-      vaultScope,      title,
+      title,
       togglePinned,
       toggleStarred,
       updateMemo,
       view,
+      vaultScope,
     ],
   );
 }

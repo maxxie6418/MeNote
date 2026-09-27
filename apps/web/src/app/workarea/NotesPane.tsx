@@ -28,6 +28,15 @@ export interface NotesPaneProps {
   /** 单篇加密开关的落地（含成功/失败提示） */
   onToggleEncryption: (itemId: string, encrypted: boolean) => void;
   onToast: (message: string, tone: "success" | "error") => void;
+  /** 加密空间的移入/移出（M3-8）；锁定时内部层级为空，只能入根 */
+  vault: {
+    enabled: boolean;
+    locked: boolean;
+    id: string | null;
+    folders: ReadonlyArray<{ id: string; name: string }>;
+    onMoveIn: (itemId: string, folderId: string | null) => void;
+    onMoveOut: (itemId: string) => void;
+  };
 }
 
 export function NotesPane({
@@ -36,6 +45,7 @@ export function NotesPane({
   encryption,
   onToggleEncryption,
   onToast,
+  vault,
 }: NotesPaneProps) {
   const selected = workspace.selected;
 
@@ -64,6 +74,7 @@ export function NotesPane({
           onToggleStarred={(id) => {
             void workspace.toggleStarred(id);
           }}
+          vault={vault}
         />
       }
       doc={

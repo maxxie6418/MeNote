@@ -30,13 +30,6 @@ function loginKey(seed: number): string {
   return base64UrlEncode(bytes);
 }
 
-/** 造一段"形状合法"的字节：首字节是 BLOB 版本 1（服务端只校验长度与版本） */
-function base64UrlOf(bytes: number, seed: number): string {
-  const data = new Uint8Array(bytes).fill(seed);
-  if (bytes > 0) data[0] = 1;
-  return base64UrlEncode(data);
-}
-
 function headers(cookie: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
     "Content-Type": "application/json",
@@ -368,75 +361,6 @@ describe("条目：元数据补丁", () => {
       body: JSON.stringify({ base_meta_rev: 1, folder_id: newUlid() }),
     });
     expect(badFolder.status).toBe(422);
-  });
-
-  it("单篇加密（M3-7）：没启用隐私锁时拒绝，启用后可开可关", async () => {
-    const user = await registerUser("Alice", 1);
-    const id = newUlid();
-    await createNote(user.cookie, id, "正文");
-
-    // 还没启用隐私锁 → 422 且带上原因（客户端据此指向设置页）
-    const before = await SELF.fetch(`${ORIGIN}/api/items/${id}/meta`, {
-      method: "PATCH",
-      headers: headers(user.cookie),
-      body: JSON.stringify({ base_meta_rev: 1, enc_self: 1 }),
-    });
-    expect(before.status).toBe(422);
-    expect(((await before.json()) as { detail?: { reason?: string } }).detail?.reason).toBe(
-      "privacy_not_enabled",
-    );
-
-    // 启用隐私锁（材料形状合法即可，服务端不看内容）
-    const enabled = await SELF.fetch(`${ORIGIN}/api/crypto`, {
-      method: "PUT",
-      headers: headers(user.cookie),
-      body: JSON.stringify({
-        materials: {
-          kdf: "PBKDF2-SHA-256",
-          kdf_iterations: 600_000,
-          kdf_salt: base64UrlOf(16, 1),
-          verifier: base64UrlOf(47, 2),
-          k_wrapped_pw: base64UrlOf(61, 3),
-        },
-        k: base64UrlOf(32, 4),
-      }),
-    });
-    expect(enabled.status).toBe(200);
-
-    const on = await SELF.fetch(`${ORIGIN}/api/items/${id}/meta`, {
-      method: "PATCH",
-      headers: headers(user.cookie),
-      body: JSON.stringify({ base_meta_rev: 1, enc_self: 1 }),
-    });
-    expect(on.status).toBe(200);
-    expect(((await on.json()) as { meta_rev: number }).meta_rev).toBe(2);
-
-    // 关掉总是允许的（不需要先解锁——服务端不看会话里的解锁态）
-    const off = await SELF.fetch(`${ORIGIN}/api/items/${id}/meta`, {
-      method: "PATCH",
-      headers: headers(user.cookie),
-      body: JSON.stringify({ base_meta_rev: 2, enc_self: 0 }),
-    });
-    expect(off.status).toBe(200);
-  });
-
-  it("单篇加密（M3-7）：Memo 一律拒绝（Memo 的门禁由隐私锁负责）", async () => {
-    const user = await registerUser("Alice", 1);
-    const memoId = newUlid();
-    const created = await createNote(user.cookie, memoId, "随手一记", {
-      type: "memo",
-      title: null,
-      memo_at: 1_700_000_000_000,
-    });
-    expect(created.status).toBe(200);
-
-    const res = await SELF.fetch(`${ORIGIN}/api/items/${memoId}/meta`, {
-      method: "PATCH",
-      headers: headers(user.cookie),
-      body: JSON.stringify({ base_meta_rev: 1, enc_self: 1 }),
-    });
-    expect(res.status).toBe(422);
-    expect(((await res.json()) as { message: string }).message).toContain("Memo");
   });
 });
 

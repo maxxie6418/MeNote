@@ -247,6 +247,8 @@ export async function patchItemMeta(
 
   const fields: ItemMetaField[] = [];
   const values: unknown[] = [];
+  /** 目标文件夹（若本次补丁要改 `folder_id`）：`null` = 根目录，`undefined` = 没给 */
+  let targetFolder: { id: string; is_enc_space: number; in_enc_space: number } | null = null;
   if (patch.title !== undefined) {
     fields.push("title");
     values.push(patch.title);
@@ -256,8 +258,9 @@ export async function patchItemMeta(
       const folder = await db
         .prepare(SQL_SELECT_FOLDER_BY_ID)
         .bind(patch.folder_id, userId)
-        .first<{ id: string }>();
+        .first<{ id: string; is_enc_space: number; in_enc_space: number }>();
       if (!folder) throw new DomainError("invalid", "目标文件夹不存在");
+      targetFolder = folder;
     }
     fields.push("folder_id");
     values.push(patch.folder_id);
@@ -297,6 +300,43 @@ export async function patchItemMeta(
     }
     fields.push("enc_self");
     values.push(patch.enc_self);
+  }
+  if (patch.in_enc_space !== undefined) {
+    /**
+     * 移入 / 移出加密空间（M3-8，《隐私锁设计》§6.3）。四条校验：
+     * 1. **必须同时给 `folder_id`**：移入空间 = `folder_id` 指向空间行/空间内文件夹；
+     *    两条一起写才不会出现"标记在空间里、却挂在普通文件夹下"这种自相矛盾的行；
+     * 2. **移入时目标必须是空间的**（空间根或空间内文件夹）；
+     * 3. **移出时目标不能在空间里**（否则等于没移出）；
+     * 4. 移入还要求：不是 Memo、且已启用隐私锁（与单篇加密同一套理由）。
+     */
+    if (patch.folder_id === undefined) {
+      throw new DomainError("invalid", "移入或移出加密空间时必须同时给出目标文件夹");
+    }
+    const inSpace = targetFolder !== null && (targetFolder.is_enc_space === 1 || targetFolder.in_enc_space === 1);
+
+    if (patch.in_enc_space === 1) {
+      if (base.type === "memo") {
+        throw new DomainError("invalid", "Memo 不能放进加密空间");
+      }
+      if (!inSpace) {
+        throw new DomainError("invalid", "移入加密空间的目标必须是空间根或空间内文件夹");
+      }
+      const crypto = await db
+        .prepare(SQL_SELECT_USER_CRYPTO)
+        .bind(userId)
+        .first<{ user_id: string }>();
+      if (!crypto) {
+        throw new DomainError("invalid", "还没有启用隐私锁，无法移入加密空间", {
+          reason: "privacy_not_enabled",
+        });
+      }
+    } else if (inSpace) {
+      throw new DomainError("invalid", "移出加密空间的目标不能在空间内");
+    }
+
+    fields.push("in_enc_space");
+    values.push(patch.in_enc_space);
   }
 
   if (fields.length === 0) {

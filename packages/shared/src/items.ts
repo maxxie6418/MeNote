@@ -127,6 +127,12 @@ export const ItemMetaPatchSchema = v.object({
    * 以及**必须先启用隐私锁**（否则就是"给一个没有门的房间上锁"）。
    */
   enc_self: v.optional(FlagSchema),
+  /**
+   * 是否位于加密空间内（M3-8）。**必须与 `folder_id` 一起给**（同一条 `patch_meta`）：
+   * 移入空间 = `{ folder_id: <空间行 id>, in_enc_space: 1 }`，移出 = `{ folder_id: 目标, in_enc_space: 0 }`。
+   * 服务端会核对"目标文件夹确实在空间里 / 确实不在空间里"，避免出现自相矛盾的行。
+   */
+  in_enc_space: v.optional(FlagSchema),
 });
 export type ItemMetaPatch = v.InferOutput<typeof ItemMetaPatchSchema>;
 

@@ -40,6 +40,15 @@ export interface VaultScopeInput {
   refresh: () => Promise<void>;
   open: (id: string) => Promise<void>;
   setView: (view: NotesView) => void;
+  /**
+   * 元数据补丁（由 `useNotesWorkspace` 传入）。
+   * 移入 / 移出必须**一条补丁同时写 `folder_id` 与 `in_enc_space`**，
+   * 所以这两个动作放在这里、用调用方给的补丁函数落地。
+   */
+  patchItem: (
+    itemId: string,
+    patch: Partial<Pick<LocalItem, "folder_id" | "in_enc_space">>,
+  ) => Promise<void>;
   onLocalWrite?: () => void;
 }
 
@@ -49,10 +58,14 @@ export interface VaultScope {
   vault: VaultDescriptor;
   createVaultFolder: (name: string, parentId: string | null) => Promise<void>;
   createNoteInVault: (options?: { folderId?: string | null }) => Promise<void>;
+  /** 移入加密空间（`folderId = null` = 空间根） */
+  moveItemToVault: (itemId: string, folderId: string | null) => Promise<void>;
+  /** 移出加密空间（`folderId = null` = 根目录） */
+  moveItemOutOfVault: (itemId: string, folderId: string | null) => Promise<void>;
 }
 
 export function useVaultScope(input: VaultScopeInput): VaultScope {
-  const { folders, folderCounts, allItems, refresh, open, setView, onLocalWrite } = input;
+  const { folders, folderCounts, allItems, refresh, open, setView, patchItem, onLocalWrite } = input;
 
   const vaultRoot = useMemo(() => findVaultRoot(folders), [folders]);
   const notebookFolderRows = useMemo(() => notebookFolders(folders), [folders]);
@@ -116,6 +129,28 @@ export function useVaultScope(input: VaultScopeInput): VaultScope {
   );
 
   /**
+   * 移入加密空间（M3-8）：**一条 `patch_meta` 同时写 `folder_id` 与 `in_enc_space`**——
+   * 分两次写会出现"标记已经在空间里、却还挂在普通文件夹下"的中间态（服务端也会拒绝）。
+   * `folderId = null` 表示移入空间根（**锁定态唯一可用的目标**）。
+   */
+  const moveItemToVault = useCallback(
+    async (itemId: string, folderId: string | null) => {
+      const target = folderId ?? vaultRoot?.id ?? null;
+      if (!target) throw new Error("加密空间还没同步下来，请稍后重试");
+      await patchItem(itemId, { folder_id: target, in_enc_space: 1 });
+    },
+    [patchItem, vaultRoot],
+  );
+
+  /** 移出加密空间（M3-8）：移到某个普通文件夹（`null` = 根目录），并摘掉空间标记 */
+  const moveItemOutOfVault = useCallback(
+    async (itemId: string, folderId: string | null) => {
+      await patchItem(itemId, { folder_id: folderId, in_enc_space: 0 });
+    },
+    [patchItem],
+  );
+
+  /**
    * **必须 memo**：`useNotesWorkspace` 会把这个对象放进它自己的 memo 依赖，
    * 每次新建对象会让 workspace 的返回值身份每次都变 → 调用方 effect（同步引擎）反复重建
    * → 请求风暴（M1-11 实测过；`notes-hook` 的引用稳定性用例专门盯这一点）。
@@ -127,7 +162,17 @@ export function useVaultScope(input: VaultScopeInput): VaultScope {
       vault,
       createVaultFolder,
       createNoteInVault,
+      moveItemToVault,
+      moveItemOutOfVault,
     }),
-    [createNoteInVault, createVaultFolder, notebookCounts, notebookFolderRows, vault],
+    [
+      createNoteInVault,
+      createVaultFolder,
+      moveItemOutOfVault,
+      moveItemToVault,
+      notebookCounts,
+      notebookFolderRows,
+      vault,
+    ],
   );
 }

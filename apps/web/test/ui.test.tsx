@@ -258,6 +258,91 @@ describe("笔记列表空状态", () => {
   });
 });
 
+describe("列表行的加密空间移入/移出（M3-8）", () => {
+  function renderList(options: {
+    item?: Parameters<typeof note>[1];
+    vault?: Parameters<typeof NoteList>[0]["vault"];
+  }) {
+    render(
+      <NoteList
+        items={[note("a", options.item)]}
+        title="全部笔记"
+        selectedId={null}
+        loading={false}
+        onSelect={vi.fn()}
+        onNewNote={vi.fn()}
+        vault={options.vault}
+      />,
+    );
+    // 打开该行的更多菜单
+    fireEvent.click(screen.getByRole("button", { name: /的更多操作/ }));
+  }
+
+  const baseVault = {
+    enabled: true,
+    locked: false,
+    id: "vault",
+    folders: [{ id: "vc1", name: "旅行" }],
+    onMoveIn: vi.fn(),
+    onMoveOut: vi.fn(),
+  };
+
+  it("未启用隐私锁：移入入口置灰并说明去哪里启用", () => {
+    renderList({ vault: { ...baseVault, enabled: false, id: null, folders: [] } });
+    const moveIn = screen.getByRole("menuitem", { name: "移入加密空间" }) as HTMLButtonElement;
+    expect(moveIn.disabled).toBe(true);
+    expect(moveIn.title).toContain("设置 › 隐私锁");
+  });
+
+  it("锁定时只能移入空间根（不下发内部层级），且没有「移出」", () => {
+    const onMoveIn = vi.fn();
+    renderList({
+      vault: { ...baseVault, locked: true, folders: [], onMoveIn },
+    });
+
+    const moveIn = screen.getByRole("menuitem", { name: "移入加密空间" }) as HTMLButtonElement;
+    expect(moveIn.disabled).toBe(false);
+    fireEvent.click(moveIn);
+    expect(onMoveIn).toHaveBeenCalledWith("a", null);
+
+    // 锁定时不出现层级项（那些文件夹此时不可见）
+    expect(screen.queryByRole("menuitem", { name: /移入 加密空间\// })).toBeNull();
+    // 也不该出现「移出」（本来就不在空间里）
+    expect(screen.queryByRole("menuitem", { name: "移出加密空间" })).toBeNull();
+  });
+
+  it("解锁后可选择空间内层级", () => {
+    const onMoveIn = vi.fn();
+    renderList({ vault: { ...baseVault, onMoveIn } });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "移入 加密空间/旅行" }));
+    expect(onMoveIn).toHaveBeenCalledWith("a", "vc1");
+  });
+
+  it("已在空间里的条目：显示「移出」，锁定时置灰并说明要先解锁", () => {
+    const onMoveOut = vi.fn();
+    renderList({
+      item: { in_enc_space: 1 },
+      vault: { ...baseVault, locked: true, folders: [], onMoveOut },
+    });
+
+    const moveOut = screen.getByRole("menuitem", { name: "移出加密空间" }) as HTMLButtonElement;
+    expect(moveOut.disabled).toBe(true);
+    expect(moveOut.title).toContain("先解锁");
+    expect(screen.queryByRole("menuitem", { name: "移入加密空间" })).toBeNull();
+  });
+
+  it("已在空间里且已解锁：移出可用", () => {
+    const onMoveOut = vi.fn();
+    renderList({ item: { in_enc_space: 1 }, vault: { ...baseVault, onMoveOut } });
+
+    const moveOut = screen.getByRole("menuitem", { name: "移出加密空间" }) as HTMLButtonElement;
+    expect(moveOut.disabled).toBe(false);
+    fireEvent.click(moveOut);
+    expect(onMoveOut).toHaveBeenCalledWith("a");
+  });
+});
+
 describe("正文状态栏（M04-04/M04-05）", () => {
   it("硬上限提示与阻止态可见；正常时显示大小与已同步", () => {
     const { rerender } = render(

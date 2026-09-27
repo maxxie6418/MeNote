@@ -7,7 +7,7 @@
 import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
-import { DropdownMenu } from "../../../app/ui/Menu";
+import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { ItemListHead } from "../../../app/workarea/ItemListHead";
 
 const PENDING_LABEL: Record<string, string> = {
@@ -41,6 +41,24 @@ export interface NoteListProps {
   onMove?: (id: string, folderId: string | null) => void;
   onTogglePinned?: (id: string) => void;
   onToggleStarred?: (id: string) => void;
+  /**
+   * 加密空间的移入/移出（M3-8；《隐私锁设计》§6.3、§8）。
+   *
+   * 三条口径直接体现在菜单里：
+   * - **未启用隐私锁**：不提供移入入口，菜单项置灰并说明去哪里启用；
+   * - **锁定态**：只能移入**空间根**（`folders` 传空即可，内部层级此时不可见）；**移出**不可用（要先解锁）；
+   * - 已在空间里的条目才显示「移出加密空间」。
+   */
+  vault?: {
+    enabled: boolean;
+    locked: boolean;
+    /** 空间根 id；还没同步下来时给 `null`（此时不给移入入口） */
+    id: string | null;
+    /** 空间内文件夹（锁定时应为空数组） */
+    folders: ReadonlyArray<{ id: string; name: string }>;
+    onMoveIn: (itemId: string, folderId: string | null) => void;
+    onMoveOut: (itemId: string) => void;
+  };
 }
 
 /** 空状态的文案随视图不同——收藏空与笔记空的原因不一样，出口也不一样 */
@@ -72,6 +90,7 @@ export function NoteList({
   onMove,
   onTogglePinned,
   onToggleStarred,
+  vault,
 }: NoteListProps) {
   const empty = emptyCopy(title);
 
@@ -166,6 +185,43 @@ export function NoteList({
                         icon: "star",
                         onSelect: () => onToggleStarred?.(item.id),
                       },
+                      ...(vault
+                        ? item.in_enc_space === 1
+                          ? ([
+                              {
+                                id: "vault-out",
+                                label: "移出加密空间",
+                                icon: "lock" as const,
+                                // 移出意味着要处理面明文：必须先解锁（走查表第 16 行）
+                                disabled: vault.locked,
+                                title: vault.locked
+                                  ? "先解锁隐私锁，才能把内容移出加密空间"
+                                  : "移到根目录，之后按普通内容对待",
+                                onSelect: () => vault.onMoveOut(item.id),
+                              },
+                            ] satisfies MenuItemSpec[])
+                          : ([
+                              {
+                                id: "vault-in",
+                                label: "移入加密空间",
+                                icon: "lock" as const,
+                                disabled: !vault.enabled || vault.id === null,
+                                title: !vault.enabled
+                                  ? "先在「设置 › 隐私锁」启用隐私锁"
+                                  : vault.id === null
+                                    ? "加密空间还没同步下来，请稍后重试"
+                                    : undefined,
+                                onSelect: () => vault.onMoveIn(item.id, null),
+                              },
+                              // 锁定时 `folders` 为空 → 只给"入根"这一条（设计 §6.3 与走查第 15 行）
+                              ...vault.folders.map((folder) => ({
+                                id: `vault-in-${folder.id}`,
+                                label: `移入 加密空间/${folder.name}`,
+                                icon: "folder" as const,
+                                onSelect: () => vault.onMoveIn(item.id, folder.id),
+                              })),
+                            ] satisfies MenuItemSpec[])
+                        : []),
                     ]}
                   />
                 </div>

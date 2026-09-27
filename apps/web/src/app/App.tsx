@@ -28,7 +28,7 @@ import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnv
 import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { HomeView } from "./workarea/HomeView";
-import { NotesPane } from "./workarea/NotesPane";
+import { NotesSlot } from "./NotesSlot";
 import { MemoView } from "./workarea/MemoView";
 import { TaskView } from "./workarea/TaskView";
 import { SearchView } from "./workarea/SearchView";
@@ -528,27 +528,17 @@ export default function App() {
             onAdd={focusComposer}
           />
         ) : (
-          <NotesPane
+          <NotesSlot
             workspace={workspace}
             editorMode={userSettings.settings.editor_mode}
-            encryption={{
+            privacy={{
               enabled: privacy.enabled,
               gate: privacy.gate,
+              lockState: privacy.runtime.lockState,
               unlockedCount: privacy.runtime.unlockedItems.size,
               onRequestUnlock: requestUnlock,
               onLockItem: privacy.lockItem,
               onLockAllItems: privacy.lockAllItems,
-            }}
-            onToggleEncryption={(itemId, next) => {
-              void workspace
-                .setItemEncryption(itemId, next)
-                .then(() => pushToast(next ? "已加密此篇" : "已取消加密", "success"))
-                .catch((error: unknown) => {
-                  pushToast(
-                    error instanceof Error ? error.message : "操作失败，请稍后重试",
-                    "error",
-                  );
-                });
             }}
             onToast={(message, tone) => pushToast(message, tone)}
           />

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Menote 视觉定型提案 · 色板对照</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1d1d1d; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lede { color: #6b6b6b; font-size: 13px; margin: 0 0 20px; }
+  .themes { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .theme { flex: 1 1 460px; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 14px rgba(29,29,29,.07); }
+  .theme > header { padding: 10px 16px; font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+  .canvas { padding: 16px; display: grid; gap: 16px; }
+  .block { border-radius: 10px; padding: 12px; }
+  .block h2 { font-size: 12px; margin: 0 0 10px; font-weight: 600; letter-spacing: .04em; opacity: .7; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sw { flex: 1 1 92px; border-radius: 8px; overflow: hidden; font-size: 10px; }
+  .sw .chip { height: 46px; }
+  .sw .meta { padding: 5px 6px; font-family: Consolas, monospace; font-size: 9.5px; line-height: 1.35; }
+  .btn { border: none; border-radius: 10px; height: 31px; padding: 0 12px; font-size: 13px; font-weight: 600; cursor: default; }
+  .btn-new { height: 38px; border-radius: 9px; width: 100%; font-size: 13px; font-weight: 600; border: none; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 12px; border-radius: 99px; font-size: 12px; border: 1px solid; }
+  .type div { margin: 3px 0; }
+  .radii { display: flex; gap: 10px; }
+  .radii span { width: 56px; height: 40px; display: grid; place-items: center; font-size: 10px; font-family: Consolas, monospace; }
+  .scale { display: flex; gap: 4px; align-items: flex-end; }
+  .scale i { font-style: normal; font-family: Consolas, monospace; font-size: 9px; text-align: center; }
+  .note { font-size: 11px; line-height: 1.6; }
+  code { font-family: Consolas, monospace; font-size: 10.5px; }
+</style>
+</head>
+<body>
+  <h1>Menote 视觉定型提案 · 色板对照</h1>
+  <p class="lede">锚点取自你给的站点图标四个橙：<code>#F6821F</code> <code>#FBAD41</code> <code>#F15A24</code> <code>#FDBA74</code>。括号里是实测 WCAG 对比度。</p>
+
+  <div class="themes">
+    <!-- ============ 浅色 ============ -->
+    <section class="theme" style="background:#ffffff; color:#1d1d1d;">
+      <header style="background:#f7f7f7; color:#4a4a4a; border-bottom:1px solid #e0e0e0;">浅色主题 · Light</header>
+      <div class="canvas">
+
+        <div class="block" style="background:#f2f2f2;">
+          <h2>主色与派生</h2>
+          <div class="row">
+            <div class="sw"><div class="chip" style="background:#f6821f;"></div><div class="meta">--primary<br>#F6821F<br>填充色</div></div>
+            <div class="sw"><div class="chip" style="background:#e8720d;"></div><div class="meta">--primary-2<br>#E8720D<br>悬停/渐变暗端</div></div>
+            <div class="sw"><div class="chip" style="background:#b45309;"></div><div class="meta">--primary-ink<br>#B45309<br>橙色文字 5.02:1</div></div>
+            <div class="sw"><div class="chip" style="background:#1d1d1d;"></div><div class="meta">--on-primary<br>#1D1D1D<br>按钮文字 6.53:1</div></div>
+          </div>
+        </div>
+
+        <div class="block" style="background:#f7f7f7;">
+          <h2>按钮（注意文字是深墨，不是白字）</h2>
+          <button class="btn-new" style="background:linear-gradient(140deg,#f6821f,#e8720d); color:#1d1d1d;">新建笔记</button>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn" style="background:#f6821f; color:#1d1d1d;">主操作</button>
+            <button class="btn" style="background:#ffffff; color:#1d1d1d; border:1px solid #c9c9c9;">次操作</button>
+            <button class="btn" style="background:transparent; color:#4a4a4a; font-weight:400;">幽灵</button>
+            <button class="btn" style="background:transparent; color:#c0392b; border:1px solid rgba(192,57,43,.26);">危险</button>
+            <button class="btn" style="background:#e8e8e8; color:#1d1d1d;" disabled>禁用</button>
+          </div>
+          <p class="note" style="color:#6b6b6b; margin:10px 0 0;">对照：白字压橙 <code>#fff on #F6821F = 2.58:1</code> ✗ 明显读不清，所以定成深墨。</p>
+        </div>
+
+        <div class="block" style="background:#f2f2f2;">
+          <h2>语义色（必须配图标或文字，颜色只是辅助）</h2>
+          <div class="row">
+            <span class="pill" style="color:#1f7a4d; background:rgba(31,122,77,.11); border-color:rgba(31,122,77,.26);">✓ 已同步</span>
+            <span class="pill" style="color:#8a5a00; background:rgba(138,90,0,.11); border-color:rgba(138,90,0,.26);">! 3 项待上传</span>
+            <span class="pill" style="color:#c0392b; background:rgba(192,57,43,.10); border-color:rgba(192,57,43,.26);">✗ 上传失败</span>
+            <span class="pill" style="color:#6b6b6b; background:transparent; border-color:#c9c9c9;">中性</span>
+          </div>
+          <p class="note" style="color:#6b6b6b; margin:10px 0 0;">深色下 amber 与 primary 同属橙黄，所以四个状态我都带了符号——沿用「语义色不得单独表意」。</p>
+        </div>
+
+        <div class="block" style="background:#ffffff; border:1px solid #e0e0e0;">
+          <h2>文字三级</h2>
+          <div class="type">
+            <div style="color:#1d1d1d; font-size:13px;">正文 #1D1D1D（16.9:1）</div>
+            <div style="color:#4a4a4a; font-size:13px;">次要 #4A4A4A（8.9:1）</div>
+            <div style="color:#6b6b6b; font-size:12px;">辅助 #6B6B6B（5.3:1）</div>
+            <div style="color:#b45309; font-size:13px;">橙色文字走 --primary-ink #B45309（5.0:1）——链接、选中项、头像首字</div>
+          </div>
+        </div>
+
+        <div class="block" style="background:#f7f7f7;">
+          <h2>字号 6 档</h2>
+          <div class="type" style="color:#1d1d1d;">
+            <div style="font-size:20px; font-weight:600;">20 · 大标题</div>
+            <div style="font-size:17px; font-weight:600;">17 · 标题</div>
+            <div style="font-size:14px; font-weight:600;">14 · 小标题</div>
+            <div style="font-size:13px;">13 · 正文</div>
+            <div style="font-size:12px; color:#4a4a4a;">12 · 次要</div>
+            <div style="font-size:11px; color:#6b6b6b;">11 · 微标</div>
+          </div>
+        </div>
+
+        <div class="block" style="background:#f2f2f2;">
+          <h2>圆角 3 档 + 间距 6 档</h2>
+          <div class="radii">
+            <span style="background:#fff; border:1px solid #e0e0e0; border-radius:14px;">14</span>
+            <span style="background:#fff; border:1px solid #e0e0e0; border-radius:10px;">10</span>
+            <span style="background:#fff; border:1px solid #e0e0e0; border-radius:6px;">6</span>
+            <span style="background:#fff; border:1px solid #e0e0e0; border-radius:99px;">99</span>
+            <span style="background:#fff; border:1px solid #e0e0e0; border-radius:50%;">50%</span>
+          </div>
+          <div class="scale" style="margin-top:12px; color:#4a4a4a;">
+            <i style="width:4px; background:#f6821f; height:8px;"></i><i style="width:8px; background:#f6821f; height:14px;"></i><i style="width:12px; background:#f6821f; height:20px;"></i><i style="width:16px; background:#f6821f; height:26px;"></i><i style="width:20px; background:#f6821f; height:32px;"></i><i style="width:24px; background:#f6821f; height:38px;"></i>
+            <span style="font-size:11px; margin-left:8px;">4 / 8 / 12 / 16 / 20 / 24（4px 基数）</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 深色 ============ -->
+    <section class="theme" style="background:#161616; color:#f2f2f2;">
+      <header style="background:#1e1e1e; color:#bdbdbd; border-bottom:1px solid #333;">深色主题 · Dark</header>
+      <div class="canvas">
+
+        <div class="block" style="background:#2d2d2d;">
+          <h2>主色与派生</h2>
+          <div class="row">
+            <div class="sw"><div class="chip" style="background:#f6821f;"></div><div class="meta">--primary<br>#F6821F<br>填充 + 文字 7.01:1</div></div>
+            <div class="sw"><div class="chip" style="background:#fbad41;"></div><div class="meta">--primary-2<br>#FBAD41<br>悬停改变亮</div></div>
+            <div class="sw"><div class="chip" style="background:#161616; border:1px solid #333;"></div><div class="meta">--on-primary<br>#161616<br>按钮文字 7.01:1</div></div>
+          </div>
+        </div>
+
+        <div class="block" style="background:#1e1e1e;">
+          <h2>按钮</h2>
+          <button class="btn-new" style="background:linear-gradient(140deg,#f6821f,#fbad41); color:#161616;">新建笔记</button>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn" style="background:#f6821f; color:#161616;">主操作</button>
+            <button class="btn" style="background:#242424; color:#f2f2f2; border:1px solid #4a4a4a;">次操作</button>
+            <button class="btn" style="background:transparent; color:#bdbdbd; font-weight:400;">幽灵</button>
+            <button class="btn" style="background:transparent; color:#f07167; border:1px solid rgba(240,113,103,.3);">危险</button>
+          </div>
+        </div>
+
+        <div class="block" style="background:#2d2d2d;">
+          <h2>语义色</h2>
+          <div class="row">
+            <span class="pill" style="color:#5cbf8a; background:rgba(92,191,138,.14); border-color:rgba(92,191,138,.28);">✓ 已同步 7.99:1</span>
+            <span class="pill" style="color:#e0a458; background:rgba(224,164,88,.14); border-color:rgba(224,164,88,.3);">! 待上传 8.29:1</span>
+            <span class="pill" style="color:#f07167; background:rgba(240,113,103,.14); border-color:rgba(240,113,103,.3);">✗ 失败 6.26:1</span>
+          </div>
+          <p class="note" style="color:#8f8f8f; margin:10px 0 0;">注意 amber 与 primary 在这里都偏橙——所以状态一律带符号/文字。</p>
+        </div>
+
+        <div class="block" style="background:#242424;">
+          <h2>文字三级</h2>
+          <div class="type">
+            <div style="color:#f2f2f2; font-size:13px;">正文 #F2F2F2（16.2:1）</div>
+            <div style="color:#bdbdbd; font-size:13px;">次要 #BDBDBD（9.6:1）</div>
+            <div style="color:#8f8f8f; font-size:12px;">辅助 #8F8F8F（5.6:1）</div>
+            <div style="color:#f6821f; font-size:13px;">橙色文字直接用 --primary #F6821F（7.0:1）</div>
+          </div>
+        </div>
+
+        <div class="block" style="background:#1e1e1e;">
+          <h2>底色层级（bg → panel-3）</h2>
+          <div class="row">
+            <div class="sw"><div class="chip" style="background:#161616; border:1px solid #333;"></div><div class="meta">#161616<br>--bg</div></div>
+            <div class="sw"><div class="chip" style="background:#1e1e1e; border:1px solid #333;"></div><div class="meta">#1E1E1E<br>--bg-soft</div></div>
+            <div class="sw"><div class="chip" style="background:#242424; border:1px solid #333;"></div><div class="meta">#242424<br>--panel</div></div>
+            <div class="sw"><div class="chip" style="background:#2d2d2d; border:1px solid #333;"></div><div class="meta">#2D2D2D<br>--panel-2</div></div>
+            <div class="sw"><div class="chip" style="background:#383838; border:1px solid #333;"></div><div class="meta">#383838<br>--panel-3</div></div>
+          </div>
+        </div>
+
+        <div class="block" style="background:#242424;">
+          <h2>阴影 3 档</h2>
+          <div class="row" style="gap:14px;">
+            <div style="flex:1; background:#2d2d2d; border:1px solid #333; border-radius:10px; padding:10px 12px; font-size:11px; box-shadow:0 4px 14px rgba(0,0,0,.35);">shadow-1<br>卡片/主按钮</div>
+            <div style="flex:1; background:#2d2d2d; border:1px solid #333; border-radius:10px; padding:10px 12px; font-size:11px; box-shadow:0 16px 40px rgba(0,0,0,.45);">shadow-2<br>菜单/弹层</div>
+            <div style="flex:1; background:#2d2d2d; border:1px solid #333; border-radius:10px; padding:10px 12px; font-size:11px; box-shadow:0 28px 70px rgba(0,0,0,.55);">shadow-3<br>模态</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="note" style="margin-top:20px; color:#4a4a4a; max-width:900px;">
+    这一页只是**提案预览**（自包含 HTML，不影响应用）。取值表、对比度实测、落地顺序与 `components.md` 比对结果见
+    <code>docs/modules/Menote-视觉定型提案-v1.md</code>。你确认后我才改 <code>DESIGN.md</code>、原型与 <code>tokens.css</code>。
+  </p>
+</body>
+</html>

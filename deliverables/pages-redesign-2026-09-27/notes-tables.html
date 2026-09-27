@@ -1,0 +1,1517 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeNote · 笔记（含表格）重构稿（2026-09-27）</title>
+<style>
+/* ============================================================
+   0. 设计令牌
+   —— 全部照抄 deliverables/pages-redesign-2026-09-27/index.html（即 DESIGN.md §3.3 的 tokens.css）
+   —— 本稿未新增任何令牌
+   ============================================================ */
+:root{
+  color-scheme:light;
+  --bg:#ffffff; --bg-soft:#f7f7f7; --panel:#ffffff; --panel-2:#f2f2f2; --panel-3:#e8e8e8;
+  --line:#e0e0e0; --line-2:#c9c9c9;
+  --text:#1d1d1d; --text-2:#4a4a4a; --muted:#6b6b6b;
+  --primary:#f6821f; --primary-2:#e8720d;
+  --primary-soft:rgba(246,130,31,.12); --primary-line:rgba(246,130,31,.35);
+  --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+  --primary-ink:#b45309; --on-primary:#1d1d1d;
+  --amber:#8a5a00; --amber-soft:rgba(138,90,0,.11); --amber-line:rgba(138,90,0,.26);
+  --green:#1f7a4d; --green-soft:rgba(31,122,77,.11); --green-line:rgba(31,122,77,.26);
+  --red:#c0392b; --red-soft:rgba(192,57,43,.10); --red-line:rgba(192,57,43,.26);
+  --purple:#6d47a8; --purple-soft:rgba(109,71,168,.12);
+  --hairline:rgba(29,29,29,.022); --ph-stripe:rgba(29,29,29,.05);
+  --topbar-bg:rgba(255,255,255,.86); --lock-veil:rgba(255,255,255,.95); --scrim:rgba(29,29,29,.42);
+  --shadow-1:0 4px 14px rgba(29,29,29,.07);
+  --shadow-2:0 16px 40px rgba(29,29,29,.13);
+  --shadow-3:0 28px 70px rgba(29,29,29,.20);
+
+  /* 结构尺寸（DESIGN.md §2.2） */
+  --topbar-h:54px; --fnbar-w:294px; --list-w:330px; --settings-nav-w:184px;
+  --radius-sm:6px; --radius:10px; --radius-lg:14px;
+  --radius-pill:99px; --radius-circle:50%;
+
+  /* 字号刻度（DESIGN.md §3.3，6 档） */
+  --fs-display:20px; --fs-title:17px; --fs-body-lg:14px; --fs-body:13px; --fs-small:12px; --fs-micro:11px;
+
+  /* 间距刻度（DESIGN.md §4.3，4px 基数 6 档） */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,"SF Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#161616; --bg-soft:#1e1e1e; --panel:#242424; --panel-2:#2d2d2d; --panel-3:#383838;
+  --line:#333333; --line-2:#4a4a4a;
+  --text:#f2f2f2; --text-2:#bdbdbd; --muted:#8f8f8f;
+  --primary:#f6821f; --primary-2:#fbad41;
+  --primary-soft:rgba(246,130,31,.16); --primary-line:rgba(246,130,31,.34);
+  --primary-ink:#f6821f; --on-primary:#161616;
+  --amber:#e0a458; --amber-soft:rgba(224,164,88,.14); --amber-line:rgba(224,164,88,.30);
+  --green:#5cbf8a; --green-soft:rgba(92,191,138,.14); --green-line:rgba(92,191,138,.28);
+  --red:#f07167; --red-soft:rgba(240,113,103,.14); --red-line:rgba(240,113,103,.30);
+  --purple:#b5a2e0; --purple-soft:rgba(181,162,224,.16);
+  --hairline:rgba(255,255,255,.02); --ph-stripe:rgba(255,255,255,.035);
+  --topbar-bg:rgba(22,22,22,.86); --lock-veil:rgba(22,22,22,.95); --scrim:rgba(0,0,0,.55);
+  --shadow-1:0 4px 14px rgba(0,0,0,.35);
+  --shadow-2:0 16px 40px rgba(0,0,0,.45);
+  --shadow-3:0 28px 70px rgba(0,0,0,.55);
+}
+
+/* ============================================================
+   1. 基础
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:var(--fs-body); line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden; /* DESIGN.md §2.7：body 不滚动 */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+ul,ol{margin:0;padding:0;list-style:none}
+h1,h2,h3,h4,p{margin:0}
+time{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:var(--radius-sm)}
+svg.ic{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg.ic--sm{width:13px;height:13px}
+svg.ic--lg{width:20px;height:20px}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+.hit{position:relative}
+.hit::after{content:'';position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ============================================================
+   2. 通用控件（DESIGN.md §5.2 / §5.3）
+   ============================================================ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);
+  height:31px;padding:0 var(--sp-3);border:1px solid var(--line-2);border-radius:var(--radius);
+  background:var(--panel);color:var(--text-2);font-size:var(--fs-body-lg);white-space:nowrap;
+  transition:border-color .16s,color .16s,background .16s}
+.btn:hover{border-color:var(--primary-line);color:var(--primary-ink);background:var(--primary-soft)}
+.btn--primary{background:var(--primary-grad);border-color:transparent;color:var(--on-primary);font-weight:600;box-shadow:var(--shadow-1)}
+.btn--primary:hover{color:var(--on-primary);border-color:transparent;filter:brightness(1.05)}
+.btn--sm{height:27px;padding:0 var(--sp-2);font-size:var(--fs-small)}
+.btn--ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn--ghost:hover{background:var(--panel-2);color:var(--text);border-color:transparent}
+.btn[disabled]{opacity:.45;pointer-events:none}
+
+/* 盒式分段控件：互斥的视图 / 参数切换（DESIGN.md §5.3） */
+.seg{display:inline-flex;align-items:center;gap:2px;padding:2px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:var(--radius);flex:none}
+.seg button{display:inline-flex;align-items:center;gap:var(--sp-1);height:25px;padding:0 var(--sp-3);
+  border-radius:var(--radius-sm);color:var(--muted);font-size:var(--fs-body);white-space:nowrap;
+  transition:background .16s,color .16s}
+.seg button:hover{color:var(--text-2)}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--text);font-weight:600;box-shadow:var(--shadow-1)}
+.seg button[aria-pressed="true"] svg{color:var(--primary)}
+
+/* 图标按钮（DESIGN.md §2.2 图标按钮 24×24） */
+.iconbtn{display:grid;place-items:center;width:24px;height:24px;border-radius:var(--radius-sm);
+  color:var(--muted);transition:.16s;flex:none}
+.iconbtn:hover{background:var(--panel-2);color:var(--text)}
+.iconbtn--left svg{transform:rotate(180deg)}
+.iconbtn--danger:hover{background:var(--red-soft);color:var(--red)}
+.iconbtn[disabled]{opacity:.35;pointer-events:none}
+
+/* 滚动条 */
+.scroll-thin{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.scroll-thin::-webkit-scrollbar{width:8px;height:8px;background:transparent}
+.scroll-thin::-webkit-scrollbar-track{background:transparent}
+.scroll-thin::-webkit-scrollbar-thumb{background:var(--line-2);border:2px solid transparent;
+  border-radius:var(--radius-pill);background-clip:content-box}
+.scroll-thin::-webkit-scrollbar-thumb:hover{background:var(--muted);
+  border:2px solid transparent;background-clip:content-box}
+.scroll-thin::-webkit-scrollbar-corner{background:transparent}
+
+/* 胶囊 */
+.chip{display:inline-flex;align-items:center;gap:var(--sp-1);height:21px;padding:0 var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius-pill);background:var(--panel);
+  color:var(--text-2);font-size:var(--fs-micro);white-space:nowrap;transition:.16s}
+button.chip:hover{border-color:var(--primary-line);color:var(--primary-ink);background:var(--primary-soft)}
+.chip[aria-pressed="true"]{background:var(--primary-soft);border-color:var(--primary-line);color:var(--primary-ink);font-weight:600}
+.chip--tag{color:var(--purple);background:var(--purple-soft);border-color:transparent}
+
+/* 状态胶囊：带语义色，必须配图标或文字（DESIGN.md §3.2-4） */
+.pill{display:inline-flex;align-items:center;gap:var(--sp-1);height:21px;padding:0 var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius-pill);color:var(--muted);
+  font-size:var(--fs-micro);white-space:nowrap;background:var(--panel)}
+.pill--red{color:var(--red);border-color:var(--red-line);background:var(--red-soft)}
+.pill--amber{color:var(--amber);border-color:var(--amber-line);background:var(--amber-soft)}
+.pill--green{color:var(--green);border-color:var(--green-line);background:var(--green-soft)}
+.pill--neutral{color:var(--text-2)}
+
+/* InfoHint：辅助说明的唯一出口（DESIGN.md §5.4-1） */
+.infohint{position:relative;display:inline-grid;place-items:center;width:16px;height:16px;
+  color:var(--muted);flex:none;vertical-align:middle}
+.infohint:hover,.infohint:focus-visible{color:var(--primary-ink)}
+.infohint__pop{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+  width:max-content;max-width:260px;padding:var(--sp-2) var(--sp-3);border-radius:var(--radius);
+  background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow-2);
+  color:var(--text-2);font-size:var(--fs-small);font-weight:400;line-height:1.5;text-align:left;
+  opacity:0;visibility:hidden;transition:opacity .16s,visibility .16s;z-index:30;pointer-events:none}
+.infohint:hover .infohint__pop,.infohint:focus-visible .infohint__pop{opacity:1;visibility:visible}
+.infohint--right .infohint__pop{left:auto;right:0;transform:none}
+/* 顶部几处 InfoHint 向下弹出：.work 有 overflow:hidden，向上会被裁掉 */
+.docpane__head .infohint__pop,.tabletoolbar .infohint__pop{bottom:auto;top:calc(100% + 8px)}
+
+/* 文字链接 */
+.link{display:inline-flex;align-items:center;gap:var(--sp-1);color:var(--primary-ink);
+  font-size:var(--fs-small);text-decoration:underline;text-underline-offset:2px}
+
+/* 开关（DESIGN.md §2.2 toggle 38×21） */
+.switch{display:inline-flex;align-items:center;gap:var(--sp-2);color:var(--text-2);
+  font-size:var(--fs-small);cursor:pointer}
+.switch__track{position:relative;width:38px;height:21px;flex:none;border-radius:var(--radius-pill);
+  background:var(--panel-3);border:1px solid var(--line-2);transition:background .16s,border-color .16s}
+.switch__track::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;
+  border-radius:var(--radius-circle);background:var(--panel);box-shadow:var(--shadow-1);transition:transform .16s}
+.switch[aria-checked="true"] .switch__track{background:var(--primary);border-color:var(--primary)}
+.switch[aria-checked="true"] .switch__track::after{transform:translateX(17px)}
+
+/* 空状态（DESIGN.md §5.4-3） */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--sp-2);padding:var(--sp-6) var(--sp-4);text-align:center}
+.empty__ico{display:grid;place-items:center;width:50px;height:50px;border-radius:var(--radius-circle);
+  background:var(--panel-2);color:var(--muted);margin-bottom:var(--sp-1)}
+.empty__t{font-size:var(--fs-body-lg);font-weight:600}
+.empty__h{color:var(--muted);font-size:var(--fs-small);max-width:340px}
+
+/* ============================================================
+   3. 应用骨架（DESIGN.md §2.1 / §2.2 / §2.5）
+   ============================================================ */
+.shell{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* —— 顶栏：固定 6 块，数量与顺序不可增减 —— */
+.topbar{height:var(--topbar-h);flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:0 var(--sp-4);background:var(--topbar-bg);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);position:relative;z-index:20}
+.brand{display:flex;align-items:center;gap:var(--sp-2);flex:none;padding-right:var(--sp-3);
+  border-right:1px solid var(--line)}
+.brand img{width:22px;height:22px;display:block}
+.brand b{font-size:var(--fs-body-lg);letter-spacing:.2px}
+.crumb{display:flex;align-items:center;gap:var(--sp-1);flex:1;min-width:0;
+  color:var(--text-2);font-size:var(--fs-small);white-space:nowrap;overflow:hidden}
+.crumb .sep{color:var(--muted)}
+.crumb b{color:var(--text);font-weight:600}
+.search{display:flex;align-items:center;gap:var(--sp-2);flex:none;width:290px;height:33px;
+  padding:0 var(--sp-3);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--panel-2);color:var(--muted);font-size:var(--fs-small)}
+.search input{flex:1;min-width:0;border:0;background:none;font:inherit;color:var(--text);outline:none}
+.search input::placeholder{color:var(--muted)}
+.search kbd{font-family:var(--mono);font-size:var(--fs-micro);padding:0 5px;
+  border:1px solid var(--line-2);border-radius:var(--radius-sm);color:var(--muted)}
+.pilltop{display:inline-flex;align-items:center;gap:var(--sp-1);flex:none;height:30px;
+  padding:0 var(--sp-3);border:1px solid var(--green-line);border-radius:var(--radius-pill);
+  background:var(--green-soft);color:var(--green);font-size:var(--fs-small)}
+.capsule{display:inline-flex;align-items:center;gap:var(--sp-1);flex:none;height:32px;
+  padding:0 var(--sp-3);border:1px solid var(--primary-line);border-radius:var(--radius-pill);
+  background:var(--primary-soft);color:var(--primary-ink);font-size:var(--fs-small)}
+.capsule .timer{font-family:var(--mono);font-size:var(--fs-micro);opacity:.85}
+.avatar{width:30px;height:30px;flex:none;border-radius:var(--radius-circle);
+  background:var(--primary-grad);color:var(--on-primary);display:grid;place-items:center;
+  font-size:var(--fs-small);font-weight:600}
+.body-row{flex:1;display:flex;min-height:0}
+
+/* —— 功能栏 —— */
+.fnbar{width:var(--fnbar-w);flex:none;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--bg-soft);border-right:1px solid var(--line)}
+.fn-top{flex:none;padding:var(--sp-4) var(--sp-4) var(--sp-3)}
+.btn-new{display:flex;align-items:center;justify-content:center;gap:var(--sp-2);width:100%;height:31px;
+  border-radius:var(--radius);background:var(--primary-grad);color:var(--on-primary);
+  font-size:var(--fs-body-lg);font-weight:600;box-shadow:var(--shadow-1)}
+.composer{margin-top:var(--sp-3);padding:var(--sp-2) var(--sp-3);
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);
+  transition:border-color .16s,box-shadow .16s}
+.composer:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.composer textarea{display:block;width:100%;min-height:40px;max-height:180px;resize:vertical;
+  border:0;background:none;font:inherit;font-size:var(--fs-body);line-height:1.6;color:var(--text);outline:none}
+.composer textarea::placeholder{color:var(--muted)}
+.composer__extra{display:flex;align-items:center;gap:var(--sp-1);height:26px;margin-top:var(--sp-2);overflow-x:auto;flex-wrap:nowrap}
+.composer__extra::-webkit-scrollbar{height:0}
+.mode-row{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2)}
+.mode-row .btn{margin-left:auto}
+.seg--incomposer button{height:23px;padding:0 var(--sp-2);font-size:var(--fs-small)}
+.fn-scroll{flex:1;overflow-y:auto;padding:0 var(--sp-4) var(--sp-4)}
+.nav-seg{display:flex;gap:var(--sp-1);position:sticky;top:0;z-index:2;
+  background:var(--bg-soft);border-bottom:1px solid var(--line);margin-bottom:var(--sp-3)}
+.seg-item{flex:1;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;
+  gap:var(--sp-1);padding:var(--sp-2) 0 var(--sp-3);color:var(--muted);font-size:var(--fs-body);
+  transition:color .16s;text-decoration:none}
+.seg-item:hover{color:var(--text-2)}
+.seg-item[aria-current="page"]{color:var(--primary-ink);font-weight:600}
+.seg-item[aria-current="page"]::after{content:'';position:absolute;left:var(--sp-2);right:var(--sp-2);
+  bottom:-1px;height:2px;border-radius:var(--radius-pill);background:var(--primary)}
+.nav-group{margin-bottom:var(--sp-3)}
+.nav-group__title{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2);
+  padding:0 var(--sp-2);color:var(--muted);font-size:var(--fs-micro);font-weight:600;letter-spacing:.06em}
+.nav-item{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2);
+  border-radius:var(--radius);color:var(--text-2);font-size:var(--fs-body);transition:.16s;text-decoration:none}
+.nav-item:hover{background:var(--panel-2);color:var(--text)}
+.nav-item[aria-current="page"]{background:var(--primary-soft);color:var(--primary-ink);font-weight:600}
+.nav-item .n{margin-left:auto;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+.nav-tags{display:flex;flex-wrap:wrap;gap:var(--sp-1);padding:0 var(--sp-2)}
+.fn-vault{flex:none;padding:var(--sp-3) var(--sp-4);border-top:1px solid var(--line)}
+
+/* —— 主操作区 —— */
+.work{flex:1;min-width:0;display:flex;overflow:hidden}
+.page{flex:1;min-width:0;display:flex;flex-direction:column}
+/* 笔记页 = 列表 + 正文双栏（DESIGN.md §2.6） */
+.page-body{flex:1;min-height:0;display:flex}
+
+/* ============================================================
+   4. 笔记页 —— 左列条目列表 + 右列正文（按条目类型分流）
+   ============================================================ */
+.listcol{width:var(--list-w);flex:none;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--bg-soft);border-right:1px solid var(--line)}
+.listcol__head{flex:none;display:flex;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--line)}
+.listcol__name{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-body-lg);
+  font-weight:600;color:var(--text)}
+.listcol__n{margin-left:auto;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+.listcol__scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:var(--sp-2)}
+
+.doclist{display:flex;flex-direction:column;gap:2px}
+.docrow{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2);
+  border-radius:var(--radius);transition:background .16s}
+.docrow:hover{background:var(--panel-2)}
+.docrow[aria-current="true"]{background:var(--primary-soft)}
+/* 条目类型图标底（DESIGN.md §2.2：列表行类型图标底 26×26）——笔记与表格混排靠它区分 */
+.docrow__ico{flex:none;display:grid;place-items:center;width:26px;height:26px;
+  border-radius:var(--radius-sm);background:var(--panel-2);color:var(--muted)}
+.docrow[aria-current="true"] .docrow__ico{background:var(--panel);color:var(--primary-ink)}
+.docrow__main{flex:1;min-width:0}
+.docrow__t{display:block;font-size:var(--fs-body);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.docrow[aria-current="true"] .docrow__t{color:var(--primary-ink);font-weight:600}
+.docrow__sub{display:block;margin-top:1px;color:var(--muted);font-size:var(--fs-micro);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.docrow__when{flex:none;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+
+/* —— 右列：正文区（正文头固定 · 中间滚动 · 底部状态栏固定，DESIGN.md §2.7） —— */
+.docpane{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.docpane__head{flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--line)}
+.doctitle{flex:1;min-width:0;border:0;background:none;padding:0;outline:none;
+  font-family:inherit;font-size:var(--fs-title);font-weight:650;letter-spacing:-.01em;color:var(--text)}
+.docpane__hactions{display:flex;align-items:center;gap:var(--sp-3);flex:none}
+/* 标题栏里的一小组：视图切换 + 该类自己的动作（按条目类型整组切换） */
+.docpane__hgroup{display:flex;align-items:center;gap:var(--sp-3)}
+.docpane__body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+/* 两种正文形态（笔记 / 表格）都是「纵向撑满」的容器 */
+.noteview,.tableview{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* —— 笔记形态：分屏（编辑 / 仅编辑 / 仅预览，DESIGN.md §5.3 盒式分段） —— */
+.doc-split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);overflow:hidden}
+.doc-split__pane{min-width:0;overflow-y:auto;overflow-x:hidden}
+.doc-split__pane--view{border-left:1px solid var(--line);position:relative;overflow:hidden}
+/* 编辑栏允许横向滚动：代码区不换行，长行靠横向滚动看全（仍是这一层的唯一滚动容器） */
+.doc-split__pane--edit{overflow:auto}
+/* 单档时只剩一栏：网格收成一列，否则内容只占左半边（另一栏由 JS 置 hidden） */
+.doc-split[data-mode="edit"],.doc-split[data-mode="preview"]{grid-template-columns:minmax(0,1fr)}
+
+.editor{display:flex;min-height:100%;font-family:var(--mono);font-size:var(--fs-small);line-height:1.7}
+/* white-space:pre 是必须的：行号在 HTML 里是用换行分隔的纯文本，缺了它换行会被折叠成空格、
+   17 个行号横排成一行。行高 1.7 与代码区一致、上内边距同为 --sp-4，所以逐行与代码对齐。 */
+.editor__gutter{flex:none;padding:var(--sp-4) var(--sp-2) var(--sp-4) var(--sp-4);text-align:right;
+  color:var(--muted);user-select:none;white-space:pre}
+/* 代码区不换行（与代码编辑器默认一致）：一行太长就横向滚动，行号才不会与代码错位 */
+.editor__code{flex:1;padding:var(--sp-4);white-space:pre;color:var(--text)}
+.md-h{color:var(--primary-ink);font-weight:600}
+.md-strong{font-weight:650;color:var(--text)}
+.md-code{color:var(--text-2);background:var(--panel-2);border-radius:var(--radius-sm);padding:0 3px}
+.md-quote{color:var(--text-2)}
+
+.preview{max-width:740px;padding:var(--sp-4) var(--sp-5) var(--sp-6)}
+.preview h2{margin:var(--sp-5) 0 var(--sp-2);font-size:var(--fs-body-lg);font-weight:650;letter-spacing:-.01em}
+.preview h2:first-child{margin-top:0}
+.preview p{margin:var(--sp-2) 0;font-size:var(--fs-body);line-height:1.72}
+.preview ul{margin:var(--sp-2) 0;padding-left:1.2em;list-style:disc}
+.preview li{font-size:var(--fs-body);line-height:1.7}
+.preview li+li{margin-top:2px}
+.preview blockquote{margin:var(--sp-3) 0;padding:var(--sp-2) var(--sp-3);
+  border-left:3px solid var(--line-2);color:var(--text-2);font-size:var(--fs-body)}
+.preview code{font-family:var(--mono);font-size:var(--fs-small);padding:1px 5px;
+  border-radius:var(--radius-sm);background:var(--panel-2);color:var(--text-2)}
+.preview strong{font-weight:650}
+.preview__tbl{width:100%;border-collapse:collapse;margin:var(--sp-3) 0;font-size:var(--fs-small)}
+.preview__tbl th{text-align:left;font-weight:600;color:var(--text-2);
+  padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line-2)}
+.preview__tbl td{padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line);color:var(--text)}
+
+.docstatus{flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-2) var(--sp-5);border-top:1px solid var(--line);font-size:var(--fs-micro);color:var(--muted)}
+.docstatus__right{margin-left:auto;display:flex;align-items:center;gap:var(--sp-3)}
+.docstatus .sizetag{font-family:var(--mono);color:var(--muted)}
+
+/* ============================================================
+   5. 表格形态（同一个正文区里的另一种打开方式；设计文档 §十）
+   ============================================================ */
+.tabletoolbar{flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-2) var(--sp-5);border-bottom:1px solid var(--line)}
+.tabletoolbar__right{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2)}
+
+/* 表格区：一个滚动容器，横向滚动也在其中；表头 sticky 固定（DESIGN.md §2.7） */
+.tblarea{flex:1;min-height:0;display:flex;flex-direction:column}
+.tblscroll{flex:1;overflow:auto}
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:var(--fs-body)}
+.tbl th{position:sticky;top:0;z-index:1;background:var(--bg-soft);
+  padding:var(--sp-2) var(--sp-3);text-align:left;white-space:nowrap;
+  border-bottom:1px solid var(--line);color:var(--text-2);font-size:var(--fs-small);font-weight:600}
+.tbl__th{display:flex;align-items:center;gap:var(--sp-2)}
+.tbl__th svg{color:var(--muted)}
+/* 列类型文字：图标不可单独表意，配一行微标说明列类型（DESIGN.md §5.5-4） */
+.tbl__type{color:var(--muted);font-size:var(--fs-micro);font-weight:400}
+.tbl__thmenu{margin-left:auto}
+.tbl td{padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line);
+  color:var(--text);vertical-align:middle}
+.tbl tbody tr{transition:background .16s}
+.tbl tbody tr:hover{background:var(--panel-2)}
+/* 可点即改的单元格：给一点可编辑的暗示 */
+.tbl td[data-editable]{cursor:text}
+.tbl__num{font-variant-numeric:tabular-nums}
+.tbl__edit{width:100%;border:1px solid var(--primary-line);border-radius:var(--radius-sm);
+  background:var(--panel);color:var(--text);font:inherit;padding:1px var(--sp-1);outline:none}
+/* 图片列：附件管线接入前如实显示文件名并置灰（《M4 界面稿》§2.3） */
+.tbl__img{display:inline-flex;align-items:center;gap:var(--sp-1);color:var(--muted);font-size:var(--fs-small)}
+.tbl__tags{display:inline-flex;flex-wrap:wrap;gap:var(--sp-1)}
+.tbl__td--menu,.tbl__th--menu{width:44px;text-align:right}
+.tbl tbody .iconbtn{opacity:.5}
+.tbl tbody tr:hover .iconbtn{opacity:1}
+
+/* 图册：以图片为主体的网格；卡片尺寸统一（封面正方 + 行高 1fr，横竖一致） */
+.gallery{flex:1;overflow-y:auto;padding:var(--sp-5)}
+.gallery__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));
+  grid-auto-rows:1fr;gap:var(--sp-3)}
+.gcard{display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;text-align:left;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);transition:.16s}
+.gcard:hover{border-color:var(--line-2);box-shadow:var(--shadow-1)}
+.gcard__cover{display:grid;place-items:center;aspect-ratio:1/1;background:var(--ph-stripe);
+  border-bottom:1px solid var(--line);color:var(--muted);font-size:var(--fs-micro)}
+.gcard__cover .ph{display:flex;flex-direction:column;align-items:center;gap:var(--sp-1);
+  max-width:100%;padding:0 var(--sp-2);overflow:hidden}
+.gcard__body{display:flex;flex-direction:column;gap:var(--sp-1);padding:var(--sp-2) var(--sp-3)}
+.gcard__t{font-size:var(--fs-body);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 属性胶囊压成一行：不换行，多出的裁掉——保证每张卡等高 */
+.gcard__chips{display:flex;flex-wrap:nowrap;overflow:hidden;gap:var(--sp-1)}
+
+/* 大小状态栏：N 行 · M 列 + 大小标签（常驻，实时计数必须可见，DESIGN.md §5.4-2） */
+.tablesizebar{flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-2) var(--sp-5);border-top:1px solid var(--line);
+  font-size:var(--fs-micro);color:var(--muted)}
+.tablesizebar__right{margin-left:auto;display:flex;align-items:center;gap:var(--sp-2)}
+.tablesizebar .sizetag{font-family:var(--mono);color:var(--muted)}
+
+/* ============================================================
+   6. 浮动层：列设置弹窗（DESIGN.md §5.3：需要输入 / 阅读后果 → 弹窗，最大宽 400px）
+   ============================================================ */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:70}
+.modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:71;
+  display:flex;flex-direction:column;width:400px;max-width:calc(100vw - var(--sp-5) * 2);
+  max-height:calc(100vh - var(--sp-6) * 2);overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-3)}
+.modal__head{flex:none;padding:var(--sp-4) var(--sp-5) var(--sp-3);border-bottom:1px solid var(--line)}
+.modal__title{font-size:var(--fs-title);font-weight:650;letter-spacing:-.01em}
+.modal__desc{margin-top:var(--sp-1);color:var(--muted);font-size:var(--fs-small)}
+.modal__body{flex:1;overflow-y:auto;padding:var(--sp-4) var(--sp-5);
+  display:flex;flex-direction:column;gap:var(--sp-4)}
+.modal__foot{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:var(--sp-2);
+  padding:var(--sp-3) var(--sp-5);border-top:1px solid var(--line)}
+
+/* 列清单 */
+.collist{display:flex;flex-direction:column;gap:2px}
+.colrow{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-1) var(--sp-2);
+  border:1px solid transparent;border-radius:var(--radius);transition:.16s}
+.colrow:hover{background:var(--panel-2)}
+.colrow--on{border-color:var(--primary-line);background:var(--primary-soft)}
+.colrow__pick{flex:1;min-width:0;font-size:var(--fs-body);color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.colrow--on .colrow__pick{color:var(--primary-ink);font-weight:600}
+.colrow__type{flex:none;color:var(--muted);font-size:var(--fs-micro)}
+
+/* 类型单选组：10 种列类型，每个带一行说明（DESIGN.md §5.3「互斥的配置选项」） */
+.typegroup{display:flex;flex-direction:column;gap:var(--sp-1);margin:0;padding:0;border:0}
+.typegroup__legend{padding:0 0 var(--sp-2);color:var(--text-2);font-size:var(--fs-small);font-weight:600}
+.typeopt{display:flex;align-items:baseline;gap:var(--sp-2);padding:var(--sp-2);cursor:pointer;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);transition:.16s}
+.typeopt:hover{border-color:var(--line-2)}
+.typeopt input{flex:none;margin:0;accent-color:var(--primary)}
+.typeopt__t{flex:none;font-size:var(--fs-small);font-weight:600;color:var(--text)}
+.typeopt__h{flex:1;min-width:0;color:var(--muted);font-size:var(--fs-micro);line-height:1.5}
+
+/* `_id` 固定行：不可删改，只有「显示此列」开关 */
+.rowid{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-soft)}
+.rowid__name{font-family:var(--mono);font-size:var(--fs-body);color:var(--text-2)}
+.rowid__hint{color:var(--muted);font-size:var(--fs-micro)}
+.rowid .switch{margin-left:auto}
+
+/* ============================================================
+   7. 更多：弹出小窗（DESIGN.md §5.3：锚定在某个元素旁的短菜单）
+   ============================================================ */
+.menu{position:relative;flex:none}
+.menu__pop{position:absolute;right:0;top:calc(100% + 6px);z-index:45;min-width:184px;
+  display:flex;flex-direction:column;gap:1px;padding:var(--sp-1);
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-2)}
+.menu__item{display:flex;align-items:center;gap:var(--sp-2);width:100%;height:29px;
+  padding:0 var(--sp-2);border-radius:var(--radius-sm);color:var(--text-2);
+  font-size:var(--fs-body);white-space:nowrap;transition:.16s}
+.menu__item:hover{background:var(--panel-2);color:var(--text)}
+.menu__item--danger{color:var(--red)}
+.menu__item--danger:hover{background:var(--red-soft);color:var(--red)}
+.menu__sep{height:1px;margin:var(--sp-1) 0;background:var(--line)}
+
+/* ============================================================
+   8. 悬浮大纲（笔记预览右侧；固定不随内容滚走，随滚动高亮当前小节）
+   ============================================================ */
+/* 预览列：内容在内部滚动，大纲浮在它右侧 —— 于是滚动时大纲不走、内容走 */
+.viewwrap{position:absolute;inset:0}
+.preview-scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden}
+.outline{position:absolute;right:var(--sp-4);top:var(--sp-4);z-index:5;width:180px;
+  max-height:calc(100% - var(--sp-6));display:flex;flex-direction:column;overflow:hidden;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-2)}
+.outline__head{flex:none;padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--line);
+  color:var(--muted);font-size:var(--fs-micro);font-weight:600;letter-spacing:.06em}
+.outline__list{flex:1;min-height:0;overflow-y:auto;padding:var(--sp-1);
+  display:flex;flex-direction:column;gap:2px}
+.outline__item{display:block;width:100%;padding:var(--sp-1) var(--sp-2);
+  border-radius:var(--radius-sm);color:var(--text-2);font-size:var(--fs-small);line-height:1.45;
+  text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.16s}
+.outline__item:hover{background:var(--panel-2);color:var(--text)}
+.outline__item[aria-current="true"]{background:var(--primary-soft);color:var(--primary-ink);font-weight:600}
+.outline__foot{flex:none;display:flex;align-items:center;gap:var(--sp-1);
+  padding:var(--sp-1) var(--sp-2) var(--sp-2);border-top:1px solid var(--line)}
+.iconbtn--up svg{transform:rotate(-90deg)}
+.iconbtn--down svg{transform:rotate(90deg)}
+/* 大纲在时给预览留出空间，正文不会压到它下面（180 宽 + 16 右距 + 12 间隙） */
+.viewwrap[data-outline="on"] .preview{padding-right:208px}
+
+/* ============================================================
+   9. 预览控制条（不属于应用界面）
+   ============================================================ */
+.previewbar{position:fixed;left:50%;bottom:var(--sp-4);transform:translateX(-50%);z-index:60;
+  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);
+  border-radius:var(--radius-pill);background:var(--text);color:var(--bg);
+  box-shadow:var(--shadow-3);font-size:var(--fs-small)}
+.previewbar__tag{opacity:.62;font-size:var(--fs-micro);white-space:nowrap}
+.previewbar .seg{background:rgba(128,128,128,.18);border-color:rgba(128,128,128,.28)}
+.previewbar .seg button{color:inherit;opacity:.68;height:23px;padding:0 var(--sp-2);font-size:var(--fs-micro)}
+.previewbar .seg button:hover{opacity:.9}
+.previewbar .seg button[aria-pressed="true"]{background:var(--bg);color:var(--text);box-shadow:none;opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ============ 图标 sprite（1.6px 描边 / 无填充 / currentColor；沿用改版原型的 sprite） ============ -->
+<svg class="sprite" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6.5 3.5h7L18 8v12.5H6.5z"/><path d="M13.5 3.5V8H18"/><path d="M9.5 12.5h7M9.5 16h4.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-check-sq" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8 12.2l2.8 2.8L16.5 9.5"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 4.5v15M15 4.5v15"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v8.3a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M11 3.5H4.5v6.5l9 9a2 2 0 0 0 2.8 0l3.7-3.7a2 2 0 0 0 0-2.8z"/><circle cx="8" cy="7" r="1.3"/></symbol>
+  <symbol id="i-cloud-ok" viewBox="0 0 24 24"><path d="M7 18.5a4.2 4.2 0 0 1-.3-8.4 5.3 5.3 0 0 1 10.2-1.3A4 4 0 1 1 17 18.5z"/><path d="M9.3 13.6l2 2 3.3-3.7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l8.5 15h-17z"/><path d="M12 10v4.5M12 17.2v.2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.2v4.6h-4.6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.8 10.4L12 4l8.2 6.4V19a1.6 1.6 0 0 1-1.6 1.6h-3.8v-6.2H9.2v6.2H5.4A1.6 1.6 0 0 1 3.8 19z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.5 6.5l5.5 5.5-5.5 5.5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="8.6" cy="9.6" r="1.7"/><path d="M4 17l4.5-4.5 4 4 3-3 4.5 4.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+</defs></svg>
+
+<div class="shell">
+
+  <!-- ==================== 顶栏（固定 6 块） ==================== -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="../../apps/web/public/icon.svg" alt="MeNote">
+      <b>MeNote</b>
+    </div>
+    <div class="crumb">
+      <span id="crumbA">笔记本</span>
+      <span class="sep">/</span>
+      <b id="crumbB">自托管备份方案</b>
+    </div>
+    <div class="search">
+      <svg class="ic ic--sm"><use href="#i-search"/></svg>
+      <input type="text" placeholder="搜索标题、正文、标签…" aria-label="搜索">
+      <kbd>Ctrl K</kbd>
+    </div>
+    <div class="pilltop"><svg class="ic ic--sm"><use href="#i-cloud-ok"/></svg>已同步</div>
+    <div class="capsule"><svg class="ic ic--sm"><use href="#i-unlock"/></svg>已解锁<span class="timer">4:32</span></div>
+    <div class="avatar" role="button" tabindex="0" title="账户与设置">M</div>
+  </header>
+
+  <div class="body-row">
+
+    <!-- ==================== 功能栏 ==================== -->
+    <aside class="fnbar">
+      <div class="fn-top">
+        <button class="btn-new"><svg class="ic ic--sm"><use href="#i-plus"/></svg>新建笔记</button>
+
+        <div class="composer">
+          <textarea placeholder="记点什么……  Ctrl+Enter 发布" aria-label="快速录入"></textarea>
+          <div class="composer__extra">
+            <span class="chip"># 项目</span>
+            <span class="chip"># 读书</span>
+            <span class="chip"># 自托管</span>
+            <span class="chip"># 灵感</span>
+          </div>
+          <div class="mode-row">
+            <div class="seg seg--incomposer">
+              <button aria-pressed="false"><svg class="ic ic--sm"><use href="#i-clock"/></svg>Memo</button>
+              <button aria-pressed="false"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>待办</button>
+              <button aria-pressed="true"><svg class="ic ic--sm"><use href="#i-note"/></svg>笔记</button>
+            </div>
+            <button class="btn btn--primary btn--sm" title="Ctrl+Enter 发布">发布</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="fn-scroll scroll-thin">
+        <div class="nav-seg">
+          <a class="seg-item" href="#" data-nav="home"><svg class="ic ic--sm"><use href="#i-home"/></svg>首页</a>
+          <a class="seg-item" href="#" data-nav="memo"><svg class="ic ic--sm"><use href="#i-clock"/></svg>Memo</a>
+          <a class="seg-item" href="#" data-nav="task"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>待办</a>
+        </div>
+
+        <div class="nav-group">
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-refresh"/></svg>最近编辑<span class="n">24</span></a>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-star"/></svg>收藏<span class="n">7</span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group__title"><svg class="ic ic--sm"><use href="#i-folder"/></svg>笔记本</div>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-folder"/></svg>学习<span class="n">3</span></a>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-folder"/></svg>自托管<span class="n">2</span></a>
+          <a class="nav-item" href="#" aria-current="page"><svg class="ic ic--sm"><use href="#i-folder"/></svg>项目<span class="n">4</span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group__title"><svg class="ic ic--sm"><use href="#i-tag"/></svg>标签</div>
+          <div class="nav-tags">
+            <span class="chip chip--tag"># 读书</span>
+            <span class="chip chip--tag"># 自托管</span>
+            <span class="chip chip--tag"># 英语</span>
+            <span class="chip chip--tag"># 灵感</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fn-vault">
+        <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-lock"/></svg>加密空间<span class="n">12</span></a>
+      </div>
+    </aside>
+
+    <!-- ==================== 主操作区：笔记页 ==================== -->
+    <main class="work">
+      <section class="page" aria-label="笔记">
+        <div class="page-body">
+
+          <!-- —— 左列：项目文件夹下的条目（笔记与表格混排，点谁看谁） —— -->
+          <aside class="listcol">
+            <div class="listcol__head">
+              <span class="listcol__name"><svg class="ic ic--sm"><use href="#i-folder"/></svg>项目</span>
+              <span class="listcol__n">4 条</span>
+            </div>
+
+            <div class="listcol__scroll scroll-thin">
+              <ul class="doclist" id="doclist">
+                <li>
+                  <button class="docrow" data-kind="note">
+                    <span class="docrow__ico"><svg class="ic ic--sm"><use href="#i-note"/></svg></span>
+                    <span class="docrow__main">
+                      <span class="docrow__t">自托管备份方案</span>
+                      <span class="docrow__sub">目标：WebDAV / S3 / Git</span>
+                    </span>
+                    <time class="docrow__when">今天</time>
+                  </button>
+                </li>
+                <li>
+                  <button class="docrow" data-kind="table">
+                    <span class="docrow__ico"><svg class="ic ic--sm"><use href="#i-table"/></svg></span>
+                    <span class="docrow__main">
+                      <span class="docrow__t">2026 书单</span>
+                      <span class="docrow__sub">表格 · 6 列</span>
+                    </span>
+                    <time class="docrow__when">昨天</time>
+                  </button>
+                </li>
+                <li>
+                  <button class="docrow" data-kind="note">
+                    <span class="docrow__ico"><svg class="ic ic--sm"><use href="#i-note"/></svg></span>
+                    <span class="docrow__main">
+                      <span class="docrow__t">Workers Builds 部署备忘</span>
+                      <span class="docrow__sub">首个请求触发自愈建表</span>
+                    </span>
+                    <time class="docrow__when">9月24日</time>
+                  </button>
+                </li>
+                <li>
+                  <button class="docrow" data-kind="note">
+                    <span class="docrow__ico"><svg class="ic ic--sm"><use href="#i-note"/></svg></span>
+                    <span class="docrow__main">
+                      <span class="docrow__t">读《设计中的设计》</span>
+                      <span class="docrow__sub">第 3 章 · 空与留白</span>
+                    </span>
+                    <time class="docrow__when">9月23日</time>
+                  </button>
+                </li>
+              </ul>
+
+              <div class="empty" id="listEmpty" hidden>
+                <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-note"/></svg></span>
+                <p class="empty__t">这个文件夹还是空的</p>
+                <p class="empty__h">用左上角的「新建笔记」，或在新建菜单里建一张表格；两者会一起出现在这里。</p>
+                <button class="btn btn--primary btn--sm">新建笔记</button>
+              </div>
+            </div>
+          </aside>
+
+          <!-- —— 右列：正文区。同一块区域按选中条目的类型分流：笔记→编辑器；表格→表格编辑器 —— -->
+          <div class="docpane">
+            <header class="docpane__head">
+              <input class="doctitle" id="docTitle" value="自托管备份方案" aria-label="标题">
+              <!-- 标题栏里放的都是「非表格专用」的键：视图切换 + 每类自己的动作。
+                   视图切换两态共用一个位置：笔记＝分屏/仅编辑/仅预览，表格＝表格/图册。 -->
+              <div class="docpane__hactions">
+                <div class="docpane__hgroup" id="headNoteActions">
+                  <button class="btn btn--sm"><svg class="ic ic--sm"><use href="#i-plus"/></svg>添加附件</button>
+                  <div class="seg" id="noteModeSw">
+                    <button data-note-mode="split" aria-pressed="true">分屏</button>
+                    <button data-note-mode="edit" aria-pressed="false">仅编辑</button>
+                    <button data-note-mode="preview" aria-pressed="false">仅预览</button>
+                  </div>
+                </div>
+                <div class="docpane__hgroup" id="headTableActions" hidden>
+                  <div class="seg" id="tableViewSw">
+                    <button data-view="grid" aria-pressed="true"><svg class="ic ic--sm"><use href="#i-table"/></svg>表格</button>
+                    <button data-view="gallery" aria-pressed="false"><svg class="ic ic--sm"><use href="#i-grid"/></svg>图册</button>
+                  </div>
+                  <button class="infohint" aria-label="表格与笔记的关系">
+                    <svg class="ic ic--sm"><use href="#i-info"/></svg>
+                    <span class="infohint__pop">表格就是这一篇：正文是 GFM 管道表格，列定义存在文首的 YAML 里，导出即一篇文章。它和普通笔记共用同一套列表、加密与版本。</span>
+                  </button>
+                </div>
+              </div>
+              <div class="menu">
+                <button class="iconbtn" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-label="更多操作" title="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                <div class="menu__pop" id="morePop" role="menu" hidden></div>
+              </div>
+            </header>
+
+            <div class="docpane__body">
+
+              <!-- ========== 形态 A：笔记（分屏编辑 + 预览） ========== -->
+              <div class="noteview" id="noteView">
+                <div class="doc-split" id="noteSplit" data-mode="split">
+                  <div class="doc-split__pane doc-split__pane--edit" id="editPane" aria-label="编辑">
+                    <div class="editor">
+                      <div class="editor__gutter" aria-hidden="true">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35</div>
+<div class="editor__code"><span class="md-h">## 目标</span>
+
+把 MeNote 的数据做成<span class="md-strong">**可带走**</span>的：D1 导出 + 附件清单，
+再推到 WebDAV / S3 / Git 任意一个目标。
+
+<span class="md-h">## 目标清单</span>
+
+- WebDAV：家里 NAS，每天 3:00
+- S3：兼容 R2，每周日
+- Git：只推 Markdown，随提交
+
+<span class="md-h">## 对照表</span>
+
+| 目标 | 频率 | 状态 |
+|---|---|---|
+| WebDAV | 每天 | 有效 |
+| S3 | 每周 | 暂停 |
+
+<span class="md-h">## 触发时机</span>
+
+停止编辑 10 分钟后自动封存一次，跨设备首次编辑也封存。
+
+自动保存与版本是两件事：前者只更新当前稿，后者把某一刻封存下来。
+
+<span class="md-h">## 加密与恢复</span>
+
+- 信封格式由 <span class="md-code">`crypto-format`</span> 统一
+- 密钥由密码派生，不落库
+- 恢复时按 rev 逐条比对
+
+<span class="md-quote">&gt; 加密备份的信封格式与导出共用同一套，密钥不进仓库。</span>
+
+<span class="md-h">## 失败与告警</span>
+
+上传失败进 outbox 重试，连续失败三次在状态栏给一条可见提示。</div>
+                    </div>
+                  </div>
+
+                  <div class="doc-split__pane doc-split__pane--view" id="viewPane" aria-label="预览">
+                    <div class="viewwrap" id="viewWrap">
+                      <div class="preview-scroll scroll-thin" id="previewScroll">
+                        <div class="preview" id="previewBody">
+                          <h2>目标</h2>
+                          <p>把 MeNote 的数据做成<strong>可带走</strong>的：D1 导出 + 附件清单，再推到 WebDAV / S3 / Git 任意一个目标。</p>
+
+                          <h2>目标清单</h2>
+                          <ul>
+                            <li>WebDAV：家里 NAS，每天 3:00</li>
+                            <li>S3：兼容 R2，每周日</li>
+                            <li>Git：只推 Markdown，随提交</li>
+                          </ul>
+
+                          <h2>对照表</h2>
+                          <table class="preview__tbl">
+                            <thead><tr><th>目标</th><th>频率</th><th>状态</th></tr></thead>
+                            <tbody>
+                              <tr><td>WebDAV</td><td>每天</td><td>有效</td></tr>
+                              <tr><td>S3</td><td>每周</td><td>暂停</td></tr>
+                            </tbody>
+                          </table>
+
+                          <h2>触发时机</h2>
+                          <p>停止编辑 10 分钟后自动封存一次，跨设备首次编辑也封存。</p>
+                          <p>自动保存与版本是两件事：前者只更新当前稿，后者把某一刻封存下来。</p>
+
+                          <h2>加密与恢复</h2>
+                          <ul>
+                            <li>信封格式由 <code>crypto-format</code> 统一</li>
+                            <li>密钥由密码派生，不落库</li>
+                            <li>恢复时按 rev 逐条比对</li>
+                          </ul>
+                          <blockquote>加密备份的信封格式与导出共用同一套，密钥不进仓库。</blockquote>
+
+                          <h2>失败与告警</h2>
+                          <p>上传失败进 outbox 重试，连续失败三次在状态栏给一条可见提示。</p>
+                        </div>
+                      </div>
+
+                      <!-- 悬浮大纲：固定在这一层不动，随滚动高亮当前小节；底部两个回顶/到底按钮 -->
+                      <aside class="outline" id="outline" hidden aria-label="大纲">
+                        <div class="outline__head">大纲</div>
+                        <nav class="outline__list" id="outlineList"></nav>
+                        <div class="outline__foot">
+                          <button class="iconbtn iconbtn--up" id="toTop" aria-label="回到最顶" title="回到最顶"><svg class="ic ic--sm"><use href="#i-chev-r"/></svg></button>
+                          <button class="iconbtn iconbtn--down" id="toBottom" aria-label="到最低" title="到最低"><svg class="ic ic--sm"><use href="#i-chev-r"/></svg></button>
+                        </div>
+                      </aside>
+                    </div>
+                  </div>
+                </div>
+
+                <footer class="docstatus">
+                  <span class="pill pill--green"><svg class="ic ic--sm"><use href="#i-cloud-ok"/></svg>已同步</span>
+                  <div class="docstatus__right">
+                    <span>正文 312 字</span>
+                    <span class="sizetag">1.1 KB / 1.9 MB</span>
+                  </div>
+                </footer>
+              </div>
+
+              <!-- ========== 形态 B：表格（表格 / 图册 + 列设置） ========== -->
+              <div class="tableview" id="tableView" hidden>
+                <!-- 表格自己的工具条：只放表格专用键（视图切换已上移到标题栏） -->
+                <div class="tabletoolbar">
+                  <button class="infohint" aria-label="行 ID 列说明">
+                    <svg class="ic ic--sm"><use href="#i-info"/></svg>
+                    <span class="infohint__pop">首列 _id 是稳定行 ID（6–8 位），默认隐藏、不可删除或改类型——附件与 AI 按行更新都靠它对上号，可在「列设置」里切换显示。</span>
+                  </button>
+                  <div class="tabletoolbar__right">
+                    <button class="btn btn--ghost btn--sm"><svg class="ic ic--sm"><use href="#i-search"/></svg>筛选</button>
+                    <button class="btn btn--ghost btn--sm" id="openColPanel"><svg class="ic ic--sm"><use href="#i-table"/></svg>列设置</button>
+                    <button class="btn btn--sm" id="addRowBtn"><svg class="ic ic--sm"><use href="#i-plus"/></svg>新增行</button>
+                  </div>
+                </div>
+
+                <div class="tblarea">
+                  <div class="tblscroll scroll-thin" id="gridPane">
+                    <table class="tbl">
+                      <thead>
+                        <tr>
+                          <th scope="col"><span class="tbl__th"><svg class="ic ic--sm"><use href="#i-note"/></svg>书名<span class="tbl__type">文字</span><button class="iconbtn tbl__thmenu" aria-label="书名的列操作"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button></span></th>
+                          <th scope="col"><span class="tbl__th"><svg class="ic ic--sm"><use href="#i-note"/></svg>作者<span class="tbl__type">文字</span><button class="iconbtn tbl__thmenu" aria-label="作者的列操作"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button></span></th>
+                          <th scope="col"><span class="tbl__th"><svg class="ic ic--sm"><use href="#i-tag"/></svg>评分<span class="tbl__type">数字</span><button class="iconbtn tbl__thmenu" aria-label="评分的列操作"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button></span></th>
+                          <th scope="col"><span class="tbl__th"><svg class="ic ic--sm"><use href="#i-clock"/></svg>状态<span class="tbl__type">状态</span><button class="iconbtn tbl__thmenu" aria-label="状态的列操作"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button></span></th>
+                          <th scope="col"><span class="tbl__th"><svg class="ic ic--sm"><use href="#i-folder"/></svg>封面<span class="tbl__type">图片</span><button class="iconbtn tbl__thmenu" aria-label="封面的列操作"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button></span></th>
+                          <th scope="col"><span class="tbl__th"><svg class="ic ic--sm"><use href="#i-tag"/></svg>标签<span class="tbl__type">标签</span><button class="iconbtn tbl__thmenu" aria-label="标签的列操作"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button></span></th>
+                          <th scope="col" class="tbl__th--menu" aria-label="行操作"></th>
+                        </tr>
+                      </thead>
+                      <tbody id="tblBody">
+                        <tr>
+                          <td data-editable>三体</td>
+                          <td data-editable>刘慈欣</td>
+                          <td class="tbl__num" data-editable>9</td>
+                          <td><span class="pill pill--green">已读</span></td>
+                          <td><span class="tbl__img" title="缩略图随附件功能接入，现显示文件名"><svg class="ic ic--sm"><use href="#i-image"/></svg>santi.jpg</span></td>
+                          <td><span class="tbl__tags"><span class="chip chip--tag">科幻</span><span class="chip chip--tag">长篇</span></span></td>
+                          <td class="tbl__td--menu"><button class="iconbtn" aria-label="三体 的行操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button></td>
+                        </tr>
+                        <tr>
+                          <td data-editable>活着</td>
+                          <td data-editable>余华</td>
+                          <td class="tbl__num" data-editable>8</td>
+                          <td><span class="pill pill--amber">在读</span></td>
+                          <td><span class="tbl__img" title="缩略图随附件功能接入，现显示文件名"><svg class="ic ic--sm"><use href="#i-image"/></svg>huozhe.jpg</span></td>
+                          <td><span class="tbl__tags"><span class="chip chip--tag">小说</span></span></td>
+                          <td class="tbl__td--menu"><button class="iconbtn" aria-label="活着 的行操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button></td>
+                        </tr>
+                        <tr>
+                          <td data-editable>人类简史</td>
+                          <td data-editable>尤瓦尔·赫拉利</td>
+                          <td class="tbl__num" data-editable>8</td>
+                          <td><span class="pill pill--green">已读</span></td>
+                          <td><span class="tbl__img" title="缩略图随附件功能接入，现显示文件名"><svg class="ic ic--sm"><use href="#i-image"/></svg>renlei.jpg</span></td>
+                          <td><span class="tbl__tags"><span class="chip chip--tag">历史</span><span class="chip chip--tag">科普</span></span></td>
+                          <td class="tbl__td--menu"><button class="iconbtn" aria-label="人类简史 的行操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button></td>
+                        </tr>
+                        <tr>
+                          <td data-editable>叫魂</td>
+                          <td data-editable>孔飞力</td>
+                          <td class="tbl__num" data-editable>9</td>
+                          <td><span class="pill pill--neutral">待读</span></td>
+                          <td><span class="tbl__img">—</span></td>
+                          <td><span class="tbl__tags"><span class="chip chip--tag">历史</span></span></td>
+                          <td class="tbl__td--menu"><button class="iconbtn" aria-label="叫魂 的行操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- 图册：同一张表的另一种渲染（设计文档 §10.8）；卡片尺寸统一 -->
+                  <div class="gallery scroll-thin" id="galleryPane" hidden>
+                    <ul class="gallery__grid">
+                      <li>
+                        <button class="gcard">
+                          <span class="gcard__cover"><span class="ph"><svg class="ic ic--lg"><use href="#i-image"/></svg>santi.jpg</span></span>
+                          <span class="gcard__body">
+                            <span class="gcard__t">三体</span>
+                            <span class="gcard__chips"><span class="chip">刘慈欣</span><span class="chip">评分 9</span></span>
+                          </span>
+                        </button>
+                      </li>
+                      <li>
+                        <button class="gcard">
+                          <span class="gcard__cover"><span class="ph"><svg class="ic ic--lg"><use href="#i-image"/></svg>huozhe.jpg</span></span>
+                          <span class="gcard__body">
+                            <span class="gcard__t">活着</span>
+                            <span class="gcard__chips"><span class="chip">余华</span><span class="chip">评分 8</span></span>
+                          </span>
+                        </button>
+                      </li>
+                      <li>
+                        <button class="gcard">
+                          <span class="gcard__cover"><span class="ph"><svg class="ic ic--lg"><use href="#i-image"/></svg>renlei.jpg</span></span>
+                          <span class="gcard__body">
+                            <span class="gcard__t">人类简史</span>
+                            <span class="gcard__chips"><span class="chip">尤瓦尔·赫拉利</span><span class="chip">评分 8</span></span>
+                          </span>
+                        </button>
+                      </li>
+                      <li>
+                        <button class="gcard">
+                          <span class="gcard__cover"><span class="ph">无图片</span></span>
+                          <span class="gcard__body">
+                            <span class="gcard__t">叫魂</span>
+                            <span class="gcard__chips"><span class="chip">孔飞力</span><span class="chip">评分 9</span></span>
+                          </span>
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <footer class="tablesizebar">
+                  <span id="sizeFull">4 行 · 6 列</span>
+                  <span id="sizeEmpty" hidden>0 行 · 6 列</span>
+                  <button class="infohint" aria-label="表格大小上限">
+                    <svg class="ic ic--sm"><use href="#i-info"/></svg>
+                    <span class="infohint__pop">超过 1 MB 变色提示、仍可保存；达到 1.9 MB 硬上限会阻止保存，这是 D1 单条 2 MB 的物理限制。行列数列在左侧，实时更新。</span>
+                  </button>
+                  <div class="tablesizebar__right">
+                    <span class="sizetag">742 B / 1.9 MB</span>
+                  </div>
+                </footer>
+              </div>
+
+              <!-- 两处空状态（按当前条目类型显示其一；DESIGN.md §5.4-3 必须有出口） -->
+              <div class="empty" id="emptyNote" hidden>
+                <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-note"/></svg></span>
+                <p class="empty__t">选一条笔记开始读</p>
+                <p class="empty__h">从左边挑一条，或按顶部的「新建笔记」写一篇新的。表格与笔记都在同一个列表里。</p>
+              </div>
+              <div class="empty" id="emptyTable" hidden>
+                <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-table"/></svg></span>
+                <p class="empty__t">这张表还没有内容</p>
+                <p class="empty__h">列结构已经建好，加第一行就能开始记。</p>
+                <button class="btn btn--primary btn--sm"><svg class="ic ic--sm"><use href="#i-plus"/></svg>新增行</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- ==================== 列设置弹窗（表格属性的动态编辑） ==================== -->
+<div class="scrim" id="colScrim" hidden></div>
+<div class="modal" id="colPanel" role="dialog" aria-modal="true" aria-label="列设置" hidden>
+  <div class="modal__head">
+    <div class="modal__title">列设置</div>
+    <div class="modal__desc">列定义存在表格正文的 YAML 里；改类型不改动已有文本。</div>
+  </div>
+  <div class="modal__body">
+    <div class="collist" id="colList"></div>
+    <button class="btn btn--sm" id="addColBtn" style="align-self:flex-start"><svg class="ic ic--sm"><use href="#i-plus"/></svg>添加一列</button>
+
+    <div class="rowid">
+      <span class="rowid__name">_id</span>
+      <span class="rowid__hint">稳定行 ID（6–8 位）</span>
+      <span class="switch" id="rowidSwitch" role="switch" aria-checked="false" tabindex="0"><span class="switch__track"></span>显示此列</span>
+    </div>
+
+    <fieldset class="typegroup" id="colTypes">
+      <legend class="typegroup__legend" id="colTypesLegend">类型</legend>
+      <label class="typeopt"><input type="radio" name="coltype" value="text"><span class="typeopt__t">文字</span><span class="typeopt__h">默认类型；要换行写 &lt;br&gt;</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="number"><span class="typeopt__t">纯数字</span><span class="typeopt__h">按数值排序；非数字内容显示原文并提示</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="select"><span class="typeopt__t">单选</span><span class="typeopt__h">从候选项里选一个</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="multi_select"><span class="typeopt__t">多选</span><span class="typeopt__h">从候选项里选多个（选完不收起）</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="checkbox"><span class="typeopt__t">复选</span><span class="typeopt__h">一键勾选，适合「做完没」这类判断</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="status"><span class="typeopt__t">状态</span><span class="typeopt__h">带颜色的状态；默认三档：待办 / 进行中 / 已完成</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="url"><span class="typeopt__t">超链接</span><span class="typeopt__h">存地址；点开在新标签页打开</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="image"><span class="typeopt__t">图片附件</span><span class="typeopt__h">单元格只写文件名，图片放在正文的「## 附件」章节</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="date"><span class="typeopt__t">时间</span><span class="typeopt__h">日期或日期时间</span></label>
+      <label class="typeopt"><input type="radio" name="coltype" value="tags"><span class="typeopt__t">标签</span><span class="typeopt__h">多个标签，逗号分隔</span></label>
+    </fieldset>
+  </div>
+  <div class="modal__foot">
+    <button class="btn btn--sm" id="colCancel">取消</button>
+    <button class="btn btn--primary btn--sm" id="colOk">确定</button>
+  </div>
+</div>
+
+<!-- ==================== 预览控制条（不属于应用界面，仅供评审） ==================== -->
+<!--
+  本稿相对 DESIGN.md / 改版原型的偏离与提案（需确认后才回写）：
+
+  一、结构：只有一页
+  1. **笔记与表格不是两页，而是同一页**（用户 2026-09-27 纠正）：左列是文件夹里的条目
+     （笔记与表格混排，靠图标区分），右列正文区按选中条目的类型分流——
+     笔记 → 编辑器（分屏 / 仅编辑 / 仅预览）；表格 → 表格编辑器（表格 / 图册 + 列设置）。
+     这就是真实应用 `NoteWorkspace` 按 `item.type === 'table'` 分流的形态。
+     上一版把两页并列是错的，已删掉独立的「表格」页。
+  2. 标题栏承载「非表格专用」的键（用户 2026-09-27 要求）：视图切换两态共用一个位置——
+     笔记显示「分屏 / 仅编辑 / 仅预览」（另加「添加附件」），表格显示「表格 / 图册」（另加一条说明）；
+     右侧始终是「更多」。表格自己的工具条**只留表格专用键**：筛选、列设置、新增行（+ 行 ID 说明）。
+     「表格 / 图册」原先放在表格工具条里，本版已上移到标题栏。
+  3. 面包屑随选中条目变化（笔记本 / 条目名；表格条目走「表格 / 表名」）。
+
+  二、图册卡片统一尺寸（用户 2026-09-27 要求「横竖一致」）
+  4. 封面改**正方形**（aspect-ratio:1/1，原为 2/3 竖版），网格 `grid-auto-rows:1fr` + 卡片
+     `height:100%`，属性胶囊**压成一行**（nowrap + 溢出裁掉）。
+     于是不论图片是横是竖、标题与属性多长，卡片都是同一宽高，网格横竖对齐。
+
+  三、表格属性可动态编辑（用户问「属性能否动态编辑」）
+  5. **能，两个层面**：①**列（属性）的增删改** —— 工具栏「列设置」打开列定义弹窗，
+     内含列清单（选中 / 左移 / 右移 / 删除）、10 种类型的单选组（带一行说明）、
+     「添加一列」、`_id` 行的「显示此列」开关；②**单元格就地编辑** —— 点文字 / 数字格
+     变输入框，Enter（或失焦）提交、Esc 取消。
+  6. 弹窗形态与字段都按真实组件 `TableColumnManager` 与《M4 界面稿》§三 写；最大宽 400px
+     沿用 DESIGN.md §2.2。`_id` 行不可删改，只给显示开关（不出现删除 / 改类型入口）。
+
+  四、为评审做的简化
+  7. 列设置里的增删列 / 改类型 / 调序只作用于弹窗内的列清单，**不回写**到下方表格的表头与
+     单元格（评审够用）；真实实现里列结构是表格正文 YAML 的真源，改完表格随之变化。
+  8. 图册封面用 --ph-stripe 占位 + 文件名，与 M4 附件管线未接入时的真实表现一致；未引外部图片。
+  9. 列头菜单、行菜单、筛选排序条展开态仍只给触发按钮（留后续稿）；
+     单元格编辑只开给「文字 / 数字」两类，状态 / 标签 / 图片格保持只读展示。
+  10. 令牌零新增；新加的类都一一对应 app 既有组件（.listcol/.docrow→ItemRow、
+      .docpane__head→DocHead、.docstatus→DocStatusBar、.tabletoolbar→TableToolbar、
+      .tbl→TableGrid、.gallery→GalleryView、.tablesizebar→TableSizeBar、.modal→Modal、
+      .menu→DropdownMenu）。
+
+  五、更多菜单与悬浮大纲（用户 2026-09-27 要求）
+  11. 「更多」做成**弹出小窗**：锚定标题栏右侧的按钮、向右对齐，点心外部或 Esc 收起。
+      菜单项随条目类型变化 —— 笔记「加密此笔记 / 移动到… / 版本历史 / 存为版本 / 分享 / 收藏 / 删除」，
+      表格多一项「降级为普通笔记」（`components.md` 的 DocMoreMenu 口径），删除用危险色。
+      菜单项**不带图标**：sprite 里没有分享 / 降级这类字形，与其拿不相干的图标充数，不如纯文字。
+  12. 预览右侧加**悬浮大纲**：条目由预览里的 H2 生成（点它滚到该小节），滚动时高亮当前小节；
+      面板本身固定不动（内容在它下面滚），底部一排是「回到最顶 / 到最低」。
+      **一处取舍**：分屏下预览只有约 408px 宽，浮大纲会压住正文，所以只在预览区宽 ≥ 640px 时浮出
+      （即「仅预览」档，或足够宽的屏幕上分屏）；浮出时给正文留 208px 右内边距，文字不会钻到面板下。
+      大纲宽 180px 是本稿定的（DESIGN.md §2.2 未登记这一档尺寸）。
+-->
+
+<div class="previewbar">
+  <span class="previewbar__tag">预览控制条 · 不属于应用界面</span>
+  <div class="seg" id="itemSw">
+    <button data-item="note" aria-pressed="true">选中笔记</button>
+    <button data-item="table" aria-pressed="false">选中表格</button>
+  </div>
+  <div class="seg" id="themeSw">
+    <button data-theme="light" aria-pressed="true">浅色</button>
+    <button data-theme="dark" aria-pressed="false">深色</button>
+  </div>
+  <div class="seg" id="dataSw">
+    <button data-data="full" aria-pressed="true">有数据</button>
+    <button data-data="empty" aria-pressed="false">空数据</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* 列表里的条目（本稿取前两条做「笔记 / 表格」两种形态的样例） */
+  var ITEMS = [
+    { kind: 'note', title: '自托管备份方案' },
+    { kind: 'table', title: '2026 书单' },
+    { kind: 'note', title: 'Workers Builds 部署备忘' },
+    { kind: 'note', title: '读《设计中的设计》' }
+  ];
+  var state = { index: 0, empty: false, noteMode: 'split', tablePane: 'grid' };
+
+  var docTitle = document.getElementById('docTitle');
+  var noteView = document.getElementById('noteView');
+  var tableView = document.getElementById('tableView');
+  var emptyNote = document.getElementById('emptyNote');
+  var emptyTable = document.getElementById('emptyTable');
+  var headNoteActions = document.getElementById('headNoteActions');
+  var headTableActions = document.getElementById('headTableActions');
+  var noteSplit = document.getElementById('noteSplit');
+  var editPane = document.getElementById('editPane');
+  var viewPane = document.getElementById('viewPane');
+  var viewWrap = document.getElementById('viewWrap');
+  var previewScroll = document.getElementById('previewScroll');
+  var previewBody = document.getElementById('previewBody');
+  var outline = document.getElementById('outline');
+  var outlineList = document.getElementById('outlineList');
+  var moreBtn = document.getElementById('moreBtn');
+  var morePop = document.getElementById('morePop');
+  var gridPane = document.getElementById('gridPane');
+  var galleryPane = document.getElementById('galleryPane');
+  var doclist = document.getElementById('doclist');
+  var listEmpty = document.getElementById('listEmpty');
+  var addRowBtn = document.getElementById('addRowBtn');
+  var sizeFull = document.getElementById('sizeFull');
+  var sizeEmpty = document.getElementById('sizeEmpty');
+  var rows = Array.prototype.slice.call(doclist.querySelectorAll('.docrow'));
+
+  function pressGroup(root, btn) {
+    root.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+  }
+
+  /* 一处总开关：选中条目 × 空数据 × 笔记模式 × 表格视图 —— 全部在这里算可见性 */
+  function apply() {
+    var item = ITEMS[state.index];
+    var kind = item.kind;
+
+    rows.forEach(function (el, i) {
+      if (i === state.index) el.setAttribute('aria-current', 'true');
+      else el.removeAttribute('aria-current');
+    });
+    docTitle.value = item.title;
+
+    /* 正文区：按类型分流；空数据时两者都不出，只出空状态 */
+    noteView.hidden = state.empty || kind !== 'note';
+    tableView.hidden = state.empty || kind !== 'table';
+    emptyNote.hidden = !(state.empty && kind === 'note');
+    emptyTable.hidden = !(state.empty && kind === 'table');
+
+    /* 标题栏：两组按键按条目类型整组切换（笔记＝添加附件 + 分屏档；表格＝表格/图册 + 说明） */
+    headNoteActions.hidden = kind !== 'note';
+    headTableActions.hidden = kind !== 'table';
+
+    /* 笔记模式：分屏两栏；仅编辑 / 仅预览 各藏一栏 */
+    editPane.hidden = state.noteMode === 'preview';
+    viewPane.hidden = state.noteMode === 'edit';
+    noteSplit.dataset.mode = state.noteMode;
+
+    /* 表格视图：表格 / 图册 互斥 */
+    gridPane.hidden = state.tablePane !== 'grid';
+    galleryPane.hidden = state.tablePane !== 'gallery';
+
+    /* 空 / 有数据 */
+    doclist.hidden = state.empty;
+    listEmpty.hidden = !state.empty;
+    addRowBtn.hidden = state.empty;
+    sizeFull.hidden = state.empty;
+    sizeEmpty.hidden = !state.empty;
+
+    /* 面包屑 */
+    crumbA.textContent = kind === 'table' ? '表格' : '笔记本';
+    crumbB.textContent = item.title;
+
+    /* 预览条同步 */
+    var sw = document.getElementById('itemSw');
+    var btn = sw.querySelector('button[data-item="' + (kind === 'table' ? 'table' : 'note') + '"]');
+    if (btn) pressGroup(sw, btn);
+
+    /* 换条目时把「更多」小窗收起；悬浮大纲按当前状态重算是否浮出 */
+    if (!morePop.hidden) closeMore();
+    updateOutline();
+  }
+
+  var crumbA = document.getElementById('crumbA');
+  var crumbB = document.getElementById('crumbB');
+
+  /* 左列表：点条目 = 打开它 */
+  rows.forEach(function (el, i) {
+    el.addEventListener('click', function () {
+      state.index = i;
+      apply();
+    });
+  });
+
+  /* 正文头：分屏 / 仅编辑 / 仅预览 */
+  document.getElementById('noteModeSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-note-mode]');
+    if (!b) return;
+    pressGroup(this, b);
+    state.noteMode = b.dataset.noteMode;
+    apply();
+  });
+
+  /* 工具栏：表格 / 图册 */
+  document.getElementById('tableViewSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-view]');
+    if (!b) return;
+    pressGroup(this, b);
+    state.tablePane = b.dataset.view;
+    apply();
+  });
+
+  /* 预览条：选中笔记 / 选中表格（＝点列表第 1 / 第 2 条） */
+  document.getElementById('itemSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-item]');
+    if (!b) return;
+    state.index = b.dataset.item === 'table' ? 1 : 0;
+    apply();
+  });
+
+  /* 预览条：主题 */
+  document.getElementById('themeSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-theme]');
+    if (!b) return;
+    pressGroup(this, b);
+    document.documentElement.dataset.theme = b.dataset.theme;
+  });
+
+  /* 预览条：空 / 有数据 */
+  document.getElementById('dataSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-data]');
+    if (!b) return;
+    pressGroup(this, b);
+    state.empty = b.dataset.data === 'empty';
+    apply();
+  });
+
+  /* —— 单元格就地编辑（文字 / 数字列；Enter 或失焦提交，Esc 取消） —— */
+  document.getElementById('tblBody').addEventListener('click', function (e) {
+    if (e.target.closest('button')) return;
+    var td = e.target.closest('td[data-editable]');
+    if (!td || td.querySelector('input')) return;
+    var before = td.textContent;
+    var input = document.createElement('input');
+    input.className = 'tbl__edit';
+    input.value = before;
+    td.textContent = '';
+    td.appendChild(input);
+    input.focus();
+    input.select();
+    var closed = false;
+    function done(commit) {
+      if (closed) return;
+      closed = true;
+      td.textContent = commit ? (input.value.trim() || '—') : before;
+    }
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); done(true); }
+      if (ev.key === 'Escape') { ev.preventDefault(); done(false); }
+    });
+    input.addEventListener('blur', function () { done(true); });
+  });
+
+  /* —— 列设置弹窗：列（属性）的动态增删改 —— */
+  var TYPE_LABEL = {
+    text: '文字', number: '纯数字', select: '单选', multi_select: '多选', checkbox: '复选',
+    status: '状态', url: '超链接', image: '图片附件', date: '时间', tags: '标签'
+  };
+  var cols = [
+    { id: 'c1', name: '书名', type: 'text' },
+    { id: 'c2', name: '作者', type: 'text' },
+    { id: 'c3', name: '评分', type: 'number' },
+    { id: 'c4', name: '状态', type: 'status' },
+    { id: 'c5', name: '封面', type: 'image' },
+    { id: 'c6', name: '标签', type: 'tags' }
+  ];
+  var selectedCol = 'c1';
+  var colList = document.getElementById('colList');
+  var colTypesLegend = document.getElementById('colTypesLegend');
+  var colPanel = document.getElementById('colPanel');
+  var colScrim = document.getElementById('colScrim');
+
+  function byId(id) {
+    for (var i = 0; i < cols.length; i += 1) if (cols[i].id === id) return cols[i];
+    return null;
+  }
+
+  function renderCols() {
+    colList.textContent = '';
+    cols.forEach(function (c, i) {
+      var row = document.createElement('div');
+      row.className = 'colrow' + (c.id === selectedCol ? ' colrow--on' : '');
+
+      var pick = document.createElement('button');
+      pick.className = 'colrow__pick';
+      pick.setAttribute('aria-pressed', String(c.id === selectedCol));
+      pick.textContent = c.name;
+      pick.addEventListener('click', function () { selectedCol = c.id; renderCols(); syncTypes(); });
+      row.appendChild(pick);
+
+      var type = document.createElement('span');
+      type.className = 'colrow__type';
+      type.textContent = TYPE_LABEL[c.type] || c.type;
+      row.appendChild(type);
+
+      row.appendChild(moveBtn('左移', i, -1, i === 0));
+      row.appendChild(moveBtn('右移', i, 1, i === cols.length - 1));
+
+      var del = document.createElement('button');
+      del.className = 'iconbtn iconbtn--danger';
+      del.setAttribute('aria-label', '删除列「' + c.name + '」');
+      del.innerHTML = '<svg class="ic ic--sm"><use href="#i-x"/></svg>';
+      del.addEventListener('click', function () {
+        cols = cols.filter(function (x) { return x.id !== c.id; });
+        if (selectedCol === c.id) selectedCol = cols[0] ? cols[0].id : null;
+        renderCols();
+        syncTypes();
+      });
+      row.appendChild(del);
+
+      colList.appendChild(row);
+    });
+  }
+
+  function moveBtn(label, index, offset, disabled) {
+    var b = document.createElement('button');
+    b.className = 'iconbtn' + (offset < 0 ? ' iconbtn--left' : '');
+    b.setAttribute('aria-label', label);
+    if (disabled) b.disabled = true;
+    b.innerHTML = '<svg class="ic ic--sm"><use href="#i-chev-r"/></svg>';
+    b.addEventListener('click', function () {
+      var target = index + offset;
+      if (target < 0 || target >= cols.length) return;
+      var moved = cols.splice(index, 1)[0];
+      cols.splice(target, 0, moved);
+      renderCols();
+    });
+    return b;
+  }
+
+  function syncTypes() {
+    var c = byId(selectedCol);
+    colTypesLegend.textContent = c ? '类型（' + c.name + '）' : '类型';
+    document.querySelectorAll('#colTypes input[name="coltype"]').forEach(function (r) {
+      r.checked = c ? r.value === c.type : false;
+    });
+  }
+
+  document.querySelectorAll('#colTypes input[name="coltype"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      var c = byId(selectedCol);
+      if (c && r.checked) { c.type = r.value; renderCols(); }
+    });
+  });
+
+  document.getElementById('addColBtn').addEventListener('click', function () {
+    var id = 'c' + (cols.length + 1) + '-' + cols.length;
+    cols.push({ id: id, name: '列 ' + (cols.length + 1), type: 'text' });
+    selectedCol = id;
+    renderCols();
+    syncTypes();
+  });
+
+  function openCols() {
+    renderCols();
+    syncTypes();
+    colScrim.hidden = false;
+    colPanel.hidden = false;
+  }
+  function closeCols() {
+    colScrim.hidden = true;
+    colPanel.hidden = true;
+  }
+  document.getElementById('openColPanel').addEventListener('click', openCols);
+  document.getElementById('colCancel').addEventListener('click', closeCols);
+  document.getElementById('colOk').addEventListener('click', closeCols);
+  colScrim.addEventListener('click', closeCols);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (!colPanel.hidden) closeCols();
+    if (!morePop.hidden) closeMore();
+  });
+
+  /* —— 更多：弹出小窗（菜单项随条目类型变化；点心外部 / Esc 收起） —— */
+  var MORE_ITEMS = {
+    note: [
+      { label: '加密此笔记' }, { label: '移动到…' }, { label: '版本历史' }, { label: '存为版本' },
+      { label: '分享' }, { label: '收藏' },
+      { sep: true }, { label: '删除', danger: true }
+    ],
+    table: [
+      { label: '加密此表格' }, { label: '移动到…' }, { label: '版本历史' },
+      { label: '分享' }, { label: '收藏' }, { label: '降级为普通笔记' },
+      { sep: true }, { label: '删除', danger: true }
+    ]
+  };
+
+  function renderMore() {
+    morePop.textContent = '';
+    MORE_ITEMS[ITEMS[state.index].kind].forEach(function (item) {
+      if (item.sep) {
+        var sep = document.createElement('div');
+        sep.className = 'menu__sep';
+        morePop.appendChild(sep);
+        return;
+      }
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.className = 'menu__item' + (item.danger ? ' menu__item--danger' : '');
+      b.textContent = item.label;
+      b.addEventListener('click', closeMore);
+      morePop.appendChild(b);
+    });
+  }
+  function openMore() { renderMore(); morePop.hidden = false; moreBtn.setAttribute('aria-expanded', 'true'); }
+  function closeMore() { morePop.hidden = true; moreBtn.setAttribute('aria-expanded', 'false'); }
+  moreBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (morePop.hidden) openMore(); else closeMore();
+  });
+  document.addEventListener('click', function (e) {
+    if (!morePop.hidden && !e.target.closest('#morePop') && !e.target.closest('#moreBtn')) closeMore();
+  });
+
+  /* —— 悬浮大纲：标题从预览里取；点击滚到该节；滚动时高亮当前节 —— */
+  var headings = [];
+
+  function buildOutline() {
+    headings = Array.prototype.slice.call(previewBody.querySelectorAll('h2'));
+    outlineList.textContent = '';
+    headings.forEach(function (h, i) {
+      h.id = 'sec-' + i;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'outline__item';
+      b.textContent = h.textContent;
+      b.addEventListener('click', function () {
+        previewScroll.scrollTo({ top: Math.max(0, h.offsetTop - 12), behavior: 'smooth' });
+      });
+      outlineList.appendChild(b);
+    });
+  }
+
+  function syncOutline() {
+    if (outline.hidden) return;
+    var top = previewScroll.scrollTop + 24;
+    var active = 0;
+    headings.forEach(function (h, i) { if (h.offsetTop <= top) active = i; });
+    Array.prototype.forEach.call(outlineList.children, function (el, i) {
+      el.setAttribute('aria-current', String(i === active));
+    });
+  }
+
+  /* 只在「笔记 + 预览可见 + 预览区够宽」时浮出：分屏下预览只有 ~408px，浮大纲会压字 */
+  function updateOutline() {
+    var kind = ITEMS[state.index].kind;
+    var previewVisible = !state.empty && kind === 'note' && state.noteMode !== 'edit';
+    var on = previewVisible && viewPane.clientWidth >= 640;
+    outline.hidden = !on;
+    viewWrap.dataset.outline = on ? 'on' : 'off';
+    if (on) syncOutline();
+  }
+
+  previewScroll.addEventListener('scroll', syncOutline, { passive: true });
+  window.addEventListener('resize', updateOutline);
+  document.getElementById('toTop').addEventListener('click', function () {
+    previewScroll.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  document.getElementById('toBottom').addEventListener('click', function () {
+    previewScroll.scrollTo({ top: previewScroll.scrollHeight, behavior: 'smooth' });
+  });
+  buildOutline();
+
+  /* `_id` 显示开关、以及通用就地按下态 */
+  document.addEventListener('click', function (e) {
+    var sw = e.target.closest('.switch');
+    if (sw) {
+      sw.setAttribute('aria-checked', String(sw.getAttribute('aria-checked') !== 'true'));
+      return;
+    }
+    var b = e.target.closest('.seg > button');
+    if (b && !b.disabled) pressGroup(b.parentElement, b);
+  });
+
+  apply();
+})();
+</script>
+</body>
+</html>

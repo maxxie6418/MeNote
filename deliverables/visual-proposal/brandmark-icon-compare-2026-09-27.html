@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<title>品牌标记对比稿 · 站点图标 vs 现状（2026-09-27）</title>
+<style>
+  :root{
+    color-scheme:light;
+    --bg:#ffffff; --bg-soft:#f7f7f7; --panel:#ffffff; --panel-2:#f2f2f2; --panel-3:#e8e8e8;
+    --line:#e0e0e0; --line-2:#c9c9c9; --text:#1d1d1d; --text-2:#4a4a4a; --muted:#6b6b6b;
+    --primary:#f6821f; --primary-2:#e8720d; --primary-soft:rgba(246,130,31,.12);
+    --primary-line:rgba(246,130,31,.35); --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+    --primary-ink:#b45309; --on-primary:#1d1d1d;
+    --green:#1f7a4d; --green-soft:rgba(31,122,77,.11); --green-line:rgba(31,122,77,.26);
+    --topbar-bg:rgba(255,255,255,.86); --shadow-1:0 4px 14px rgba(29,29,29,.07);
+    --radius-sm:6px; --radius:10px; --radius-lg:14px; --radius-pill:99px;
+    --fs-display:20px; --fs-title:17px; --fs-body-lg:14px; --fs-body:13px; --fs-small:12px; --fs-micro:11px;
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  /* 令牌块作用域到任意子树：深色那一列用 <div data-theme="dark"> 撑起来 */
+  [data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#161616; --bg-soft:#1e1e1e; --panel:#242424; --panel-2:#2d2d2d; --panel-3:#383838;
+    --line:#333333; --line-2:#4a4a4a; --text:#f2f2f2; --text-2:#bdbdbd; --muted:#8f8f8f;
+    --primary:#f6821f; --primary-2:#fbad41; --primary-soft:rgba(246,130,31,.16);
+    --primary-line:rgba(246,130,31,.34); --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+    --primary-ink:#f6821f; --on-primary:#161616;
+    --green:#5cbf8a; --green-soft:rgba(92,191,138,.14); --green-line:rgba(92,191,138,.28);
+    --topbar-bg:rgba(22,22,22,.86); --shadow-1:0 4px 14px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:var(--sp-6);background:var(--bg);color:var(--text);font-family:var(--sans);
+       font-size:var(--fs-body);line-height:1.55}
+  h1{font-size:var(--fs-display);margin:0 0 var(--sp-2)}
+  h2{font-size:var(--fs-title);margin:0 0 var(--sp-3)}
+  .lead{color:var(--text-2);margin:0 0 var(--sp-5);max-width:78ch}
+  code{font-family:Consolas,monospace;font-size:var(--fs-small);background:var(--panel-2);
+       padding:1px 5px;border-radius:var(--radius-sm)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-5)}
+  .panel{border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-soft)}
+  .panel__head{padding:var(--sp-2) var(--sp-4);font-size:var(--fs-small);color:var(--muted);
+               border-bottom:1px solid var(--line);background:var(--panel)}
+  .row{border-bottom:1px solid var(--line);background:var(--bg)}
+  .row:last-child{border-bottom:0}
+  .row__label{display:flex;align-items:baseline;gap:var(--sp-2);padding:var(--sp-2) var(--sp-4) 0;
+              font-size:var(--fs-small);color:var(--muted)}
+  .row__label b{color:var(--text);font-weight:600}
+  .tag{font-size:var(--fs-micro);border:1px solid var(--line);border-radius:var(--radius-pill);
+       padding:0 6px;color:var(--muted)}
+  .tag.bad{border-color:var(--line-2)}
+
+  /* —— 顶栏（照 app.css：54px、gap 12、padding 0 16）—— */
+  .topbar{height:54px;display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);
+          background:var(--topbar-bg);border-bottom:1px solid var(--line)}
+  .topbar__brand{display:flex;align-items:center;gap:var(--sp-2);font-weight:600;
+                 font-size:var(--fs-body-lg);color:var(--text);flex:none}
+  .crumb{display:flex;align-items:center;gap:var(--sp-1);color:var(--muted);font-size:var(--fs-small);flex:none}
+  .search{flex:1;min-width:0;display:flex;justify-content:center}
+  .search input{width:100%;max-width:420px;height:32px;border:1px solid var(--line);border-radius:var(--radius);
+                background:var(--panel);color:var(--muted);font-size:var(--fs-small);padding:0 var(--sp-3);font-family:var(--sans)}
+  .pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--radius-pill);
+        border:1px solid var(--green-line);background:var(--green-soft);color:var(--green);font-size:var(--fs-micro);flex:none}
+
+  /* —— 现状：纯渐变方块 —— */
+  .brandmark{width:22px;height:22px;border-radius:var(--radius-sm);background:var(--primary-grad);flex:none}
+
+  /* —— 站点图标 —— */
+  .mn-ico{display:block;flex:none}
+  .mn-ico--chip{border-radius:var(--radius-sm);background:var(--panel-2);border:1px solid var(--line);padding:2px}
+  .authcard__brand{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-title);font-weight:600}
+
+  /* —— 尺寸阶梯 —— */
+  .ladder{display:flex;align-items:flex-end;gap:var(--sp-5);padding:var(--sp-5) var(--sp-4);background:var(--bg)}
+  .ladder figure{margin:0;text-align:center}
+  .ladder figcaption{font-size:var(--fs-micro);color:var(--muted);margin-top:var(--sp-2)}
+  .ladder .onpanel{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:4px}
+  .note{border:1px solid var(--primary-line);background:var(--primary-soft);border-radius:var(--radius);
+        padding:var(--sp-3) var(--sp-4);margin-top:var(--sp-5);color:var(--text-2)}
+  .note b{color:var(--text)}
+  .stack{margin-top:var(--sp-6)}
+</style>
+</head>
+<body>
+
+<!-- 站点图标（照 public/icon.svg，仅把 id 前缀保留） -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="mn-cloud" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F6821F"/><stop offset="100%" stop-color="#FBAD41"/>
+    </linearGradient>
+    <linearGradient id="mn-paper-edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F15A24"/><stop offset="100%" stop-color="#F6821F"/>
+    </linearGradient>
+    <linearGradient id="mn-line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FDBA74"/><stop offset="100%" stop-color="#F6821F"/>
+    </linearGradient>
+    <symbol id="mn-icon" viewBox="0 0 512 512">
+      <path d="M108 307 C76 304 54 279 54 248 C54 216 79 190 110 188 C121 141 163 110 213 110 C257 110 295 134 313 169 C328 160 346 155 365 155 C414 155 454 195 454 244 C454 290 420 327 375 333 L128 333 C120 333 114 323 108 307Z" fill="url(#mn-cloud)"/>
+      <path d="M292 181 C313 164 338 155 365 155 C414 155 454 195 454 244 C454 290 420 327 375 333 L292 333 C310 315 320 290 320 261 C320 230 309 202 292 181Z" fill="#F15A24" opacity="0.35"/>
+      <g transform="translate(0 40) rotate(-20 245 260)">
+        <path d="M157 177 Q157 157 177 157 L352 157 Q373 157 373 178 L373 383 Q373 405 351 405 L155 405 Q133 405 133 383 L133 199 Q133 177 157 177Z" fill="url(#mn-paper-edge)"/>
+        <path d="M145 158 Q145 138 165 138 L340 138 Q361 138 361 159 L361 361 Q361 382 340 382 L145 382 Q124 382 124 361 L124 180 Q124 158 145 158Z" fill="#FFFFFF"/>
+        <g fill="#F6821F">
+          <rect x="105" y="177" width="52" height="18" rx="9"/><rect x="105" y="227" width="52" height="18" rx="9"/>
+          <rect x="105" y="277" width="52" height="18" rx="9"/><rect x="105" y="327" width="52" height="18" rx="9"/>
+        </g>
+        <g fill="url(#mn-line)">
+          <rect x="184" y="205" width="126" height="13" rx="6.5"/><rect x="184" y="247" width="126" height="13" rx="6.5"/>
+          <rect x="184" y="289" width="92" height="13" rx="6.5"/>
+        </g>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<h1>品牌标记对比稿 · 站点图标 vs 现状</h1>
+<p class="lead">
+  现状：顶栏品牌块与登录/注册页品牌区用的是 <code>.brandmark</code>——22×22 的 <code>var(--primary-grad)</code> 纯渐变方块，没有放你给的站点图标。
+  下面把 <code>public/icon.svg</code>（云 + 笔记本）放进同一个位置，按真实尺寸对比，浅深两主题各一遍。全部数值照 <code>tokens.css</code> / <code>app.css</code>。
+</p>
+
+<div class="grid">
+  <!-- 浅色 -->
+  <div class="panel">
+    <div class="panel__head">浅色主题（默认）</div>
+
+    <div class="row">
+      <div class="row__label"><b>1 现状</b><span class="tag">22px 渐变方块</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><span class="brandmark"></span>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>2 站点图标 22px · 无容器</b><span class="tag bad">白页糊在白底上</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><svg class="mn-ico" width="22" height="22"><use href="#mn-icon"/></svg>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>3 站点图标 22px · 浅灰切片容器</b><span class="tag">推荐？</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><svg class="mn-ico mn-ico--chip" width="22" height="22"><use href="#mn-icon"/></svg>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>4 站点图标 28px · 浅灰切片容器</b><span class="tag">顶栏 54px 放得下</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><svg class="mn-ico mn-ico--chip" width="28" height="28"><use href="#mn-icon"/></svg>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>5 登录 / 注册页品牌区（图标 28px）</b></div>
+      <div style="padding:var(--sp-4);background:var(--bg-soft)">
+        <div class="authcard__brand" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-3)">
+          <svg class="mn-ico" width="28" height="28"><use href="#mn-icon"/></svg>Menote
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 深色 -->
+  <div class="panel" data-theme="dark">
+    <div class="panel__head" style="background:var(--panel)">深色主题</div>
+
+    <div class="row">
+      <div class="row__label"><b>1 现状</b><span class="tag">22px 渐变方块</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><span class="brandmark"></span>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>2 站点图标 22px · 无容器</b><span class="tag">白页自己跳出来</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><svg class="mn-ico" width="22" height="22"><use href="#mn-icon"/></svg>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>3 站点图标 22px · 浅灰切片容器</b><span class="tag">推荐？</span></div>
+      <div class="topbar">
+        <div class="topbar__brand"><svg class="mn-ico mn-ico--chip" width="22" height="22"><use href="#mn-icon"/></svg>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>4 站点图标 28px · 浅灰切片容器</b></div>
+      <div class="topbar">
+        <div class="topbar__brand"><svg class="mn-ico mn-ico--chip" width="28" height="28"><use href="#mn-icon"/></svg>Menote</div>
+        <div class="crumb">全部笔记</div>
+        <div class="search"><input value="搜索（M2 提供）" readonly /></div>
+        <span class="pill">● 已同步</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row__label"><b>5 登录 / 注册页品牌区（图标 28px）</b></div>
+      <div style="padding:var(--sp-4);background:var(--bg-soft)">
+        <div class="authcard__brand" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-3)">
+          <svg class="mn-ico" width="28" height="28"><use href="#mn-icon"/></svg>Menote
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 尺寸阶梯 -->
+<div class="stack">
+  <h2>尺寸阶梯：这张图在多大才看得清</h2>
+  <div class="grid">
+    <div class="panel">
+      <div class="panel__head">浅色 · 透明底 / 切片容器对照</div>
+      <div class="ladder">
+        <figure><svg class="mn-ico" width="16" height="16"><use href="#mn-icon"/></svg><figcaption>16 无容器</figcaption></figure>
+        <figure><svg class="mn-ico" width="22" height="22"><use href="#mn-icon"/></svg><figcaption>22 无容器</figcaption></figure>
+        <figure><svg class="mn-ico" width="28" height="28"><use href="#mn-icon"/></svg><figcaption>28 无容器</figcaption></figure>
+        <figure><svg class="mn-ico" width="32" height="32"><use href="#mn-icon"/></svg><figcaption>32 无容器</figcaption></figure>
+        <figure><svg class="mn-ico mn-ico--chip" width="22" height="22"><use href="#mn-icon"/></svg><figcaption>22 切片</figcaption></figure>
+        <figure><svg class="mn-ico mn-ico--chip" width="28" height="28"><use href="#mn-icon"/></svg><figcaption>28 切片</figcaption></figure>
+        <figure><svg class="mn-ico" width="48" height="48"><use href="#mn-icon"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="mn-ico" width="72" height="72"><use href="#mn-icon"/></svg><figcaption>72</figcaption></figure>
+      </div>
+    </div>
+    <div class="panel" data-theme="dark">
+      <div class="panel__head">深色 · 同上</div>
+      <div class="ladder">
+        <figure><svg class="mn-ico" width="16" height="16"><use href="#mn-icon"/></svg><figcaption>16 无容器</figcaption></figure>
+        <figure><svg class="mn-ico" width="22" height="22"><use href="#mn-icon"/></svg><figcaption>22 无容器</figcaption></figure>
+        <figure><svg class="mn-ico" width="28" height="28"><use href="#mn-icon"/></svg><figcaption>28 无容器</figcaption></figure>
+        <figure><svg class="mn-ico" width="32" height="32"><use href="#mn-icon"/></svg><figcaption>32 无容器</figcaption></figure>
+        <figure><svg class="mn-ico mn-ico--chip" width="22" height="22"><use href="#mn-icon"/></svg><figcaption>22 切片</figcaption></figure>
+        <figure><svg class="mn-ico mn-ico--chip" width="28" height="28"><use href="#mn-icon"/></svg><figcaption>28 切片</figcaption></figure>
+        <figure><svg class="mn-ico" width="48" height="48"><use href="#mn-icon"/></svg><figcaption>48</figcaption></figure>
+        <figure><svg class="mn-ico" width="72" height="72"><use href="#mn-icon"/></svg><figcaption>72</figcaption></figure>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>看出来了吗</b>：这张图里有云 + 笔记本 + 4 个装订标签 + 3 条书写线，一共十来个形状。<b>22px 无容器</b>时笔记本的白色页面和白色顶栏同色，
+    会只剩一团橙色（浅色主题第 2 行、深色主题第 2 行可以对照）；<b>切片容器</b>（浅灰底 + 一像素描边）能把它框住，浅深两主题都成立，代价是品牌标记从「一个色块」变成「一枚小图标」。
+  </div>
+</div>
+
+</body>
+</html>

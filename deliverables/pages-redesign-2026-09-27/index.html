@@ -1,0 +1,2336 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeNote · 首页 / Memo / 待办 重构稿（2026-09-27）</title>
+<style>
+/* ============================================================
+   0. 设计令牌
+   —— 浅深两主题全部照抄 apps/web/src/app/theme/tokens.css（DESIGN.md §3.3）
+   —— 唯一新增：【临时值·待确认】--fs-stat、--subbar-w、--viewseg-w，见文末「提案」清单
+   ============================================================ */
+:root{
+  color-scheme:light;
+  --bg:#ffffff; --bg-soft:#f7f7f7; --panel:#ffffff; --panel-2:#f2f2f2; --panel-3:#e8e8e8;
+  --line:#e0e0e0; --line-2:#c9c9c9;
+  --text:#1d1d1d; --text-2:#4a4a4a; --muted:#6b6b6b;
+  --primary:#f6821f; --primary-2:#e8720d;
+  --primary-soft:rgba(246,130,31,.12); --primary-line:rgba(246,130,31,.35);
+  --primary-grad:linear-gradient(140deg,var(--primary),var(--primary-2));
+  --primary-ink:#b45309; --on-primary:#1d1d1d;
+  --amber:#8a5a00; --amber-soft:rgba(138,90,0,.11); --amber-line:rgba(138,90,0,.26);
+  --green:#1f7a4d; --green-soft:rgba(31,122,77,.11); --green-line:rgba(31,122,77,.26);
+  --red:#c0392b; --red-soft:rgba(192,57,43,.10); --red-line:rgba(192,57,43,.26);
+  --purple:#6d47a8; --purple-soft:rgba(109,71,168,.12);
+  --hairline:rgba(29,29,29,.022); --ph-stripe:rgba(29,29,29,.05);
+  --topbar-bg:rgba(255,255,255,.86); --lock-veil:rgba(255,255,255,.95); --scrim:rgba(29,29,29,.42);
+  --shadow-1:0 4px 14px rgba(29,29,29,.07);
+  --shadow-2:0 16px 40px rgba(29,29,29,.13);
+  --shadow-3:0 28px 70px rgba(29,29,29,.20);
+
+  /* 结构尺寸（DESIGN.md §2.2） */
+  --topbar-h:54px; --fnbar-w:294px; --list-w:330px; --settings-nav-w:184px;
+  /* 【临时值·待确认】页内二级侧栏宽度：DESIGN.md §2.2 未登记这一档 */
+  --subbar-w:232px;
+  /* 【临时值·待确认】页头视图切换段的固定宽度：保证 Memo / 待办切页时右侧那组不位移 */
+  --viewseg-w:176px;
+  --radius-sm:6px; --radius:10px; --radius-lg:14px;
+  --radius-pill:99px; --radius-circle:50%;
+
+  /* 字号刻度（DESIGN.md §3.3，6 档） */
+  --fs-display:20px; --fs-title:17px; --fs-body-lg:14px; --fs-body:13px; --fs-small:12px; --fs-micro:11px;
+  /* 【临时值·待确认】仪表数字档：现有 6 档最大 20px，承载不了首页总览数字 */
+  --fs-stat:30px;
+
+  /* 间距刻度（DESIGN.md §4.3，4px 基数 6 档） */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,"SF Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#161616; --bg-soft:#1e1e1e; --panel:#242424; --panel-2:#2d2d2d; --panel-3:#383838;
+  --line:#333333; --line-2:#4a4a4a;
+  --text:#f2f2f2; --text-2:#bdbdbd; --muted:#8f8f8f;
+  --primary:#f6821f; --primary-2:#fbad41;
+  --primary-soft:rgba(246,130,31,.16); --primary-line:rgba(246,130,31,.34);
+  --primary-ink:#f6821f; --on-primary:#161616;
+  --amber:#e0a458; --amber-soft:rgba(224,164,88,.14); --amber-line:rgba(224,164,88,.30);
+  --green:#5cbf8a; --green-soft:rgba(92,191,138,.14); --green-line:rgba(92,191,138,.28);
+  --red:#f07167; --red-soft:rgba(240,113,103,.14); --red-line:rgba(240,113,103,.30);
+  --purple:#b5a2e0; --purple-soft:rgba(181,162,224,.16);
+  --hairline:rgba(255,255,255,.02); --ph-stripe:rgba(255,255,255,.035);
+  --topbar-bg:rgba(22,22,22,.86); --lock-veil:rgba(22,22,22,.95); --scrim:rgba(0,0,0,.55);
+  --shadow-1:0 4px 14px rgba(0,0,0,.35);
+  --shadow-2:0 16px 40px rgba(0,0,0,.45);
+  --shadow-3:0 28px 70px rgba(0,0,0,.55);
+}
+
+/* ============================================================
+   1. 基础
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:var(--fs-body); line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden; /* DESIGN.md §2.7：body 不滚动 */
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+ul,ol{margin:0;padding:0;list-style:none}
+h1,h2,h3,h4,p{margin:0}
+time{font-variant-numeric:tabular-nums}
+/* [hidden] 必须真的能藏住：本稿大量容器自带 display:flex/grid，作者样式会盖掉 UA 的
+   [hidden]{display:none}，于是「列表/看板切换」和「有数据/空数据切换」会双双失效。 */
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:var(--radius-sm)}
+svg.ic{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg.ic--sm{width:13px;height:13px}
+svg.ic--lg{width:20px;height:20px}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+
+/* 触屏命中区（DESIGN.md §2.4-3）：视觉尺寸不变，用透明伪元素把可点区补到 44px */
+.hit{position:relative}
+.hit::after{content:'';position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%)}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ============================================================
+   2. 通用控件（DESIGN.md §5.2 / §5.3）
+   ============================================================ */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-2);
+  height:31px;padding:0 var(--sp-3);border:1px solid var(--line-2);border-radius:var(--radius);
+  background:var(--panel);color:var(--text-2);font-size:var(--fs-body-lg);white-space:nowrap;
+  transition:border-color .16s,color .16s,background .16s}
+.btn:hover{border-color:var(--primary-line);color:var(--primary-ink);background:var(--primary-soft)}
+.btn--primary{background:var(--primary-grad);border-color:transparent;color:var(--on-primary);font-weight:600;box-shadow:var(--shadow-1)}
+.btn--primary:hover{color:var(--on-primary);border-color:transparent;filter:brightness(1.05)}
+.btn--sm{height:27px;padding:0 var(--sp-2);font-size:var(--fs-small)}
+.btn--ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn--ghost:hover{background:var(--panel-2);color:var(--text);border-color:transparent}
+.btn[disabled]{opacity:.45;pointer-events:none}
+
+/* 盒式分段控件：互斥的视图 / 参数切换（DESIGN.md §5.3） */
+.seg{display:inline-flex;align-items:center;gap:2px;padding:2px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:var(--radius);flex:none}
+.seg button{display:inline-flex;align-items:center;gap:var(--sp-1);height:25px;padding:0 var(--sp-3);
+  border-radius:var(--radius-sm);color:var(--muted);font-size:var(--fs-body);white-space:nowrap;
+  transition:background .16s,color .16s}
+.seg button:hover{color:var(--text-2)}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--text);font-weight:600;box-shadow:var(--shadow-1)}
+.seg button[aria-pressed="true"] svg{color:var(--primary)}
+.seg--incomposer button{height:23px;padding:0 var(--sp-2);font-size:var(--fs-small)}
+/* 页头右侧那一组：视图段与添加按钮都定宽，两页共用同一套壳 ——
+   切换 Memo / 待办时右侧那组的位置不因文字长短而位移（不靠改文案去凑）。 */
+.seg--view{min-width:var(--viewseg-w)}
+.seg--view button{flex:1;justify-content:center}
+/* 添加按钮：用固定 width（不是 min-width）——「添加 Memo」的拉丁字符比「添加待办」的汉字宽，
+   min-width 只兜底不封顶，两个按钮就不等宽了 */
+.btn--add{width:112px}
+
+/* 滚动条：细、轨道透明、滑块用线色，不抢视觉重量（侧边栏与功能栏共用） */
+.scroll-thin{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.scroll-thin::-webkit-scrollbar{width:8px;height:8px;background:transparent}
+.scroll-thin::-webkit-scrollbar-track{background:transparent}
+.scroll-thin::-webkit-scrollbar-thumb{background:var(--line-2);border:2px solid transparent;
+  border-radius:var(--radius-pill);background-clip:content-box}
+.scroll-thin::-webkit-scrollbar-thumb:hover{background:var(--muted);
+  border:2px solid transparent;background-clip:content-box}
+.scroll-thin::-webkit-scrollbar-corner{background:transparent}
+
+/* 胶囊：轻量标记与条目属性（DESIGN.md §5.3 / §2.2 chip 21px） */
+.chip{display:inline-flex;align-items:center;gap:var(--sp-1);height:21px;padding:0 var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius-pill);background:var(--panel);
+  color:var(--text-2);font-size:var(--fs-micro);white-space:nowrap;transition:.16s}
+button.chip:hover{border-color:var(--primary-line);color:var(--primary-ink);background:var(--primary-soft)}
+.chip[aria-pressed="true"]{background:var(--primary-soft);border-color:var(--primary-line);color:var(--primary-ink);font-weight:600}
+.chip--tag{color:var(--purple);background:var(--purple-soft);border-color:transparent}
+.chip .n{color:var(--muted);font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"] .n{color:var(--primary-ink)}
+
+/* 状态胶囊：带语义色，必须配图标或文字（DESIGN.md §3.2-4） */
+.pill{display:inline-flex;align-items:center;gap:var(--sp-1);height:21px;padding:0 var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius-pill);color:var(--muted);
+  font-size:var(--fs-micro);white-space:nowrap;background:var(--panel)}
+.pill--red{color:var(--red);border-color:var(--red-line);background:var(--red-soft)}
+.pill--amber{color:var(--amber);border-color:var(--amber-line);background:var(--amber-soft)}
+.pill--green{color:var(--green);border-color:var(--green-line);background:var(--green-soft)}
+.pill--neutral{color:var(--text-2)}
+
+/* 开关（DESIGN.md §2.2 toggle 38×21） */
+.switch{display:inline-flex;align-items:center;gap:var(--sp-2);color:var(--text-2);font-size:var(--fs-small)}
+.switch__track{position:relative;width:38px;height:21px;flex:none;border-radius:var(--radius-pill);
+  background:var(--panel-3);border:1px solid var(--line-2);transition:background .16s,border-color .16s}
+.switch__track::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;
+  border-radius:var(--radius-circle);background:var(--panel);box-shadow:var(--shadow-1);transition:transform .16s}
+.switch[aria-checked="true"] .switch__track{background:var(--primary);border-color:var(--primary)}
+.switch[aria-checked="true"] .switch__track::after{transform:translateX(17px)}
+
+/* InfoHint：辅助说明的唯一出口（DESIGN.md §5.4-1） */
+.infohint{position:relative;display:inline-grid;place-items:center;width:16px;height:16px;
+  color:var(--muted);flex:none;vertical-align:middle}
+.infohint:hover,.infohint:focus-visible{color:var(--primary-ink)}
+.infohint__pop{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+  width:max-content;max-width:260px;padding:var(--sp-2) var(--sp-3);border-radius:var(--radius);
+  background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow-2);
+  color:var(--text-2);font-size:var(--fs-small);font-weight:400;line-height:1.5;text-align:left;
+  opacity:0;visibility:hidden;transition:opacity .16s,visibility .16s;z-index:30;pointer-events:none}
+.infohint:hover .infohint__pop,.infohint:focus-visible .infohint__pop{opacity:1;visibility:visible}
+.infohint--right .infohint__pop{left:auto;right:0;transform:none}
+.infohint--left .infohint__pop{left:0;transform:none}
+/* 视图头里的 InfoHint 向下弹出：.work 有 overflow:hidden，向上会被裁掉 */
+.pane-head .infohint__pop,.memo-head .infohint__pop,.tkhead .infohint__pop{bottom:auto;top:calc(100% + 8px)}
+
+/* 文字链接：不得用按钮冒充（DESIGN.md §5.3） */
+.link{display:inline-flex;align-items:center;gap:var(--sp-1);color:var(--primary-ink);
+  font-size:var(--fs-small);text-decoration:underline;text-underline-offset:2px}
+
+/* 进度条 */
+.bar{height:4px;border-radius:var(--radius-pill);background:var(--panel-3);overflow:hidden;display:flex}
+
+/* 空状态（DESIGN.md §5.4-3：必须有「为什么空 + 下一步」） */
+.empty{display:flex;flex-direction:column;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-6) var(--sp-4);text-align:center}
+.empty__ico{display:grid;place-items:center;width:50px;height:50px;border-radius:var(--radius-circle);
+  background:var(--panel-2);color:var(--muted);margin-bottom:var(--sp-1)}
+.empty__t{font-size:var(--fs-body-lg);font-weight:600}
+.empty__h{color:var(--muted);font-size:var(--fs-small);max-width:340px}
+
+/* ============================================================
+   3. 应用骨架（DESIGN.md §2.1 / §2.2 / §2.5）
+   ============================================================ */
+.shell{height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* —— 顶栏：固定 6 块，数量与顺序不可增减 —— */
+.topbar{height:var(--topbar-h);flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:0 var(--sp-4);background:var(--topbar-bg);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);position:relative;z-index:20}
+.brand{display:flex;align-items:center;gap:var(--sp-2);flex:none;padding-right:var(--sp-3);
+  border-right:1px solid var(--line)}
+.brand img{width:22px;height:22px;display:block} /* 品牌标记＝站点图标本体（DESIGN.md §5.5-5） */
+.brand b{font-size:var(--fs-body-lg);letter-spacing:.2px}
+.crumb{display:flex;align-items:center;gap:var(--sp-1);flex:1;min-width:0;
+  color:var(--text-2);font-size:var(--fs-small);white-space:nowrap;overflow:hidden}
+.crumb .sep{color:var(--muted)}
+.crumb b{color:var(--text);font-weight:600}
+.search{display:flex;align-items:center;gap:var(--sp-2);flex:none;width:290px;height:33px;
+  padding:0 var(--sp-3);border:1px solid var(--line);border-radius:var(--radius);
+  background:var(--panel-2);color:var(--muted);font-size:var(--fs-small)}
+.search input{flex:1;min-width:0;border:0;background:none;font:inherit;color:var(--text);outline:none}
+.search input::placeholder{color:var(--muted)}
+.search kbd{font-family:var(--mono);font-size:var(--fs-micro);padding:0 5px;
+  border:1px solid var(--line-2);border-radius:var(--radius-sm);color:var(--muted)}
+.pilltop{display:inline-flex;align-items:center;gap:var(--sp-1);flex:none;height:30px;
+  padding:0 var(--sp-3);border:1px solid var(--green-line);border-radius:var(--radius-pill);
+  background:var(--green-soft);color:var(--green);font-size:var(--fs-small)}
+.capsule{display:inline-flex;align-items:center;gap:var(--sp-1);flex:none;height:32px;
+  padding:0 var(--sp-3);border:1px solid var(--primary-line);border-radius:var(--radius-pill);
+  background:var(--primary-soft);color:var(--primary-ink);font-size:var(--fs-small)}
+.capsule .timer{font-family:var(--mono);font-size:var(--fs-micro);opacity:.85}
+.avatar{width:30px;height:30px;flex:none;border-radius:var(--radius-circle);
+  background:var(--primary-grad);color:var(--on-primary);display:grid;place-items:center;
+  font-size:var(--fs-small);font-weight:600}
+
+.body-row{flex:1;display:flex;min-height:0}
+
+/* —— 功能栏：新建 + 录入框固定在上，导航滚动，加密空间贴底 —— */
+.fnbar{width:var(--fnbar-w);flex:none;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--bg-soft);border-right:1px solid var(--line)}
+.fn-top{flex:none;padding:var(--sp-4) var(--sp-4) var(--sp-3)}
+.btn-new{display:flex;align-items:center;justify-content:center;gap:var(--sp-2);width:100%;height:31px;
+  border-radius:var(--radius);background:var(--primary-grad);color:var(--on-primary);
+  font-size:var(--fs-body-lg);font-weight:600;box-shadow:var(--shadow-1)}
+.composer{margin-top:var(--sp-3);padding:var(--sp-2) var(--sp-3);
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);
+  transition:border-color .16s,box-shadow .16s}
+.composer:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.composer textarea{display:block;width:100%;min-height:40px;max-height:180px;resize:vertical;
+  border:0;background:none;font:inherit;font-size:var(--fs-body);line-height:1.6;color:var(--text);outline:none}
+.composer textarea::placeholder{color:var(--muted)}
+/* 模式附加项：固定 26px、不换行，越界横向滚动，不允许撑高（DESIGN.md §2.5-2） */
+.composer__extra{display:flex;align-items:center;gap:var(--sp-1);height:26px;margin-top:var(--sp-2);overflow-x:auto;flex-wrap:nowrap}
+.composer__extra::-webkit-scrollbar{height:0}
+.mode-row{display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2)}
+.mode-row .btn{margin-left:auto}
+
+.fn-scroll{flex:1;overflow-y:auto;padding:0 var(--sp-4) var(--sp-4)}
+/* 浏览三段：下划线页签，无框无底（DESIGN.md §2.5-4） */
+.nav-seg{display:flex;gap:var(--sp-1);position:sticky;top:0;z-index:2;
+  background:var(--bg-soft);border-bottom:1px solid var(--line);margin-bottom:var(--sp-3)}
+.seg-item{flex:1;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;
+  gap:var(--sp-1);padding:var(--sp-2) 0 var(--sp-3);color:var(--muted);font-size:var(--fs-body);
+  transition:color .16s}
+.seg-item:hover{color:var(--text-2)}
+.seg-item[aria-current="page"]{color:var(--primary-ink);font-weight:600}
+.seg-item[aria-current="page"]::after{content:'';position:absolute;left:var(--sp-2);right:var(--sp-2);
+  bottom:-1px;height:2px;border-radius:var(--radius-pill);background:var(--primary)}
+.nav-group{margin-bottom:var(--sp-3)}
+.nav-group__title{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2);
+  padding:0 var(--sp-2);color:var(--muted);font-size:var(--fs-micro);font-weight:600;letter-spacing:.06em}
+.nav-item{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2);
+  border-radius:var(--radius);color:var(--text-2);font-size:var(--fs-body);transition:.16s}
+.nav-item:hover{background:var(--panel-2);color:var(--text)}
+.nav-item[aria-current="page"]{background:var(--primary-soft);color:var(--primary-ink);font-weight:600}
+.nav-item .n{margin-left:auto;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+.nav-tags{display:flex;flex-wrap:wrap;gap:var(--sp-1);padding:0 var(--sp-2)}
+.fn-vault{flex:none;padding:var(--sp-3) var(--sp-4);border-top:1px solid var(--line)}
+
+/* —— 主操作区 —— */
+.work{flex:1;min-width:0;display:flex;overflow:hidden}
+.page{flex:1;min-width:0;display:none;flex-direction:column}
+.page.is-active{display:flex}
+
+/* 视图头：页面之间靠「头部承载什么信息」区分，而不是靠装饰 */
+.pane-head{flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--line)}
+.pane-title{margin:0;font-size:var(--fs-title);font-weight:650;letter-spacing:-.01em} /* 【提案】原为 --fs-body-lg 14px */
+.pane-head__meta{display:flex;align-items:center;gap:var(--sp-2);color:var(--muted);font-size:var(--fs-small)}
+.pane-head__spacer{flex:1;min-width:0}
+.pane-head__actions{display:flex;align-items:center;gap:var(--sp-2);flex:none}
+
+.page__scroll{flex:1;overflow-y:auto;padding:var(--sp-5)}
+/* 内容宽度上限（DESIGN.md §2.3） */
+.wrap{width:100%;max-width:var(--cap,740px);margin:0 auto;display:flex;flex-direction:column;gap:var(--sp-5)}
+.page--home{--cap:920px}   /* 首页卡片组 */
+.page--memo{--cap:740px}   /* Memo 时间轴 */
+.page--task{--cap:920px}
+
+/* —— 页内二级侧栏（骨架层新增，DESIGN.md §2.1 原为 topbar + fnbar + work）——
+   Memo 用它自上而下承载：概况（概述 · 热力图）→ 入口（随机漫步 · 那年今日）
+   → 筛选（日期 · 标签）。分块之间用 1px 线分段，靠主次而非装饰区分。
+   窄屏整条横过来落在页头下方：同一份 DOM，不回退、也不另起一套样式。 */
+.page-body{flex:1;min-height:0;display:flex}
+/* overflow-x:hidden 是兜底：overflow-y:auto 会把横向也算成 auto，内部一旦溢出 1px
+   侧栏底部就多出一条横滑条 */
+.subbar{width:var(--subbar-w);flex:none;display:flex;flex-direction:column;
+  padding:var(--sp-4) var(--sp-3) 0;overflow-y:auto;overflow-x:hidden;
+  border-right:1px solid var(--line)}
+.subblk{display:flex;flex-direction:column;gap:var(--sp-1);padding-bottom:var(--sp-4)}
+.subblk+.subblk{border-top:1px solid var(--line);padding-top:var(--sp-4)}
+.subblk__t{display:flex;align-items:center;gap:var(--sp-1);margin:0 0 var(--sp-1);
+  padding:0 var(--sp-2);color:var(--muted);font-size:var(--fs-micro);font-weight:600;letter-spacing:.06em}
+.sublist{display:flex;flex-direction:column;gap:2px}
+.subitem{position:relative;display:flex;align-items:center;gap:var(--sp-2);width:100%;
+  padding:var(--sp-2);border-radius:var(--radius);color:var(--text-2);font-size:var(--fs-body);transition:.16s}
+.subitem:hover{background:var(--panel-2);color:var(--text)}
+.subitem[aria-pressed="true"]{background:var(--primary-soft);color:var(--primary-ink);font-weight:600}
+/* 选中标记：左侧一道主色刻线，扫一眼就知道正看的是哪一批（不靠底色单独表意） */
+.subitem[aria-pressed="true"]::before{content:'';position:absolute;left:0;top:var(--sp-2);
+  bottom:var(--sp-2);width:2.5px;border-radius:var(--radius-pill);background:var(--primary)}
+.subitem .n{margin-left:auto;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+.subitem[aria-pressed="true"] .n{color:var(--primary-ink)}
+.subbar .seg{width:100%}
+.subbar .seg button{flex:1;justify-content:center;padding:0 var(--sp-1)}
+
+/* 概述：三个数字并排的整合块。数字在上、名目在下，格间 1px 竖线，整体是一个圆角容器 */
+.stat3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.stat3__cell{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1px;padding:var(--sp-2) var(--sp-1);min-width:0}
+.stat3__cell+.stat3__cell{border-left:1px solid var(--line)}
+.stat3__n{font-size:var(--fs-title);font-weight:650;line-height:1.15;color:var(--text);
+  font-variant-numeric:tabular-nums}
+.stat3__l{max-width:100%;color:var(--muted);font-size:var(--fs-micro);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+
+/* 热力图：12 周 × 7 天。格子随侧栏宽度自适应（1fr + aspect-ratio），不会撑出横滑条；
+   5 档梯度的中间三档用 color-mix 从 --primary 派生，不引入裸色值 */
+.heat__sum{margin:0 0 var(--sp-2);padding:0 var(--sp-2);color:var(--muted);font-size:var(--fs-micro)}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,1fr);
+  grid-template-columns:repeat(12,1fr);gap:2px;aspect-ratio:12/7;padding:0 var(--sp-2)}
+.hm{border-radius:2px;background:var(--panel-3)} /* 2px 为临时值，见文末提案 */
+.hm--1{background:color-mix(in srgb,var(--primary) 22%,var(--bg))}
+.hm--2{background:color-mix(in srgb,var(--primary) 45%,var(--bg))}
+.hm--3{background:color-mix(in srgb,var(--primary) 70%,var(--bg))}
+.hm--4{background:var(--primary)}
+.heat__lg{display:flex;align-items:center;gap:var(--sp-1);margin-top:var(--sp-2);
+  padding:0 var(--sp-2);color:var(--muted);font-size:var(--fs-micro)}
+.heat__lg .hm{flex:none;width:10px;height:10px}
+
+/* 侧栏里的动作行与卡片 */
+.subact{display:flex;align-items:center;gap:var(--sp-2);width:100%;padding:var(--sp-2);
+  border-radius:var(--radius);color:var(--text-2);font-size:var(--fs-body);transition:.16s}
+.subact:hover{background:var(--panel-2);color:var(--text)}
+.subact__l{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subact__go{margin-left:auto;color:var(--muted)}
+.subact:hover .subact__go{color:var(--primary-ink)}
+/* 随机漫步：不带小标题，按钮本体就是那一块的入口，所以给它按钮的样子而不是导航行 */
+.subact--solo{padding:var(--sp-3) var(--sp-2);border:1px solid var(--line);
+  background:var(--panel);color:var(--text);font-weight:600}
+.subact--solo:hover{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary-ink)}
+.subact--solo .subact__go{color:var(--primary-ink)}
+.otd{display:flex;flex-direction:column;gap:var(--sp-1);width:100%;padding:var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);transition:.16s}
+.otd:hover{border-color:var(--primary-line);background:var(--primary-soft)}
+.otd__hd{display:flex;align-items:baseline;gap:var(--sp-2)}
+.otd__d{color:var(--primary-ink);font-size:var(--fs-small);font-weight:600}
+.otd__n{margin-left:auto;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+.otd__x{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  color:var(--text-2);font-size:var(--fs-small);line-height:1.5}
+
+/* 「随机漫步 / 那年今日」跳到的那一条：给一处可见的着落点 */
+.tl__item.is-walked .memo,.tl__day.is-walked .memo{background:var(--primary-soft)}
+.tl__item.is-walked .tl__dot{border-color:var(--primary);background:var(--primary)}
+
+/* 窄屏：整条横过来放在页头下方（同一份控件，不新增一套） */
+@media (max-width:1080px){
+  .page-body{flex-direction:column}
+  .subbar{width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;
+    gap:var(--sp-2) var(--sp-4);padding:var(--sp-2) var(--sp-5);overflow:visible;
+    border-right:0;border-bottom:1px solid var(--line)}
+  .subblk{flex-direction:row;flex-wrap:wrap;align-items:center;gap:var(--sp-2);
+    padding-bottom:0;padding-top:0}
+  .subblk+.subblk{border-top:0;padding-top:0}
+  .subblk__t{margin:0}
+  .sublist{flex-direction:row;flex-wrap:wrap;gap:var(--sp-1)}
+  .subitem{width:auto;height:21px;padding:0 var(--sp-2);gap:var(--sp-1);
+    border:1px solid var(--line);border-radius:var(--radius-pill);
+    background:var(--panel);font-size:var(--fs-micro)}
+  .subitem[aria-pressed="true"]::before{display:none}
+  .subitem .n{margin-left:var(--sp-1)}
+  .subbar .seg{width:auto}
+  .subbar .seg button{flex:none}
+  .stat3{width:auto;grid-template-columns:repeat(3,auto)}
+  .stat3__cell{padding:0 var(--sp-3)}
+  .heat,.heat__lg{padding:0}
+  .heat{aspect-ratio:auto;grid-template-columns:repeat(12,12px);grid-template-rows:repeat(7,12px)}
+  .heat__sum{margin-bottom:var(--sp-2);padding:0}
+  .subact{width:auto;padding:0 var(--sp-2);height:21px;font-size:var(--fs-micro)}
+  .subact--solo{padding:0 var(--sp-2)}
+  .otd{width:220px}
+}
+
+/* ============================================================
+   4. 首页 —— 「状态甲板」：左干活、右读数
+   ============================================================ */
+.deck{display:grid;grid-template-columns:minmax(0,1.34fr) minmax(0,1fr);
+  gap:var(--sp-5);align-items:start}
+@media (max-width:1080px){.deck{grid-template-columns:minmax(0,1fr)}}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--sp-4)}
+.card--focus{box-shadow:var(--shadow-1)}
+.card--flat{background:none;border:0;padding:0}
+
+.blk-head{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3)}
+.blk-title{margin:0;font-size:var(--fs-body-lg);font-weight:600}
+.blk-count{margin-left:auto;display:inline-flex;align-items:baseline;gap:var(--sp-1);
+  padding:2px var(--sp-2);border-radius:var(--radius-pill);background:var(--panel-2);
+  color:var(--text-2);font-size:var(--fs-micro)}
+.blk-count b{font-size:var(--fs-small);font-variant-numeric:tabular-nums}
+.blk-head .infohint{margin-left:var(--sp-1)}
+.blk-foot{margin-top:var(--sp-3);padding-top:var(--sp-3);border-top:1px solid var(--line)}
+
+/* 今日待办：首页唯一的「可行动」块，做成焦点 */
+.todo{display:flex;flex-direction:column}
+.todo__row{position:relative;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-2);border-radius:var(--radius);transition:background .16s}
+.todo__row+.todo__row{border-top:1px solid var(--line)}
+.todo__row:hover{background:var(--panel-2)}
+/* 优先级刻线：优先级不再只靠一个词，左侧有一道可扫的刻度 */
+.todo__mark{flex:none;width:3px;height:18px;border-radius:var(--radius-pill);background:transparent}
+.todo__mark--high{background:var(--amber)}
+.todo__mark--mid{background:var(--line-2)}
+.todo__title{flex:1;min-width:0;font-size:var(--fs-body-lg);color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .16s}
+.todo__row:hover .todo__title{color:var(--primary-ink)}
+.todo__meta{display:flex;align-items:center;gap:var(--sp-1);flex:none}
+
+/* 条目统计：一条仪表数字带 */
+.statband{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
+.statband__cell{position:relative;padding:var(--sp-4) var(--sp-3);text-align:center}
+.statband__cell+.statband__cell::before{content:'';position:absolute;left:0;
+  top:var(--sp-4);bottom:var(--sp-4);width:1px;background:var(--line)}
+.statband__n{font-size:var(--fs-stat);font-weight:650;line-height:1;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.statband__l{margin-top:var(--sp-2);color:var(--muted);font-size:var(--fs-micro)}
+.statband__hd{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-2)}
+
+/* 最近动态：迷你时间轴（细主干 + 节点），与 Memo 页的大主干呼应但更紧凑 */
+.mini{position:relative;display:flex;flex-direction:column}
+/* 主干对齐图标中心：padding-left 8px + 图标 13px 的一半 */
+.mini::before{content:'';position:absolute;left:14px;top:var(--sp-3);bottom:var(--sp-3);
+  width:1px;background:var(--line)}
+.mini__row{position:relative;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-2);border-radius:var(--radius);transition:background .16s}
+.mini__row:hover{background:var(--panel-2)}
+.mini__ico{flex:none;width:13px;height:13px;color:var(--muted);background:var(--panel);
+  display:grid;place-items:center}
+.mini__title{flex:1;min-width:0;font-size:var(--fs-body);color:var(--text-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini__row:hover .mini__title{color:var(--text)}
+.mini__when{flex:none;color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+
+/* 快捷方式：一条内联动作带，不再是一张装着按钮的卡片 */
+.actionbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-3) 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.actionbar__label{flex:none;margin-right:var(--sp-2);color:var(--muted);
+  font-size:var(--fs-micro);font-weight:600;letter-spacing:.06em}
+.act{display:inline-flex;align-items:center;gap:var(--sp-2);height:31px;padding:0 var(--sp-3);
+  border:1px solid var(--line-2);border-radius:var(--radius);color:var(--text-2);
+  font-size:var(--fs-body);transition:.16s}
+.act:hover{border-color:var(--primary-line);color:var(--primary-ink);background:var(--primary-soft)}
+.act svg{color:var(--muted)}
+.act:hover svg{color:var(--primary-ink)}
+
+/* 快速导航 */
+.qn{display:flex;flex-direction:column;gap:var(--sp-4)}
+.qn__grp{display:flex;flex-direction:column;gap:var(--sp-2)}
+.qn__title{color:var(--muted);font-size:var(--fs-micro);font-weight:600;letter-spacing:.08em}
+.qn__row{display:flex;flex-wrap:wrap;gap:var(--sp-1)}
+
+/* 锁定占位（必须可见，DESIGN.md §5.4-4） */
+.locked{display:flex;align-items:flex-start;gap:var(--sp-2);padding:var(--sp-3);
+  border:1px dashed var(--line-2);border-radius:var(--radius);background:var(--bg-soft);
+  color:var(--text-2);font-size:var(--fs-small)}
+.locked b{display:block;color:var(--text);font-weight:600}
+.locked__ico{flex:none;display:grid;place-items:center;width:26px;height:26px;
+  border-radius:var(--radius-sm);background:var(--panel-2);color:var(--muted)}
+
+/* ============================================================
+   5. Memo —— 「时间主干」：时间去卡片化
+   ============================================================ */
+/* 页头只剩「这是什么页 + 一共几条 + 添加入口」；标签与日期筛选已移入左侧页内栏 */
+.memo-head{flex:none;display:flex;align-items:center;gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--line)}
+
+/* 主干：日期与时间占左侧一列，1px 竖线贯穿，节点落在线上 */
+.tl{position:relative;display:flex;flex-direction:column;gap:var(--sp-6)}
+.tl::before{content:'';position:absolute;left:104px;top:var(--sp-2);bottom:var(--sp-2);
+  width:1px;background:var(--line)}
+.tl__day{display:flex;flex-direction:column}
+.tl__row{position:relative;display:grid;grid-template-columns:88px minmax(0,1fr);column-gap:32px}
+.tl__gutter{padding-top:var(--sp-2);text-align:right;min-width:0}
+.tl__date{display:block;font-size:var(--fs-body-lg);font-weight:600;color:var(--text);white-space:nowrap}
+.tl__wd{display:block;color:var(--muted);font-size:var(--fs-micro)}
+.tl__time{color:var(--muted);font-size:var(--fs-micro);font-family:var(--mono)}
+/* 日期节点：主色实心点，用 box-shadow 在主干上开一个口 */
+.tl__node{position:absolute;left:104px;top:18px;width:9px;height:9px;transform:translateX(-50%);
+  border-radius:var(--radius-circle);background:var(--primary);
+  box-shadow:0 0 0 4px var(--bg)}
+/* 往年的日子：空心节点 + 弱化日期，年份这一行反而加重，避免与今年的「9月26日」混读 */
+.tl__day--then .tl__wd{color:var(--text-2);font-weight:600}
+.tl__node--then{width:11px;height:11px;background:var(--panel);border:1.6px solid var(--primary)}
+.tl__date--then{color:var(--text-2)}
+/* 条目节点：空心小点，悬停时点亮 */
+.tl__dot{position:absolute;left:104px;top:16px;width:7px;height:7px;transform:translateX(-50%);
+  border-radius:var(--radius-circle);background:var(--panel);border:1.6px solid var(--line-2);
+  transition:border-color .16s,background .16s}
+.tl__item:hover .tl__dot{border-color:var(--primary);background:var(--primary-soft)}
+
+/* Memo 条目：无边框、无底，靠主干组织；悬停才浮起 */
+.tl__content{min-width:0;padding:var(--sp-1) 0 var(--sp-4)}
+.memo{position:relative;padding:var(--sp-2) var(--sp-3) var(--sp-3);border-radius:var(--radius);
+  transition:background .16s}
+.memo:hover{background:var(--panel-2)}
+.memo__body{font-size:var(--fs-body);color:var(--text);line-height:1.72}
+.memo__body p+p{margin-top:var(--sp-2)}
+.memo__body ul{padding-left:1.2em;list-style:disc}
+.memo__body li+li{margin-top:2px}
+.memo__body code{font-family:var(--mono);font-size:var(--fs-small);
+  padding:1px 5px;border-radius:var(--radius-sm);background:var(--panel-2);color:var(--text-2)}
+.memo__body strong{font-weight:650}
+.memo__foot{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1);margin-top:var(--sp-2)}
+.memo__more{margin-left:auto;display:grid;place-items:center;width:24px;height:24px;
+  border-radius:var(--radius-sm);color:var(--muted);opacity:.55;transition:.16s}
+.memo:hover .memo__more,.memo__more:focus-visible{opacity:1}
+.memo__more:hover{background:var(--panel-3);color:var(--text)}
+.memo__media{display:flex;gap:var(--sp-2);margin-top:var(--sp-3)}
+.memo__media img{width:132px;height:99px;object-fit:cover;border-radius:var(--radius);
+  border:1px solid var(--line);background:var(--ph-stripe);display:block}
+
+/* 瀑布流：列布局做砖墙，高度差由图片比例产生。
+   4 列；DESIGN.md §2.4 原写「3 列 → 2 列」，这里改成 4 → 3，见文末提案（待确认）。
+   窄到 980 / 700 再各降一档，属临时值。 */
+.flow{column-count:4;column-gap:var(--sp-3)}
+@media (max-width:1240px){.flow{column-count:3}}
+@media (max-width:980px){.flow{column-count:2}}  /* 【临时值·待确认】 */
+@media (max-width:700px){.flow{column-count:1}}  /* 【临时值·待确认】 */
+.wf{break-inside:avoid;margin-bottom:var(--sp-3);overflow:hidden;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius-lg);transition:.16s}
+.wf:hover{border-color:var(--line-2);box-shadow:var(--shadow-1)}
+/* 整张图就是「打开这条 Memo」的入口（设计文档 §8.4：点开看该条内容）。
+   图外的信息一律不常驻：卡高＝图高，砖墙的高低差才不会被固定文字块摊薄 */
+.wf__open{position:relative;display:block;width:100%}
+/* 图片按比例占位：不论接口回什么尺寸，砖墙高度都是确定的。比例跨度必须够大 ——
+   2/3 ↔ 16/10 在 201px 列宽下给出约 176px 落差，否则看着像横竖对齐的整齐网格 */
+.wf__img{display:block;width:100%;height:auto;object-fit:cover;background:var(--ph-stripe)}
+.wf__img--portrait{aspect-ratio:2/3}
+.wf__img--tall{aspect-ratio:4/5}
+.wf__img--sq{aspect-ratio:1/1}
+.wf__img--wide{aspect-ratio:16/10}
+/* 悬停 / 聚焦时从图片底部滑上来的信息条：日期 + 两行文字，不含标签。
+   不铺实底、不描边 —— 改用半透明渐变：顶上一小段渐到全透明，所以边缘没有硬线；
+   底部不透明度约 0.71（原来是 0.86 的实底），更透。
+   渐变由令牌拼装（--topbar-bg + transparent + color-mix），没有裸色值。
+   min-height 多出的 16px 正好是文字上方那段渐变，靠 justify-content:flex-end 空出来。 */
+.wf__meta{position:absolute;left:0;right:0;bottom:0;min-height:90px;
+  display:flex;flex-direction:column;justify-content:flex-end;gap:var(--sp-1);
+  padding:var(--sp-2);
+  background:linear-gradient(180deg,transparent,
+    color-mix(in srgb,var(--topbar-bg) 82%,transparent) 16px);
+  transform:translateY(101%);transition:transform .18s ease}
+.wf:hover .wf__meta,.wf:focus-within .wf__meta{transform:translateY(0)}
+.wf__date{color:var(--muted);font-size:var(--fs-micro);font-family:var(--mono)}
+.wf__cap{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  color:var(--text-2);font-size:var(--fs-small);line-height:1.5}
+/* 触屏没有悬停：信息条常驻，不让「悬停」成为唯一入口（DESIGN.md §2.4-2） */
+@media (hover:none){.wf__meta{transform:none}}
+/* 「随机漫步」跳到的那一张 */
+.wf.is-walked{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+
+/* ============================================================
+   6. 待办 —— 「状态流转」：概览内联 + 列表密集 / 看板分散
+   ============================================================ */
+/* 页头只剩一条主控（哪一页 · 概览 · 视图 · 添加）。
+   筛选条被移进滚动容器里（见 .page--task .page__scroll），两种形态并列对比，
+   切底部预览条的「顶部方案」：基线＝胶囊横排；body[data-tkhead="float"]＝悬浮小组件。 */
+.tkhead{position:relative;flex:none;border-bottom:1px solid var(--line)}
+.tkhead__main{display:flex;flex-wrap:wrap;align-items:center;
+  gap:var(--sp-2) var(--sp-3);padding:var(--sp-3) var(--sp-5)}
+
+/* —— 筛选条的两形态（同一份 DOM，只换外壳） ——
+   形态一「胶囊」＝基线：去掉分段控件的壳，按钮自身变成胶囊，每组前面一个灰色组名。
+   形态二「悬浮」：收成左侧顶部的紧凑卡片，不占横排空间（飘在列表上），且只在列表模式出现。
+   两者都保留（用户 2026-09-27 定）：将来在「设置」里让用户自选，故不做二选一。 */
+
+/* 基线 · 胶囊横排：宽度与下面的列表同一个上限、同样居中（不是向标题栏靠齐的满宽）。
+   .tkhead__dock 是外壳：胶囊形态下只是个普通块，造型全在 .tkhead__bar 上 */
+.tkhead__dock{flex:none}
+.tkhead__bar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);flex:none;
+  width:100%;max-width:var(--cap);margin:0 auto;padding:0 0 var(--sp-2)}
+/* 组名（状态 / 优先级 / 截止）：胶囊不靠外壳成组，用一行微标点明组意 */
+.tkhead__gl{color:var(--muted);font-size:var(--fs-micro);margin-right:var(--sp-1)}
+/* 看板下筛选条取消上限，铺满收窄后的容器（与看板三列同宽，不另算一套） */
+body[data-taskview="kanban"] .tkhead__bar{max-width:none}
+
+.tkhead__bar .seg{background:none;border:0;padding:0;gap:var(--sp-1)}
+.tkhead__bar .seg button{height:21px;padding:0 var(--sp-2);
+  border:1px solid var(--line);border-radius:var(--radius-pill);
+  background:var(--panel);color:var(--text-2);font-size:var(--fs-micro)}
+.tkhead__bar .seg button[aria-pressed="true"]{background:var(--primary-soft);
+  border-color:var(--primary-line);color:var(--primary-ink);box-shadow:none}
+
+/* 形态二 · 悬浮小组件：**不占横排空间** —— 卡片脱出这一行的占位，浮在列表左上角。
+   做法是给外壳 .tkhead__dock 一个零高度 + sticky：占位为零（列表仍从顶部开始），
+   又因为 sticky 常驻在滚动容器顶部，滑动列表时它也一直在。
+   （零高度是「不占位」的必要条件：直接对卡片写 sticky，它就会在列表上方撑出一整行。） */
+body[data-tkhead="float"] .tkhead__dock{position:sticky;top:0;height:0;z-index:10}
+body[data-tkhead="float"] .tkhead__bar{flex-direction:column;align-items:flex-start;gap:0;
+  width:max-content;max-width:100%;margin:0;
+  padding:var(--sp-3);background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow-1)}
+/* 悬浮小组件只在列表模式出现：看板由列头承载状态与计数，再把筛选条浮在卡片上只会压住内容 */
+body[data-tkhead="float"][data-taskview="kanban"] .tkhead__dock{display:none}
+body[data-tkhead="float"] .tkhead__bar .pane-head__spacer{display:none}
+/* 竖直排布时把「组名 → 它那排胶囊」收紧到 2px，组与组之间留 var(--sp-3) */
+body[data-tkhead="float"] .tkhead__gl{margin:var(--sp-3) 0 2px}
+body[data-tkhead="float"] .tkhead__gl:first-child{margin-top:0}
+body[data-tkhead="float"] .tkhead__switch{margin-top:var(--sp-3)}
+/* 状态筛选把计数带在按钮上：概览与筛选不再各数一遍 */
+.seg .n{margin-left:var(--sp-1);color:var(--muted);font-variant-numeric:tabular-nums}
+.seg button[aria-pressed="true"] .n{color:var(--primary-ink)}
+/* 看板下：列头已经承载状态与计数，状态筛选与「隐藏已完成」失去意义，收起 */
+body[data-taskview="kanban"] .seg--status,
+body[data-taskview="kanban"] .tkhead__switch{display:none}
+
+/* 概览内联：细进度条 + 总数与完成率。分状态计数挂在状态筛选上，这里不重复 */
+.tksum{display:flex;align-items:center;gap:var(--sp-2);color:var(--muted);font-size:var(--fs-small)}
+.tksum b{color:var(--text);font-variant-numeric:tabular-nums}
+/* 堆叠进度条：三段按条数占比；颜色只是辅助，旁边的文字才表意 */
+.tksum__bar{flex:none;width:150px;height:5px;gap:2px;background:transparent}
+.tksum__bar span{display:block;border-radius:var(--radius-pill)}
+.bar__todo{background:var(--line-2)} .bar__doing{background:var(--amber)} .bar__done{background:var(--green)}
+
+/* 待办的两块视图互斥切换：滚动容器改成纵向 flex，可见的那块自动铺满高与宽。
+   列表受 920px 上限（.page--task 的 --cap）；看板撑满高度，宽度收在主操作区的 80%。 */
+.page--task .page__scroll{display:flex;flex-direction:column}
+.page--task [data-view-pane]{flex:1}
+.wrap--board .tkkan{flex:1}
+/* 空态在整块高度里居中，不贴顶 */
+.page--task [data-view-pane]>.empty{flex:1;justify-content:center}
+
+/* 看板整体收窄：滚动容器是看板与筛选条的共同父级，把它收到主操作区（.page-body）的 80% 并居中，
+   看板三列与筛选条跟着一起对齐（看板下筛选条是 max-width:none，正好铺满同一个内容盒）。
+   必须一起写 flex:none —— .page__scroll 的 flex:1 是 flex-basis:0 + grow:1，
+   只给 width 会被 flex-grow 吃回满宽。 */
+body[data-taskview="kanban"] .page--task .page__scroll{flex:none;width:80%;margin:0 auto}
+
+/* 待办详情：**浮层侧滑**（position:absolute 盖在原界面上，不占位、不推挤列表与看板）。
+   宽度沿用 DESIGN.md §2.4 的「侧滑详情 390 / ≤1080px 330」。
+   不铺遮罩层：用户要的是「面板开着时还能点旁边别的任务切过去」，加遮罩就把这条路挡死了；
+   关闭靠 × / Esc，或直接点另一条切换。 */
+.page--task .page-body{position:relative}
+.tdetail{position:absolute;top:0;right:0;bottom:0;width:390px;z-index:40;
+  display:flex;flex-direction:column;background:var(--bg-soft);
+  border-left:1px solid var(--line);box-shadow:var(--shadow-3);
+  transform:translateX(100%);transition:transform .22s ease}
+.tdetail.is-in{transform:translateX(0)}
+@media (max-width:1080px){.tdetail{width:330px}}
+.tdetail__hd{flex:none;display:flex;align-items:center;gap:var(--sp-2);
+  padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--line)}
+.tdetail__t{margin:0;font-size:var(--fs-title);font-weight:650}
+.tdetail__scroll{flex:1;overflow-y:auto;padding:var(--sp-4)}
+.tdetail__blk+.tdetail__blk{margin-top:var(--sp-5)}
+.tdetail__k{margin:0 0 var(--sp-2);color:var(--muted);font-size:var(--fs-micro);
+  font-weight:600;letter-spacing:.06em}
+.tdetail__ttl{margin:0 0 var(--sp-3);font-size:var(--fs-body-lg);font-weight:600;line-height:1.5}
+.tdetail__props{display:flex;flex-wrap:wrap;gap:var(--sp-1)}
+.tdetail__p{margin:0;color:var(--text-2);font-size:var(--fs-body);line-height:1.7}
+.tdetail__subs{display:flex;flex-direction:column;gap:var(--sp-2)}
+.tdetail__sub{display:flex;align-items:center;gap:var(--sp-2);color:var(--text-2);font-size:var(--fs-body)}
+.tdetail__acts{flex:none;display:flex;gap:var(--sp-2);padding:var(--sp-3) var(--sp-4);
+  border-top:1px solid var(--line)}
+/* 被打开的那一条：仅作选中标记，不改布局（浮层模式下没有任何要让位的东西） */
+.tkrow.is-open{background:var(--panel-2);box-shadow:inset 2.5px 0 0 var(--primary)}
+.tkcard.is-open{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+/* 点条目正文即打开详情（真实实现里应换成真按钮，见文末提案） */
+.tkrow__title,.tkcard__title{cursor:pointer}
+
+/* 列表：按状态成段 */
+.tkgrp{display:flex;flex-direction:column;gap:var(--sp-2)}
+.tkgrp__head{display:flex;align-items:center;gap:var(--sp-2);padding:0 var(--sp-1)}
+.tkgrp__dot{flex:none;width:7px;height:7px;border-radius:var(--radius-circle);background:var(--line-2)}
+.tkgrp__dot--doing{background:var(--amber)} .tkgrp__dot--done{background:var(--green)}
+.tkgrp__name{font-size:var(--fs-body);font-weight:600}
+.tkgrp__n{color:var(--muted);font-size:var(--fs-micro);font-variant-numeric:tabular-nums}
+.tkgrp__rule{flex:1;height:1px;background:var(--line)}
+
+/* 密集行：一行一件事，标题单行截断。列表要「集中」，不铺卡片 */
+.tkrows{display:flex;flex-direction:column;overflow:hidden;
+  border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--panel)}
+.tkrow{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;
+  align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);transition:background .16s}
+.tkrow+.tkrow{border-top:1px solid var(--line)}
+.tkrow:hover{background:var(--panel-2)}
+.tkrow__title{min-width:0;font-size:var(--fs-body);color:var(--text);line-height:1.5;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tkrow__meta{display:flex;align-items:center;gap:var(--sp-1);flex:none}
+.tkrow__acts{display:flex;align-items:center;gap:var(--sp-1);flex:none}
+/* 逾期：左侧危险色刻线 + 可见的「已逾期」胶囊，不靠颜色单独表意 */
+.tkrow--late::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red)}
+.tkrow--done{background:var(--bg-soft)}
+.tkrow--done .tkrow__title{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line-2)}
+
+.tkcheck{flex:none;display:grid;place-items:center;width:17px;height:17px;
+  border:1.6px solid var(--line-2);border-radius:var(--radius-sm);background:var(--panel);color:transparent}
+/* 密集行的行高小于 44px，命中区收到行高，避免与上下相邻行的勾选区重叠抢点击 */
+.tkrow .tkcheck.hit::after{height:100%}
+.tkcheck[aria-checked="true"]{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+
+/* 看板卡片：竖排、信息完整。看板要「分散」，保留卡片语言 */
+.tkcard{position:relative;display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-3);
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  transition:border-color .16s,box-shadow .16s}
+.tkcard:hover{border-color:var(--line-2);box-shadow:var(--shadow-1)}
+/* 逾期：左侧危险色刻线 + 可见的「已逾期」胶囊，不靠颜色单独表意 */
+.tkcard--late::before{content:'';position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;
+  background:var(--red);border-radius:var(--radius) 0 0 var(--radius)}
+.tkcard--late{border-color:var(--red-line)}
+.tkcard--done{background:var(--bg-soft)}
+.tkcard--done .tkcard__title{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line-2)}
+.tkcard__main{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--sp-2)}
+.tkcard__title{font-size:var(--fs-body-lg);color:var(--text);line-height:1.4}
+.tkcard__meta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1)}
+.tkcard__acts{display:flex;align-items:center;gap:var(--sp-1);flex:none;margin-top:var(--sp-1)}
+
+/* 看板：三列实底列，列头带状态点与计数。列等宽，宽度由可用空间决定，不再受 920px 上限 */
+.tkkan{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-4);
+  align-items:stretch}
+@media (max-width:1080px){.tkkan{grid-template-columns:minmax(0,1fr)}}
+.tkkan__col{display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-3);
+  background:var(--panel-2);border:1px solid var(--line);border-radius:var(--radius-lg)}
+.tkkan__head{display:flex;align-items:center;gap:var(--sp-2);padding-bottom:var(--sp-2);
+  border-bottom:1px solid var(--line)}
+.tkkan__name{font-size:var(--fs-body-lg);font-weight:600}
+.tkkan__n{margin-left:auto;padding:1px var(--sp-2);border-radius:var(--radius-pill);
+  background:var(--panel);color:var(--text-2);font-size:var(--fs-micro);
+  font-variant-numeric:tabular-nums}
+.tkkan__body{display:flex;flex-direction:column;gap:var(--sp-2);flex:1}
+.tkkan__body .tkcard{background:var(--panel)}
+.tkkan__empty{flex:1;display:grid;place-items:center;padding:var(--sp-4) 0;
+  color:var(--muted);font-size:var(--fs-micro);text-align:center}
+
+/* 「隐藏已完成」生效时的收口 */
+body.hide-done [data-status="done"]{display:none}
+
+/* ============================================================
+   7. 预览控制条（不属于应用界面）
+   ============================================================ */
+.previewbar{position:fixed;left:50%;bottom:var(--sp-4);transform:translateX(-50%);z-index:60;
+  display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3);
+  border-radius:var(--radius-pill);background:var(--text);color:var(--bg);
+  box-shadow:var(--shadow-3);font-size:var(--fs-small)}
+.previewbar__tag{opacity:.62;font-size:var(--fs-micro);white-space:nowrap}
+.previewbar .seg{background:rgba(128,128,128,.18);border-color:rgba(128,128,128,.28)}
+.previewbar .seg button{color:inherit;opacity:.68;height:23px;padding:0 var(--sp-2);font-size:var(--fs-micro)}
+.previewbar .seg button:hover{opacity:.9}
+.previewbar .seg button[aria-pressed="true"]{background:var(--bg);color:var(--text);box-shadow:none;opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ============ 图标 sprite（stroke 规格：1.6px / 无填充 / currentColor） ============ -->
+<svg class="sprite" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6.5 3.5h7L18 8v12.5H6.5z"/><path d="M13.5 3.5V8H18"/><path d="M9.5 12.5h7M9.5 16h4.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-check-sq" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8 12.2l2.8 2.8L16.5 9.5"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 4.5v15M15 4.5v15"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 3.5h6l-.7 5.2 3.2 3.1H6.5l3.2-3.1z"/><path d="M12 11.8v8.7"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v8.3a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M11 3.5H4.5v6.5l9 9a2 2 0 0 0 2.8 0l3.7-3.7a2 2 0 0 0 0-2.8z"/><circle cx="8" cy="7" r="1.3"/></symbol>
+  <symbol id="i-cloud-ok" viewBox="0 0 24 24"><path d="M7 18.5a4.2 4.2 0 0 1-.3-8.4 5.3 5.3 0 0 1 10.2-1.3A4 4 0 1 1 17 18.5z"/><path d="M9.3 13.6l2 2 3.3-3.7"/></symbol>
+  <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M7 18.5a4.2 4.2 0 0 1-.3-8.4 5.3 5.3 0 0 1 10.2-1.3A4 4 0 1 1 17 18.5z"/><path d="M12 17v-5M9.7 14.3L12 12l2.3 2.3"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l8.5 15h-17z"/><path d="M12 10v4.5M12 17.2v.2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.2v4.6h-4.6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.8"/><path d="M4.8 20c0-3.6 3.2-6 7.2-6s7.2 2.4 7.2 6"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.8 10.4L12 4l8.2 6.4V19a1.6 1.6 0 0 1-1.6 1.6h-3.8v-6.2H9.2v6.2H5.4A1.6 1.6 0 0 1 3.8 19z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-kanban" viewBox="0 0 24 24"><rect x="3.8" y="4.5" width="4.6" height="15" rx="1.5"/><rect x="9.7" y="4.5" width="4.6" height="10" rx="1.5"/><rect x="15.6" y="4.5" width="4.6" height="13" rx="1.5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.5 6.5l5.5 5.5-5.5 5.5"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="M14.5 5.5l4 4"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="8.6" cy="9.6" r="1.7"/><path d="M4 17l4.5-4.5 4 4 3-3 4.5 4.5"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.2 3.5L5.6 13.4h5.2l-.8 6.9 7.6-9.9h-5.2z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+</defs></svg>
+
+<div class="shell">
+
+  <!-- ==================== 顶栏（固定 6 块） ==================== -->
+  <header class="topbar">
+    <div class="brand">
+      <!-- 品牌标记＝站点图标本体，22×22、裸放不加容器（DESIGN.md §5.5 第 5 条） -->
+      <img src="../../apps/web/public/icon.svg" alt="MeNote">
+      <b>MeNote</b>
+    </div>
+    <div class="crumb">
+      <span id="crumbA">首页</span>
+      <span class="sep">/</span>
+      <b id="crumbB">状态甲板</b>
+    </div>
+    <div class="search">
+      <svg class="ic ic--sm"><use href="#i-search"/></svg>
+      <input type="text" placeholder="搜索标题、正文、标签…" aria-label="搜索">
+      <kbd>Ctrl K</kbd>
+    </div>
+    <div class="pilltop"><svg class="ic ic--sm"><use href="#i-cloud-ok"/></svg>已同步</div>
+    <div class="capsule"><svg class="ic ic--sm"><use href="#i-unlock"/></svg>已解锁<span class="timer">4:32</span></div>
+    <div class="avatar" role="button" tabindex="0" title="账户与设置">M</div>
+  </header>
+
+  <div class="body-row">
+
+    <!-- ==================== 功能栏 ==================== -->
+    <aside class="fnbar">
+      <div class="fn-top">
+        <button class="btn-new"><svg class="ic ic--sm"><use href="#i-plus"/></svg>新建笔记</button>
+
+        <div class="composer">
+          <textarea placeholder="记点什么……  Ctrl+Enter 发布" aria-label="快速录入"></textarea>
+          <div class="composer__extra">
+            <span class="chip"># 项目</span>
+            <span class="chip"># 读书</span>
+            <span class="chip"># 自托管</span>
+            <span class="chip"># 灵感</span>
+          </div>
+          <div class="mode-row">
+            <div class="seg seg--incomposer">
+              <button aria-pressed="true"><svg class="ic ic--sm"><use href="#i-clock"/></svg>Memo</button>
+              <button aria-pressed="false"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>待办</button>
+              <button aria-pressed="false"><svg class="ic ic--sm"><use href="#i-note"/></svg>笔记</button>
+            </div>
+            <button class="btn btn--primary btn--sm" title="Ctrl+Enter 发布">发布</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="fn-scroll scroll-thin">
+        <div class="nav-seg">
+          <a class="seg-item" href="#" data-nav="home" aria-current="page"><svg class="ic ic--sm"><use href="#i-home"/></svg>首页</a>
+          <a class="seg-item" href="#" data-nav="memo"><svg class="ic ic--sm"><use href="#i-clock"/></svg>Memo</a>
+          <a class="seg-item" href="#" data-nav="task"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>待办</a>
+        </div>
+
+        <div class="nav-group">
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-refresh"/></svg>最近编辑<span class="n">24</span></a>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-star"/></svg>收藏<span class="n">7</span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group__title"><svg class="ic ic--sm"><use href="#i-folder"/></svg>笔记本</div>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-folder"/></svg>学习<span class="n">3</span></a>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-folder"/></svg>自托管<span class="n">2</span></a>
+          <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-folder"/></svg>项目<span class="n">4</span></a>
+        </div>
+
+        <div class="nav-group">
+          <div class="nav-group__title"><svg class="ic ic--sm"><use href="#i-tag"/></svg>标签</div>
+          <div class="nav-tags">
+            <span class="chip chip--tag"># 读书</span>
+            <span class="chip chip--tag"># 自托管</span>
+            <span class="chip chip--tag"># 英语</span>
+            <span class="chip chip--tag"># 灵感</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fn-vault">
+        <a class="nav-item" href="#"><svg class="ic ic--sm"><use href="#i-lock"/></svg>加密空间<span class="n">12</span></a>
+      </div>
+    </aside>
+
+    <!-- ==================== 主操作区 ==================== -->
+    <main class="work">
+
+      <!-- ============================================================
+           页面一：首页 —— 「状态甲板」
+           ============================================================ -->
+      <section class="page page--home is-active" data-page="home" aria-label="首页">
+        <header class="pane-head">
+          <h1 class="pane-title">首页</h1>
+          <div class="pane-head__meta">
+            <span>9月27日 周日</span>
+            <button class="infohint" aria-label="首页数据口径">
+              <svg class="ic ic--sm"><use href="#i-info"/></svg>
+              <span class="infohint__pop">首页内容全部由本地元数据算出，不发额外请求。统计始终计入加密空间与单篇加密的条目，不区分锁定状态。</span>
+            </button>
+          </div>
+          <div class="pane-head__spacer"></div>
+          <div class="pane-head__actions">
+            <button class="btn btn--sm"><svg class="ic ic--sm"><use href="#i-search"/></svg>搜索</button>
+          </div>
+        </header>
+
+        <div class="page__scroll">
+          <div class="wrap">
+
+            <!-- —— 概括预览（三块内容重新配重：今日待办当焦点，数字与动态做右栏） —— -->
+            <div class="deck">
+
+              <!-- 焦点：今日待办 -->
+              <section class="card card--focus" aria-label="今日待办">
+                <div class="blk-head">
+                  <svg class="ic ic--sm" style="color:var(--primary)"><use href="#i-check-sq"/></svg>
+                  <h2 class="blk-title">今日待办</h2>
+                  <span class="blk-count" data-when="full">未完成 <b>4</b> 项</span>
+                  <button class="infohint infohint--right" aria-label="今日待办来源">
+                    <svg class="ic ic--sm"><use href="#i-info"/></svg>
+                    <span class="infohint__pop">内容来自清单 Memo，与待办视图同一批数据。</span>
+                  </button>
+                </div>
+
+                <ul class="todo" data-when="full">
+                  <li class="todo__row">
+                    <span class="todo__mark todo__mark--high" aria-hidden="true"></span>
+                    <button class="todo__title">整理 M4 附件上传的接口草案</button>
+                    <span class="todo__meta">
+                      <span class="pill pill--amber">高优先级</span>
+                      <span class="pill">9月30日</span>
+                    </span>
+                  </li>
+                  <li class="todo__row">
+                    <span class="todo__mark todo__mark--mid" aria-hidden="true"></span>
+                    <button class="todo__title">把上周的会议记录拆成可执行任务</button>
+                    <span class="todo__meta">
+                      <span class="pill pill--red"><svg class="ic ic--sm"><use href="#i-alert"/></svg>已逾期 3 天</span>
+                    </span>
+                  </li>
+                  <li class="todo__row">
+                    <span class="todo__mark" aria-hidden="true"></span>
+                    <button class="todo__title">给自托管备份加一个 S3 备选目标</button>
+                    <span class="todo__meta"><span class="pill">未设日期</span></span>
+                  </li>
+                  <li class="todo__row">
+                    <span class="todo__mark" aria-hidden="true"></span>
+                    <button class="todo__title">读《设计中的设计》30 页</button>
+                    <span class="todo__meta"><span class="pill">9月27日</span></span>
+                  </li>
+                </ul>
+
+                <!-- 空状态：说明为什么空 + 给出出口（DESIGN.md §5.4-3） -->
+                <div class="empty" data-when="empty" hidden>
+                  <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-check-sq"/></svg></span>
+                  <p class="empty__t">今天没有待办</p>
+                  <p class="empty__h">在功能栏的录入框里切到「待办」，写一行按 Ctrl+Enter 就会出现在这里。</p>
+                  <button class="btn btn--primary btn--sm">切到待办录入</button>
+                </div>
+
+                <div class="blk-foot" data-when="full">
+                  <button class="link">打开待办视图<svg class="ic ic--sm"><use href="#i-chev-r"/></svg></button>
+                </div>
+              </section>
+
+              <!-- 右栏：数字带 + 最近动态 -->
+              <div class="wrap" style="--cap:none;gap:var(--sp-5)">
+
+                <section aria-label="条目统计">
+                  <div class="statband__hd">
+                    <h2 class="blk-title" style="font-size:var(--fs-small)">条目统计</h2>
+                    <button class="infohint infohint--right" aria-label="统计口径">
+                      <svg class="ic ic--sm"><use href="#i-info"/></svg>
+                      <span class="infohint__pop">全部由本地元数据计算，不发额外请求；始终计入加密空间与单篇加密的条目，不区分锁定状态。</span>
+                    </button>
+                  </div>
+                  <div class="statband">
+                    <div class="statband__cell"><div class="statband__n">42</div><div class="statband__l">笔记</div></div>
+                    <div class="statband__cell"><div class="statband__n">7</div><div class="statband__l">表格</div></div>
+                    <div class="statband__cell"><div class="statband__n">186</div><div class="statband__l">Memo</div></div>
+                  </div>
+                </section>
+
+                <section class="card" aria-label="最近动态">
+                  <div class="blk-head">
+                    <svg class="ic ic--sm"><use href="#i-clock"/></svg>
+                    <h2 class="blk-title">最近动态</h2>
+                    <button class="infohint infohint--right" aria-label="最近动态口径">
+                      <svg class="ic ic--sm"><use href="#i-info"/></svg>
+                      <span class="infohint__pop">列出最近更新的笔记与表格，含加密空间内的条目。Memo 按时间轴单独查看，不进这张卡。</span>
+                    </button>
+                  </div>
+
+                  <ol class="mini" data-when="full">
+                    <li class="mini__row">
+                      <span class="mini__ico"><svg class="ic ic--sm"><use href="#i-note"/></svg></span>
+                      <button class="mini__title">M4 附件与版本历史 · 设计</button>
+                      <time class="mini__when">今天</time>
+                    </li>
+                    <li class="mini__row">
+                      <span class="mini__ico"><svg class="ic ic--sm"><use href="#i-table"/></svg></span>
+                      <button class="mini__title">备份目标对照表</button>
+                      <time class="mini__when">昨天</time>
+                    </li>
+                    <li class="mini__row">
+                      <span class="mini__ico"><svg class="ic ic--sm"><use href="#i-note"/></svg></span>
+                      <button class="mini__title">Workers Builds 部署备忘</button>
+                      <time class="mini__when">9月24日</time>
+                    </li>
+                    <li class="mini__row">
+                      <span class="mini__ico"><svg class="ic ic--sm"><use href="#i-note"/></svg></span>
+                      <button class="mini__title">读《设计中的设计》</button>
+                      <time class="mini__when">9月23日</time>
+                    </li>
+                  </ol>
+
+                  <div class="empty" data-when="empty" hidden>
+                    <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-note"/></svg></span>
+                    <p class="empty__t">还没有笔记</p>
+                    <p class="empty__h">新建一篇笔记，它就会出现在这里。</p>
+                    <button class="btn btn--primary btn--sm">新建笔记</button>
+                  </div>
+
+                  <div class="blk-foot" data-when="full">
+                    <button class="link">查看 186 条 Memo<svg class="ic ic--sm"><use href="#i-chev-r"/></svg></button>
+                  </div>
+                </section>
+
+              </div>
+            </div>
+
+            <!-- —— 快捷方式：内联动作带 —— -->
+            <section aria-label="快捷方式">
+              <div class="actionbar">
+                <span class="actionbar__label">快捷方式</span>
+                <button class="act"><svg class="ic ic--sm"><use href="#i-plus"/></svg>新建笔记</button>
+                <button class="act"><svg class="ic ic--sm"><use href="#i-clock"/></svg>记录 Memo</button>
+                <button class="act"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>新建待办</button>
+                <button class="act"><svg class="ic ic--sm"><use href="#i-lock"/></svg>打开加密空间</button>
+                <button class="act"><svg class="ic ic--sm"><use href="#i-search"/></svg>搜索<kbd style="font-family:var(--mono);font-size:var(--fs-micro);color:var(--muted)">Ctrl K</kbd></button>
+              </div>
+            </section>
+
+            <!-- —— 快速导航 —— -->
+            <section class="qn" aria-label="快速导航">
+              <div class="qn__grp">
+                <div class="qn__title">文件夹</div>
+                <div class="qn__row">
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-folder"/></svg>学习<span class="n">3</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-folder"/></svg>自托管<span class="n">2</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-folder"/></svg>项目<span class="n">4</span></button>
+                </div>
+              </div>
+
+              <div class="qn__grp">
+                <div class="qn__title">标签</div>
+                <div class="qn__row">
+                  <button class="chip chip--tag hit"># 读书<span class="n">18</span></button>
+                  <button class="chip chip--tag hit"># 自托管<span class="n">24</span></button>
+                  <button class="chip chip--tag hit"># 英语<span class="n">9</span></button>
+                  <button class="chip chip--tag hit"># 灵感<span class="n">31</span></button>
+                  <button class="chip chip--tag hit"># 项目<span class="n">12</span></button>
+                </div>
+              </div>
+
+              <div class="qn__grp">
+                <div class="qn__title">常用视图</div>
+                <div class="qn__row">
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-refresh"/></svg>最近编辑<span class="n">24</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-star"/></svg>收藏<span class="n">7</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-clock"/></svg>Memo<span class="n">186</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>待办<span class="n">14</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-folder"/></svg>笔记本<span class="n">9</span></button>
+                  <button class="chip hit"><svg class="ic ic--sm"><use href="#i-lock"/></svg>加密空间<span class="n">12</span></button>
+                </div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           页面二：Memo —— 「时间主干」
+           ============================================================ -->
+      <section class="page page--memo" data-page="memo" aria-label="Memo">
+        <!-- 页头：只说「这是什么页、几条、怎么看、能不能加」。
+             视图切换固定在最右、添加的左边：位置不随筛选内容增减而移动。 -->
+        <header class="memo-head">
+          <h1 class="pane-title">Memo</h1>
+          <span class="pane-head__meta"><span data-when="full">186 条</span><span data-when="empty" hidden>0 条</span></span>
+          <button class="infohint infohint--left" aria-label="Memo 说明">
+            <svg class="ic ic--sm"><use href="#i-info"/></svg>
+            <span class="infohint__pop">按天分组倒序；置顶的 Memo 排在最前。清单 Memo 也会出现在这里，带「清单」标记。</span>
+          </button>
+          <div class="pane-head__spacer"></div>
+          <div class="seg seg--view">
+            <button aria-pressed="true" data-memo-view="timeline"><svg class="ic ic--sm"><use href="#i-list"/></svg>时间轴</button>
+            <button aria-pressed="false" data-memo-view="flow"><svg class="ic ic--sm"><use href="#i-grid"/></svg>瀑布流</button>
+          </div>
+          <button class="btn btn--primary btn--sm btn--add"><svg class="ic ic--sm"><use href="#i-plus"/></svg>添加 Memo</button>
+        </header>
+
+        <div class="page-body">
+          <!-- 页内二级侧栏，自上而下：概况（概述 · 热力图）→ 入口（随机漫步 · 那年今日）
+               → 筛选（日期 · 标签）。视图切换已移到页头最右，标签按用户要求放最后。 -->
+          <aside class="subbar scroll-thin" aria-label="Memo 的概述、入口与筛选">
+            <!-- 概述：三个数字并排的整合块 -->
+            <section class="subblk" data-when="full">
+              <h2 class="subblk__t">概述</h2>
+              <div class="stat3">
+                <div class="stat3__cell"><b class="stat3__n">186</b><span class="stat3__l">总条数</span></div>
+                <div class="stat3__cell"><b class="stat3__n">12</b><span class="stat3__l">本月新增</span></div>
+                <div class="stat3__cell"><b class="stat3__n">42</b><span class="stat3__l">记录天数</span></div>
+              </div>
+            </section>
+
+            <!-- 热力图：近 12 周 × 7 天，格子按当天条数分 5 档；数字与图例同时给出，不靠颜色单独表意 -->
+            <section class="subblk" data-when="full">
+              <h2 class="subblk__t">热力图</h2>
+              <p class="heat__sum">近 12 周 · 共 41 条</p>
+              <div class="heat" role="img" aria-label="近 12 周记录密度：每周一列、7 天一行，共 41 条，颜色越深当天记的越多">
+                <i class="hm"></i><i class="hm"></i><i class="hm hm--2"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm hm--3"></i><i class="hm"></i>
+                <i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--3"></i><i class="hm"></i><i class="hm"></i>
+                <i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm hm--4"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm"></i>
+                <i class="hm hm--2"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm hm--1"></i><i class="hm"></i>
+                <i class="hm"></i><i class="hm hm--3"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm"></i>
+                <i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm"></i>
+                <i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--4"></i><i class="hm hm--2"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm"></i>
+                <i class="hm hm--2"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--1"></i><i class="hm hm--3"></i><i class="hm hm--1"></i><i class="hm"></i>
+                <i class="hm hm--1"></i><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm"></i><i class="hm"></i>
+                <i class="hm"></i><i class="hm hm--3"></i><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm"></i>
+                <i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--4"></i><i class="hm hm--2"></i><i class="hm"></i>
+                <i class="hm"></i><i class="hm hm--1"></i><i class="hm hm--3"></i><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm"></i><i class="hm"></i>
+              </div>
+              <div class="heat__lg"><span>少</span><i class="hm hm--1"></i><i class="hm hm--2"></i><i class="hm hm--3"></i><i class="hm hm--4"></i><span>多</span></div>
+            </section>
+
+            <!-- 入口：随机漫步（只随机跳一条）。不加小标题，按钮本体就是入口 -->
+            <div class="subblk" data-when="full">
+              <button class="subact subact--solo" id="randomWalk" title="从全部 Memo 里随机挑一条跳过去">
+                <svg class="ic ic--sm"><use href="#i-bolt"/></svg>
+                <span class="subact__l">随机漫步</span>
+                <svg class="ic ic--sm subact__go"><use href="#i-chev-r"/></svg>
+              </button>
+            </div>
+
+            <!-- 入口：那年今日（历史上「月-日」离今天最近的一天，不限年份） -->
+            <section class="subblk" data-when="full">
+              <h2 class="subblk__t">那年今日</h2>
+              <button class="otd" id="onThisDay" title="按「月-日」挑历史上离今天最近的一天，不限年份">
+                <span class="otd__hd">
+                  <span class="otd__d">2024年9月26日</span>
+                  <span class="otd__n">1 条</span>
+                </span>
+                <span class="otd__x">D1 建表顺序定成：先 items 再 sync_state，迁移号写进 schema 里对账。</span>
+              </button>
+            </section>
+
+            <section class="subblk" data-when="full">
+              <h2 class="subblk__t">日期</h2>
+              <div class="seg">
+                <button aria-pressed="true">全部</button>
+                <button aria-pressed="false">今天</button>
+                <button aria-pressed="false">本周</button>
+                <button aria-pressed="false">本月</button>
+              </div>
+            </section>
+
+            <section class="subblk" data-when="full">
+              <h2 class="subblk__t">标签</h2>
+              <nav class="sublist">
+                <button class="subitem" aria-pressed="true">全部<span class="n">186</span></button>
+                <button class="subitem" aria-pressed="false"># 项目<span class="n">12</span></button>
+                <button class="subitem" aria-pressed="false"># 读书<span class="n">18</span></button>
+                <button class="subitem" aria-pressed="false"># 自托管<span class="n">24</span></button>
+                <button class="subitem" aria-pressed="false"># 灵感<span class="n">31</span></button>
+                <button class="subitem" aria-pressed="false"># 英语<span class="n">9</span></button>
+              </nav>
+            </section>
+          </aside>
+
+          <div class="page__scroll">
+            <!-- —— 时间轴（默认）：740px 内容上限，按天分组 —— -->
+            <div class="wrap" data-memo-view-pane="timeline">
+
+            <div class="tl" data-when="full">
+              <!-- —— 9月27日 周日 —— -->
+              <section class="tl__day" aria-label="9月27日 周日">
+                <div class="tl__row">
+                  <div class="tl__gutter">
+                    <span class="tl__date">9月27日</span>
+                    <span class="tl__wd">周日</span>
+                  </div>
+                  <span class="tl__node" aria-hidden="true"></span>
+                </div>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">21:05</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>M3 收口复核跑完了，8 处偏离都有据可查，7 项未验证里只有「线上逐屏点验」还卡在 Cloudflare 侧的 <code>BACKUP_CRED_KEY</code>。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="chip chip--tag hit"># 项目</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">14:32</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>原研哉说：设计不是创造形状，而是回到事物的本来面目。放在这个项目上就是——先问这一屏到底要解决什么，再谈长什么样。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="chip chip--tag hit"># 读书</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">11:40</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <ul>
+                          <li>整理 M4 附件上传的接口草案</li>
+                          <li>给自托管备份加一个 S3 备选目标</li>
+                        </ul>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="pill pill--neutral"><svg class="ic ic--sm"><use href="#i-check-sq"/></svg>清单</span>
+                        <span class="chip chip--tag hit"># 项目</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">09:12</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>早上的想法：把首页做成一个真正的<strong>甲板</strong>——左边干活、右边读数，而不是三张等宽卡片。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="chip chip--tag hit"># 灵感</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </section>
+
+              <!-- —— 9月26日 周六 —— -->
+              <section class="tl__day" aria-label="9月26日 周六">
+                <div class="tl__row">
+                  <div class="tl__gutter">
+                    <span class="tl__date">9月26日</span>
+                    <span class="tl__wd">周六</span>
+                  </div>
+                  <span class="tl__node" aria-hidden="true"></span>
+                </div>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">22:15</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>桌面上的参考图，回头照着这个密度改。</p>
+                      </div>
+                      <!-- 样例图片：走项目既定的生图接口；图片管线本身 M4 才落地 -->
+                      <div class="memo__media">
+                        <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=minimalist%20desk%20flat%20lay%2C%20open%20notebook%20with%20handwritten%20notes%2C%20warm%20afternoon%20sunlight%2C%20soft%20film%20photography%2C%20top%20down%20view&image_size=landscape_4_3"
+                             alt="桌面参考图" loading="lazy">
+                      </div>
+                      <div class="memo__foot">
+                        <span class="chip chip--tag hit"># 灵感</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">16:48</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>隐私锁的三档计时在真机上验证通过：N 分钟 / 本次会话 / 当前设备长期，到期后列表与三视图同步回到占位态。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="pill pill--green"><svg class="ic ic--sm"><use href="#i-check"/></svg>已验证</span>
+                        <span class="chip chip--tag hit"># 项目</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">10:20</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>待办视图应该以「状态流转」为核心，不是又一个列表——把三段的占比摆在最上面，一眼就知道还剩多少。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="chip chip--tag hit"># 灵感</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </section>
+
+              <!-- —— 9月24日 周四（含待上传标记） —— -->
+              <section class="tl__day" aria-label="9月24日 周四">
+                <div class="tl__row">
+                  <div class="tl__gutter">
+                    <span class="tl__date">9月24日</span>
+                    <span class="tl__wd">周四</span>
+                  </div>
+                  <span class="tl__node" aria-hidden="true"></span>
+                </div>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">08:30</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>标签筛选放成横向滚动的一行，比折行更稳——录入框的附加项已经证明过了。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="pill pill--amber"><svg class="ic ic--sm"><use href="#i-cloud-up"/></svg>待上传</span>
+                        <span class="chip chip--tag hit"># 灵感</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </section>
+
+              <!-- —— 2024年9月26日 周四（往年）：侧栏「那年今日」的落点。
+                   挑法：在所有往年有记录的日子里，取「月-日」离今天最近的一天（今天是 9月27日，差 1 天）。
+                   往年用空心节点 + 弱化的日期，与今年的日子区分开；倒序，所以排在最后。 —— -->
+              <section class="tl__day tl__day--then" aria-label="2024年9月26日 周四" data-date="2024-09-26">
+                <div class="tl__row">
+                  <div class="tl__gutter">
+                    <span class="tl__date tl__date--then">9月26日</span>
+                    <span class="tl__wd">2024 · 周四</span>
+                  </div>
+                  <span class="tl__node tl__node--then" aria-hidden="true"></span>
+                </div>
+
+                <article class="tl__row tl__item">
+                  <div class="tl__gutter"><time class="tl__time">20:10</time></div>
+                  <span class="tl__dot" aria-hidden="true"></span>
+                  <div class="tl__content">
+                    <div class="memo">
+                      <div class="memo__body">
+                        <p>D1 建表顺序定成：先 items 再 sync_state，迁移号写进 schema 里对账。</p>
+                      </div>
+                      <div class="memo__foot">
+                        <span class="chip chip--tag hit"># 项目</span>
+                        <button class="memo__more hit" aria-label="Memo 的更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </section>
+            </div>
+
+            <!-- 空状态 -->
+            <div class="empty" data-when="empty" hidden>
+              <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-clock"/></svg></span>
+              <p class="empty__t">还没有 Memo</p>
+              <p class="empty__h">用功能栏的录入框随手记一条，按 Ctrl+Enter 发布，就会出现在这条时间轴上。</p>
+              <button class="btn btn--primary btn--sm">切到录入框</button>
+            </div>
+            </div>
+
+            <!-- —— 瀑布流：图片网格。只收有图片的 Memo（设计文档 §8.4），点图开该条内容。
+                 内容宽度收在 840px（比可用宽度窄，图片墙不铺满），4 列，窄屏逐档降列 —— -->
+            <div class="wrap" data-memo-view-pane="flow" style="--cap:840px" hidden>
+              <div class="flow" data-when="full">
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--portrait" loading="lazy" alt="木桌上摊开的笔记本与钢笔，午后暖光"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=open%20notebook%20and%20fountain%20pen%20on%20a%20walnut%20desk%2C%20warm%20afternoon%20light%2C%20shallow%20depth%20of%20field%2C%20editorial%20photography&image_size=portrait_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月27日 21:05</time>
+                      <span class="wf__cap">M3 收口复核跑完了，8 处偏离都有据可查。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--wide" loading="lazy" alt="书架上排列的书脊，暖色台灯"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=bookshelf%20with%20colorful%20book%20spines%2C%20warm%20desk%20lamp%20glow%2C%20cozy%20reading%20nook%2C%20top%20down%20view&image_size=landscape_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月27日 19:40</time>
+                      <span class="wf__cap">读《设计中的设计》30 页，留白那一章值得抄一遍。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--sq" loading="lazy" alt="夜间屏幕上的代码编辑器"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=code%20editor%20on%20a%20laptop%20screen%20at%20night%2C%20dark%20room%2C%20monospace%20text%20clearly%20visible%2C%20moody%20blue%20light&image_size=square">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月26日 22:15</time>
+                      <span class="wf__cap">迁移号写进 schema 里对账这一步，省掉了一整轮排查。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--tall" loading="lazy" alt="窗台上的咖啡杯与翻开的书"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cup%20of%20pour%20over%20coffee%20and%20an%20open%20book%20on%20a%20windowsill%2C%20soft%20morning%20light%2C%20minimal%20still%20life&image_size=portrait_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月26日 16:48</time>
+                      <span class="wf__cap">早上那半小时不被打断，是一天里唯一能读进去的时间。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--wide" loading="lazy" alt="白板上的架构草图与便签"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=whiteboard%20with%20system%20architecture%20sketches%20and%20sticky%20notes%2C%20office%20meeting%20room%2C%20clean%20neutral%20lighting&image_size=landscape_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月26日 14:02</time>
+                      <span class="wf__cap">把同步引擎画成三条泳道之后，冲突那一段终于说得清了。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--sq" loading="lazy" alt="黄昏时的街道，行人剪影"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=quiet%20city%20street%20at%20dusk%2C%20warm%20streetlights%20turning%20on%2C%20silhouettes%20of%20pedestrians%2C%20cinematic&image_size=square">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月25日 18:05</time>
+                      <span class="wf__cap">散步时想到的：与其再加一个筛选器，不如让默认视图更准。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--tall" loading="lazy" alt="桌面上摊开的英文笔记与词典"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=english%20handwritten%20study%20notes%20next%20to%20an%20open%20dictionary%20on%20a%20desk%2C%20daylight%2C%20flat%20lay&image_size=portrait_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月25日 21:30</time>
+                      <span class="wf__cap">每天 20 个词根，比背整篇短文省力，也更容易坚持。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--wide" loading="lazy" alt="极简桌面俯拍：键盘、植物与手写便签"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=minimal%20desk%20flat%20lay%20with%20mechanical%20keyboard%2C%20small%20potted%20plant%20and%20handwritten%20note%2C%20bright%20daylight%2C%20top%20down&image_size=landscape_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月24日 22:15</time>
+                      <span class="wf__cap">桌面上的参考图，回头照着这个密度改。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--sq" loading="lazy" alt="家用服务器机架与指示灯"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=small%20self%20hosted%20server%20rack%20with%20glowing%20led%20indicators%2C%20home%20lab%20corner%2C%20dim%20room&image_size=square">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月24日 08:30</time>
+                      <span class="wf__cap">把自己托管的那台机器整理了一遍，风扇终于安静了。</span>
+                    </span>
+                  </button>
+                </article>
+
+                <article class="wf">
+                  <button class="wf__open">
+                    <img class="wf__img wf__img--portrait" loading="lazy" alt="手写日历页与铅笔"
+                         src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=handwritten%20monthly%20planner%20page%20with%20pencil%20marks%2C%20warm%20paper%20texture%2C%20close%20up&image_size=portrait_4_3">
+                    <span class="wf__meta">
+                      <time class="wf__date">9月22日 09:10</time>
+                      <span class="wf__cap">这个月的节奏排得太满，下周留一天什么都不安排。</span>
+                    </span>
+                  </button>
+                </article>
+
+              </div>
+
+              <div class="empty" data-when="empty" hidden>
+                <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-image"/></svg></span>
+                <p class="empty__t">还没有带图的 Memo</p>
+                <p class="empty__h">瀑布流只收有图片的 Memo；先记一条并加上图，它就会出现在这面墙上。</p>
+                <button class="btn btn--primary btn--sm">切到录入框</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           页面三：待办 —— 「状态流转」
+           ============================================================ -->
+      <section class="page page--task" data-page="task" aria-label="待办">
+        <!-- 页头只留一条主控（这是哪页 · 概览 · 视图 · 添加）。
+             筛选不再是满宽横带，收进下面的滚动容器（见 .tkhead__bar），与列表同宽。 -->
+        <header class="tkhead">
+          <div class="tkhead__main">
+            <h1 class="pane-title">待办</h1>
+            <button class="infohint infohint--left" aria-label="待办说明">
+              <svg class="ic ic--sm"><use href="#i-info"/></svg>
+              <span class="infohint__pop">待办是清单 Memo 派生的视图，不改变数据模型；清单条目仍然出现在 Memo 时间轴里。待办视图不受置顶影响。</span>
+            </button>
+            <!-- 概览（实时计数必须保持可见，DESIGN.md §5.4-2）。分状态计数挂在下面的状态筛选上，不另数一遍 -->
+            <div class="tksum" data-when="full">
+              <span class="bar tksum__bar" role="img" aria-label="待办 5 条、进行中 3 条、已完成 6 条，共 14 条">
+                <span class="bar__done" style="flex:6"></span>
+                <span class="bar__doing" style="flex:3"></span>
+                <span class="bar__todo" style="flex:5"></span>
+              </span>
+              <span>共 <b>14</b> 条 · 已完成 <b>6</b> 条（<b>43%</b>）</span>
+            </div>
+            <div class="pane-head__spacer"></div>
+            <!-- 视图切换固定在添加的左边，位置与 Memo 页一致 -->
+            <div class="seg seg--view">
+              <button aria-pressed="true" data-view="list"><svg class="ic ic--sm"><use href="#i-list"/></svg>列表</button>
+              <button aria-pressed="false" data-view="kanban"><svg class="ic ic--sm"><use href="#i-kanban"/></svg>看板</button>
+            </div>
+            <button class="btn btn--primary btn--sm btn--add"><svg class="ic ic--sm"><use href="#i-plus"/></svg>添加待办</button>
+          </div>
+        </header>
+
+        <div class="page-body">
+          <div class="page__scroll">
+          <!-- 筛选条：同一份 DOM，两种形态（胶囊横排 / 悬浮小组件），靠 body[data-tkhead] 切换，见底部预览条。
+               外层 .tkhead__dock 是「悬浮」形态的吸附壳（零高度、sticky），让卡片不占横排空间还能常驻；
+               胶囊形态下它只是个普通外壳，不参与造型 -->
+          <div class="tkhead__dock" data-when="full">
+          <div class="tkhead__bar">
+            <span class="tkhead__gl">状态</span>
+            <div class="seg seg--status">
+              <button aria-pressed="true">全部<span class="n">14</span></button>
+              <button aria-pressed="false">待办<span class="n">5</span></button>
+              <button aria-pressed="false">进行中<span class="n">3</span></button>
+              <button aria-pressed="false">已完成<span class="n">6</span></button>
+            </div>
+            <span class="tkhead__gl">优先级</span>
+            <div class="seg">
+              <button aria-pressed="true">全部优先级</button><button aria-pressed="false">高</button>
+              <button aria-pressed="false">中</button><button aria-pressed="false">低</button>
+            </div>
+            <span class="tkhead__gl">截止</span>
+            <div class="seg">
+              <button aria-pressed="true">全部日期</button><button aria-pressed="false">已逾期</button>
+              <button aria-pressed="false">今天</button><button aria-pressed="false">本周</button>
+            </div>
+            <div class="pane-head__spacer"></div>
+            <button class="switch tkhead__switch" id="doneSwitch" aria-checked="false" role="switch">
+              <span class="switch__track" aria-hidden="true"></span>隐藏已完成
+            </button>
+          </div>
+          </div>
+          <!-- 两块视图互斥：列表沿用 920px 上限；看板不设上限，铺满可用宽高 -->
+
+            <!-- —— 列表视图：密集行，按状态成段（列表要「集中」） —— -->
+            <div data-view-pane="list" class="wrap" style="gap:var(--sp-4)">
+
+              <section class="tkgrp" data-when="full">
+                <div class="tkgrp__head">
+                  <span class="tkgrp__dot" aria-hidden="true"></span>
+                  <h2 class="tkgrp__name">待办</h2>
+                  <span class="tkgrp__n">5 条</span>
+                  <span class="tkgrp__rule" aria-hidden="true"></span>
+                </div>
+
+                <div class="tkrows">
+                  <article class="tkrow tkrow--late">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">把上周的会议记录拆成可执行任务</span>
+                    <span class="tkrow__meta">
+                      <span class="pill pill--red"><svg class="ic ic--sm"><use href="#i-alert"/></svg>已逾期 · 9月24日</span>
+                      <span class="pill pill--amber">高</span>
+                    </span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">开始</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">整理 M4 附件上传的接口草案</span>
+                    <span class="tkrow__meta">
+                      <span class="pill">9月30日</span>
+                      <span class="pill pill--amber">高</span>
+                    </span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">开始</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">回复关于 Workers Builds 的邮件</span>
+                    <span class="tkrow__meta"><span class="pill">9月29日</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">开始</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">给自托管备份加一个 S3 备选目标</span>
+                    <span class="tkrow__meta">
+                      <span class="pill">未设日期</span>
+                      <span class="pill">中</span>
+                    </span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">开始</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">读《设计中的设计》30 页</span>
+                    <span class="tkrow__meta"><span class="pill">9月27日</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">开始</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+                </div>
+              </section>
+
+              <section class="tkgrp" data-when="full">
+                <div class="tkgrp__head">
+                  <span class="tkgrp__dot tkgrp__dot--doing" aria-hidden="true"></span>
+                  <h2 class="tkgrp__name">进行中</h2>
+                  <span class="tkgrp__n">3 条</span>
+                  <span class="tkgrp__rule" aria-hidden="true"></span>
+                </div>
+
+                <div class="tkrows">
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">写 M4 界面稿的移动端章节</span>
+                    <span class="tkrow__meta">
+                      <span class="pill">9月29日</span>
+                      <span class="pill pill--amber">高</span>
+                    </span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">完成</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">修 PWA 离线缓存的过期问题</span>
+                    <span class="tkrow__meta"><span class="pill">未设日期</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">完成</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="false" aria-label="标记完成"></button>
+                    <span class="tkrow__title">整理一遍 components.md 的 props 表</span>
+                    <span class="tkrow__meta"><span class="pill">未设日期</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">完成</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+                </div>
+              </section>
+
+              <section class="tkgrp" data-when="full" data-status="done">
+                <div class="tkgrp__head">
+                  <span class="tkgrp__dot tkgrp__dot--done" aria-hidden="true"></span>
+                  <h2 class="tkgrp__name">已完成</h2>
+                  <span class="tkgrp__n">6 条</span>
+                  <span class="tkgrp__rule" aria-hidden="true"></span>
+                  <!-- 段内收起/展开：与顶部的「隐藏已完成」开关同一份状态 -->
+                  <button class="btn btn--ghost btn--sm hit" aria-label="收起已完成"><svg class="ic ic--sm"><use href="#i-chev-d"/></svg></button>
+                </div>
+
+                <div class="tkrows">
+                  <article class="tkrow tkrow--done">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="true" aria-label="重新打开">
+                      <svg class="ic ic--sm"><use href="#i-check"/></svg>
+                    </button>
+                    <span class="tkrow__title">更新 CHANGELOG 到 v0.4.0</span>
+                    <span class="tkrow__meta"><span class="pill pill--green">已完成 9月27日</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">重开</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow tkrow--done">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="true" aria-label="重新打开">
+                      <svg class="ic ic--sm"><use href="#i-check"/></svg>
+                    </button>
+                    <span class="tkrow__title">隐私锁设计的附录 B 逐条回写</span>
+                    <span class="tkrow__meta"><span class="pill pill--green">已完成 9月27日</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">重开</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow tkrow--done">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="true" aria-label="重新打开">
+                      <svg class="ic ic--sm"><use href="#i-check"/></svg>
+                    </button>
+                    <span class="tkrow__title">跑通 pnpm typecheck 与 lint</span>
+                    <span class="tkrow__meta"><span class="pill pill--green">已完成 9月26日</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">重开</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+
+                  <article class="tkrow tkrow--done">
+                    <button class="tkcheck hit" role="checkbox" aria-checked="true" aria-label="重新打开">
+                      <svg class="ic ic--sm"><use href="#i-check"/></svg>
+                    </button>
+                    <span class="tkrow__title">写 M3 收口验收复核</span>
+                    <span class="tkrow__meta"><span class="pill pill--green">已完成 9月27日</span></span>
+                    <span class="tkrow__acts">
+                      <button class="btn btn--ghost btn--sm">重开</button>
+                      <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                    </span>
+                  </article>
+                </div>
+              </section>
+
+              <!-- 筛选后的空态 -->
+              <div class="empty" data-when="empty" hidden>
+                <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-check-sq"/></svg></span>
+                <p class="empty__t">没有待办</p>
+                <p class="empty__h">在功能栏的录入框里切到「待办」记一条；已经记过的话，放宽上面的筛选条件。</p>
+                <button class="btn btn--primary btn--sm">切到待办录入</button>
+              </div>
+            </div>
+
+            <!-- —— 看板视图：三列实底，撑满高度，宽度随外层容器收在主操作区的 80% —— -->
+            <div data-view-pane="kanban" class="wrap wrap--board" style="--cap:none" hidden>
+              <div class="tkkan" data-when="full">
+                <section class="tkkan__col" aria-label="待办">
+                  <div class="tkkan__head">
+                    <span class="tkgrp__dot" aria-hidden="true"></span>
+                    <h2 class="tkkan__name">待办</h2>
+                    <span class="tkkan__n">5</span>
+                  </div>
+                  <div class="tkkan__body">
+                    <article class="tkcard tkcard--late">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">把上周的会议记录拆成可执行任务</span>
+                        <div class="tkcard__meta">
+                          <span class="pill pill--red"><svg class="ic ic--sm"><use href="#i-alert"/></svg>已逾期</span>
+                          <span class="pill pill--amber">高</span>
+                        </div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">开始</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">整理 M4 附件上传的接口草案</span>
+                        <div class="tkcard__meta">
+                          <span class="pill">9月30日</span><span class="pill pill--amber">高</span>
+                        </div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">开始</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">回复关于 Workers Builds 的邮件</span>
+                        <div class="tkcard__meta"><span class="pill">9月29日</span></div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">开始</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">给自托管备份加一个 S3 备选目标</span>
+                        <div class="tkcard__meta"><span class="pill">未设日期</span><span class="pill">中</span></div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">开始</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">读《设计中的设计》30 页</span>
+                        <div class="tkcard__meta"><span class="pill">9月27日</span></div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">开始</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="tkkan__col" aria-label="进行中">
+                  <div class="tkkan__head">
+                    <span class="tkgrp__dot tkgrp__dot--doing" aria-hidden="true"></span>
+                    <h2 class="tkkan__name">进行中</h2>
+                    <span class="tkkan__n">3</span>
+                  </div>
+                  <div class="tkkan__body">
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">写 M4 界面稿的移动端章节</span>
+                        <div class="tkcard__meta"><span class="pill">9月29日</span><span class="pill pill--amber">高</span></div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">完成</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">修 PWA 离线缓存的过期问题</span>
+                        <div class="tkcard__meta"><span class="pill">未设日期</span></div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">完成</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+
+                    <article class="tkcard">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">整理一遍 components.md 的 props 表</span>
+                        <div class="tkcard__meta"><span class="pill">未设日期</span></div>
+                      </div>
+                      <div class="tkcard__acts">
+                        <button class="btn btn--sm">完成</button>
+                        <button class="btn btn--ghost btn--sm hit" aria-label="更多操作"><svg class="ic ic--sm"><use href="#i-more"/></svg></button>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="tkkan__col" aria-label="已完成" data-status="done">
+                  <div class="tkkan__head">
+                    <span class="tkgrp__dot tkgrp__dot--done" aria-hidden="true"></span>
+                    <h2 class="tkkan__name">已完成</h2>
+                    <span class="tkkan__n">6</span>
+                  </div>
+                  <div class="tkkan__body">
+                    <article class="tkcard tkcard--done">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">更新 CHANGELOG 到 v0.4.0</span>
+                        <div class="tkcard__meta"><span class="pill">9月27日</span></div>
+                      </div>
+                    </article>
+                    <article class="tkcard tkcard--done">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">隐私锁设计的附录 B 逐条回写</span>
+                        <div class="tkcard__meta"><span class="pill">9月27日</span></div>
+                      </div>
+                    </article>
+                    <article class="tkcard tkcard--done">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">跑通 pnpm typecheck 与 lint</span>
+                        <div class="tkcard__meta"><span class="pill">9月26日</span></div>
+                      </div>
+                    </article>
+                    <article class="tkcard tkcard--done">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">写 M3 收口验收复核</span>
+                        <div class="tkcard__meta"><span class="pill">9月27日</span></div>
+                      </div>
+                    </article>
+                    <article class="tkcard tkcard--done">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">核对设计文档 §7.4 的导航顺序</span>
+                        <div class="tkcard__meta"><span class="pill">9月25日</span></div>
+                      </div>
+                    </article>
+                    <article class="tkcard tkcard--done">
+                      <div class="tkcard__main">
+                        <span class="tkcard__title">整理 M4 设计文档的评审意见</span>
+                        <div class="tkcard__meta"><span class="pill">9月26日</span></div>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+              </div>
+
+              <div class="empty" data-when="empty" hidden>
+                <span class="empty__ico"><svg class="ic ic--lg"><use href="#i-kanban"/></svg></span>
+                <p class="empty__t">没有待办</p>
+                <p class="empty__h">看板里的三列都会是空的。先从录入框记一条待办吧。</p>
+                <button class="btn btn--primary btn--sm">切到待办录入</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- —— 待办详情：从右侧「推出」而不是浮层遮罩 ——
+               面板占位后列表/看板跟着缩，三列一张都不会被盖住，仍可随时点别条 —— -->
+          <aside class="tdetail scroll-thin" id="taskDetail" hidden aria-label="待办详情">
+            <div class="tdetail__hd">
+              <h2 class="tdetail__t">详情</h2>
+              <div class="pane-head__spacer"></div>
+              <button class="btn btn--ghost btn--sm hit" id="taskDetailClose" aria-label="关闭详情">
+                <svg class="ic ic--sm"><use href="#i-x"/></svg>
+              </button>
+            </div>
+
+            <div class="tdetail__scroll">
+              <div class="tdetail__blk">
+                <p class="tdetail__ttl" id="taskDetailTitle">把上周的会议记录拆成可执行任务</p>
+                <div class="tdetail__props">
+                  <span class="pill pill--red"><svg class="ic ic--sm"><use href="#i-alert"/></svg>已逾期 · 9月24日</span>
+                  <span class="pill pill--amber">高</span>
+                  <span class="pill">待办</span>
+                </div>
+              </div>
+
+              <div class="tdetail__blk">
+                <h3 class="tdetail__k">描述</h3>
+                <p class="tdetail__p">上周的记录里混了三个项目的待办，先把属于 MeNote 的挑出来，其余转到各自的地方。</p>
+              </div>
+
+              <div class="tdetail__blk">
+                <h3 class="tdetail__k">子清单 · 3 项</h3>
+                <div class="tdetail__subs">
+                  <span class="tdetail__sub"><i class="tkgrp__dot tkgrp__dot--done" aria-hidden="true"></i>挑出 MeNote 相关的条目</span>
+                  <span class="tdetail__sub"><i class="tkgrp__dot tkgrp__dot--doing" aria-hidden="true"></i>拆成 5 条以内</span>
+                  <span class="tdetail__sub"><i class="tkgrp__dot" aria-hidden="true"></i>给每条补上截止日期</span>
+                </div>
+              </div>
+
+              <div class="tdetail__blk">
+                <h3 class="tdetail__k">活动记录</h3>
+                <p class="tdetail__p">9月24日 建立 · 9月26日 改为「进行中」 · 9月27日 改了截止日期</p>
+              </div>
+            </div>
+
+            <div class="tdetail__acts">
+              <button class="btn btn--primary btn--sm">标为完成</button>
+              <button class="btn btn--ghost btn--sm">删除</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ==================== 预览控制条（不属于应用界面，仅供评审） ==================== -->
+<!--
+  本稿相对 DESIGN.md / 现有实现的偏离与提案（需确认后才回写）：
+
+  一、新增令牌（均为【临时值·待确认】）
+  1. --fs-stat : 30px  首页 / 待办概览的数字档。DESIGN.md §3.3 现有 6 档最大 20px，承载不了总览数字。
+  2. --subbar-w : 232px  页内二级侧栏宽度。DESIGN.md §2.2 结构尺寸未登记这一档。
+     200px 时侧栏内宽只剩 176px，热力图（12 格 + 间距 + 内边距 = 182px）会溢出，
+     底部因此多一条横滑条；加宽后同时容纳三格概述与 12 周热力图。
+  3. --viewseg-w : 176px  页头视图切换段的固定宽度。Memo 的「时间轴|瀑布流」比待办的
+     「列表|看板」宽约 26px，不定宽则切页时右侧那组会左右跳。添加按钮用固定 width:112px
+     （「添加 Memo」约 101px、「添加待办」约 87px —— min-width 只兜底不封顶，压不住不等宽）。
+
+  二、布局骨架新增（DESIGN.md §2.1 现为 topbar + fnbar + work）
+  4. Memo 页在 work 内再分一列「页内二级侧栏」（概述 / 热力图 / 随机漫步 / 那年今日 / 日期 /
+     标签），窄屏 ≤1080px 整条横过来落在页头下方。待办页不使用侧栏。
+  5. 待办两块视图互斥：列表受 920px 上限（紧凑、好扫）；看板撑满高度，宽度收在主操作区的 80%
+     （用户 2026-09-27 要求「看板模式整体宽度压缩一下」）。做法是把 .page__scroll 换成纵向 flex、
+     可见的那块自动铺满；看板再把滚动容器整体收到 80% 居中，筛选条与看板三列同宽。
+     80% 是相对 .page-body（＝主操作区）而非滚动容器的内容盒算的，所以连内边距一起压。
+  6. 滚动条：新增 .scroll-thin（细滑块、透明轨道、滑块用线色）用于侧栏与功能栏。
+     DESIGN.md 未规定滚动条样式，是否升为全局约定待定。
+
+  三、既有条目调整
+  7. .pane-title 由 --fs-body-lg(14px) 提到 --fs-title(17px)，让视图头有存在感。
+  8. 补登语义色 soft/line 变体：tokens.css 已有 --amber-soft/--green-soft/--red-soft 等，
+     DESIGN.md §3.3 令牌表未登记。
+  9. 待办列表视图的内容上限沿用首页档位 920px；DESIGN.md §2.3 未给待办定值，未发明新数。
+
+  四、本稿新增内容带来的待定项
+  10. 热力图格子用 border-radius:2px。圆角三档最小是 --radius-sm(6px)，格子上太大，这一档
+      要不要进令牌表待定。梯度中间三档用 color-mix() 从 --primary 派生，未新增裸色值。
+      格子尺寸改为 1fr + aspect-ratio 自适应，不再定死 12px，避免溢出。
+  11. 侧栏内的说明用 title 属性而非 InfoHint：侧栏是滚动容器（overflow-y:auto），
+      绝对定位的浮层会被裁掉。要真正落地需要把 InfoHint 改成 fixed/portal 定位。
+  12. 「那年今日」的挑法：在所有「往年」有记录的日子里取「月-日」离今天最近的一天（今天是
+      9月27日 → 2024年9月26日，差 1 天）。两个待定：往年是否排除今年；前后等距（如 9月26日
+      与 9月28日同时存在）时取哪一侧。本稿取更早的那天。
+  13. 「随机漫步」按需求只随机跳一条；本稿用真实随机 + 高亮落点演示，不接真实数据。
+  14. 「添加 Memo / 添加待办」的按钮文案是本稿新增（原来只写「添加」）。
+  15. 概述的第三个指标由「上一个记录日」改成「记录天数」：今天本身有 Memo，
+      「上一个记录日」会自相矛盾。
+  16. 瀑布流：按设计文档 §8.4 做成图片网格（只收有图片的 Memo，点图开该条内容）。
+      瓦片只有图片；日期 + 两行文字收在一条从底部滑上来的信息条里（悬停 / 键盘聚焦时出现），
+      不显示标签。信息条不铺实底也不描边，是一条半透明渐变：顶上一小段（16px）渐到全透明、
+      所以边缘没有硬线，底部不透明度约 0.71（原 0.86 实底）。渐变由令牌拼装
+      （--topbar-bg + transparent + color-mix），无裸色值，也没有新增颜色令牌。
+      **本稿去掉了背景模糊（backdrop-filter）**：模糊带的上沿与不模糊的照片之间会留一道可见
+      的水平接缝，与「边缘不要有线条」冲突；要保留模糊得给这条带子加 mask，那条路没法静态验证，
+      所以先不做。若要把模糊要回来，更稳的做法是悬停时整张图一起模糊（无接缝）。
+      触屏（hover:none）下信息条常驻，不让「悬停」成为唯一入口。
+      §8.4 的原文没写悬停，属本稿新增交互。
+      列数与宽度：4 列，内容宽度收在 840px —— 比可用宽度窄，图片墙不铺满。
+      图片比例 2/3、4/5、1/1、16/10 四档，落差约 176px。跨度必须够大：列宽收窄后，
+      固定文字块会把图片高度差摊薄，一收窄就看着像横竖对齐的整齐网格，瀑布流不成立 ——
+      信息条改成悬停浮层后卡高＝图高，这一项已从根上解掉。
+      **与 DESIGN.md 冲突，需确认**：§2.4 断点表写的是「≤1240px Memo 瀑布流 3 列 → 2 列」，
+      现在基准列数变成 4，该条应改成「4 列 → 3 列」；≤980px 降 2 列、≤700px 降 1 列是临时值。
+      §2.3 内容宽度上限只列了 740 / 790 / 920 三条（但开头写「四个上限」），840 是本稿新增，
+      建议补成第 4 条或改用 920。
+      用 CSS 多列（column-count + break-inside:avoid）实现，读序是「先一列到底再下一列」；
+      若要严格按时间横向铺，需要改成绝对定位或 JS 布局。图片用 text_to_image 生成，
+      原型里用的是 --cover-1..7 渐变占位（M4 图片管线落地后应显示真实图片）。
+      点开看详情的浮层本稿未做。
+  17. 待办详情面板（本稿新增）：**浮层侧滑** —— position:absolute 盖在原界面上，不占位、不推挤
+      列表与看板（用户 2026-09-27 明确纠正：侧滑不是侧推，滑出要盖在原界面上）。
+      宽度沿用 DESIGN.md §2.4 的「侧滑详情 390 / ≤1080px 330」，未发明新值。
+      定稿依据：wiki M07-05「点击卡片打开详情：【建议：右侧滑出详情侧栏】」；
+      M03-07 把 drawer 的可用场景收窄为「表格图册行详情 + 清单看板卡片」，待办正在其中。
+      **没有铺遮罩层**：加遮罩会把「面板开着时还能点别的任务切过去」这条路挡死，与本稿的用法冲突；
+      关闭靠 × / Esc，或直接点另一条切换。若要标准模态遮罩，说一声再加。
+      已知代价：浮层必然盖住最右侧的「已完成」列 —— 这是浮层的固有属性，不是实现问题。
+      内容为**静态样例**（标题随点击的那一条变，其余固定）；描述 / 子清单 / 活动记录都是首版草案。
+      **一个实现缺口**：本稿是「点正文即开详情」，行/卡片本身不是按钮，只给标题加了 cursor 提示；
+      真实实现里应把标题（或一个显式的「打开详情」入口）做成真按钮，否则键盘与读屏用户够不到。
+      看板卡片原本还应支持拖到另一列改状态（M07-05），本稿未做。
+  18. 待办筛选条（本稿两种形态并列对比，切底部预览条的「顶部方案」；同一份 DOM，只换外壳）：
+      两种都不再是满宽横带，且都从页头里搬进了滚动容器（.page__scroll 的第一个子元素是外壳
+      .tkhead__dock，筛选项在它里面）—— 「悬浮」形态要靠滚动容器才能吸住。
+      **胶囊（基线）**：宽度与下面的列表用同一个上限（.page--task 的 --cap = 920px）并同样居中，
+      不再向标题栏靠齐；看板视图取消该上限，铺满收窄到 80% 的滚动容器（见上面第 5 条），与三列同宽。
+      去掉分段控件的壳，按钮自身变成胶囊，每组前面一行灰色组名（状态 / 优先级 / 截止）。
+      **悬浮**：过滤小组件收成左侧顶部的紧凑卡片（三组竖直排、宽 max-content），
+      **不占横排空间**（用户 2026-09-27 要求）：卡片外壳 .tkhead__dock 改成零高度 + position:sticky，
+      占位为零（列表仍从顶部开始），又常驻在滚动容器顶部，滑动时一直在。
+      零高度是「不占位」的必要条件 —— 直接对卡片写 sticky，它会在列表上方撑出一整行。
+      代价：卡片浮在列表左上角，会压住前几行的左侧一小块（浮层不占位的固有代价）。
+      **只在列表模式出现**（用户 2026-09-27 要求）：看板由列头承载状态与计数，
+      再把筛选条浮在卡片上只会压住内容，故 body[data-taskview="kanban"] 下整条隐藏。
+      之前的「吸附点取 top:0」说明随之作废。
+      两条与 DESIGN.md 的关系：§2.2 结构尺寸表没有「页内筛选条」一档，两种形态的尺寸都是本稿定的；
+      §2.2 也未登记「页头只剩一条」这一构形（原描述为顶栏 + 功能栏 + 主操作区）。
+      胶囊按钮高 21px、圆角 --radius-pill、字号 --fs-micro，复用与 .chip 同一套刻度，无新增令牌。
+      **结论（用户 2026-09-27 定）**：两种形态都保留，不二选一 —— 将来在「设置」里加一条偏好项，
+      让用户自己选待办筛选条用哪种（默认取哪种、偏好项叫什么、设置页第几个分类，都还没定；
+      设置页要新增一条，需先过 DESIGN.md 与设置页设计稿）。本稿的预览条开关只是评审用，不是最终形态。
+-->
+
+<div class="previewbar">
+  <span class="previewbar__tag">预览控制条 · 不属于应用界面</span>
+  <div class="seg" id="pageSw">
+    <button data-go="home" aria-pressed="true">首页</button>
+    <button data-go="memo" aria-pressed="false">Memo</button>
+    <button data-go="task" aria-pressed="false">待办</button>
+  </div>
+  <div class="seg" id="themeSw">
+    <button data-theme="light" aria-pressed="true">浅色</button>
+    <button data-theme="dark" aria-pressed="false">深色</button>
+  </div>
+  <div class="seg" id="dataSw">
+    <button data-data="full" aria-pressed="true">有数据</button>
+    <button data-data="empty" aria-pressed="false">空数据</button>
+  </div>
+  <div class="seg" id="headSw">
+    <button data-head="pills" aria-pressed="true">顶部·胶囊</button>
+    <button data-head="float" aria-pressed="false">顶部·悬浮</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var CRUMB = {
+    home: ['首页', '状态甲板'],
+    memo: ['Memo', '时间轴'],
+    task: ['待办', '列表']
+  };
+
+  function pressGroup(root, btn) {
+    root.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+  }
+
+  /* —— 页面切换 —— */
+  function go(page) {
+    document.querySelectorAll('.page').forEach(function (p) {
+      p.classList.toggle('is-active', p.dataset.page === page);
+    });
+    document.querySelectorAll('.seg-item[data-nav]').forEach(function (a) {
+      if (a.dataset.nav === page) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
+    var c = CRUMB[page];
+    document.getElementById('crumbA').textContent = c[0];
+    document.getElementById('crumbB').textContent =
+      page === 'task' && currentTaskView === 'kanban' ? '看板'
+      : page === 'memo' && currentMemoView === 'flow' ? '瀑布流'
+      : c[1];
+    window.scrollTo(0, 0);
+  }
+
+  document.getElementById('pageSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-go]');
+    if (!b) return;
+    pressGroup(this, b);
+    go(b.dataset.go);
+  });
+  document.querySelectorAll('.seg-item[data-nav]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var page = a.dataset.nav;
+      pressGroup(document.getElementById('pageSw'),
+        document.querySelector('#pageSw button[data-go="' + page + '"]'));
+      go(page);
+    });
+  });
+
+  /* —— 主题 —— */
+  document.getElementById('themeSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-theme]');
+    if (!b) return;
+    pressGroup(this, b);
+    document.documentElement.dataset.theme = b.dataset.theme;
+  });
+
+  /* —— 空数据 / 有数据 —— */
+  document.getElementById('dataSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-data]');
+    if (!b) return;
+    pressGroup(this, b);
+    var empty = b.dataset.data === 'empty';
+    document.querySelectorAll('[data-when]').forEach(function (el) {
+      el.hidden = el.dataset.when !== (empty ? 'empty' : 'full');
+    });
+  });
+
+  /* —— 分段控件 / 胶囊 / 开关：就地按下态（本稿只表达交互意图，不接业务） —— */
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.seg > button');
+    if (b && !b.disabled) { pressGroup(b.parentElement, b); return; }
+
+    /* 页内栏的单选分组（标签 / 日期 / 状态 / 优先级 / 截止）：组内互斥 */
+    var sub = e.target.closest('.sublist > button[aria-pressed]');
+    if (sub) { pressGroup(sub.parentElement, sub); return; }
+
+    var chip = e.target.closest('button.chip[aria-pressed]');
+    if (chip) { chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true')); return; }
+
+    var sw = e.target.closest('.switch');
+    if (sw) {
+      var on = sw.getAttribute('aria-checked') !== 'true';
+      sw.setAttribute('aria-checked', String(on));
+      document.body.classList.toggle('hide-done', on);
+      return;
+    }
+
+    /* 勾选：列表视图是 .tkrow，看板视图是 .tkcard，两套都要能就地按下去 */
+    var ck = e.target.closest('.tkcheck');
+    if (ck) {
+      var checked = ck.getAttribute('aria-checked') !== 'true';
+      ck.setAttribute('aria-checked', String(checked));
+      var box = ck.closest('.tkrow, .tkcard');
+      box.classList.toggle(box.classList.contains('tkrow') ? 'tkrow--done' : 'tkcard--done', checked);
+      return;
+    }
+  });
+
+  /* —— 待办：列表 / 看板 —— */
+  var currentTaskView = 'list';
+  document.querySelectorAll('button[data-view]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      currentTaskView = b.dataset.view;
+      /* 看板下状态筛选与「隐藏已完成」由 CSS 按 body[data-taskview] 收起 */
+      document.body.dataset.taskview = currentTaskView;
+      document.querySelectorAll('[data-view-pane]').forEach(function (pane) {
+        pane.hidden = pane.dataset.viewPane !== currentTaskView;
+      });
+      document.getElementById('crumbB').textContent = currentTaskView === 'kanban' ? '看板' : '列表';
+    });
+  });
+
+  /* —— Memo：时间轴 / 瀑布流 —— */
+  var currentMemoView = 'timeline';
+  document.querySelectorAll('button[data-memo-view]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      currentMemoView = b.dataset.memoView;
+      document.querySelectorAll('[data-memo-view-pane]').forEach(function (pane) {
+        pane.hidden = pane.dataset.memoViewPane !== currentMemoView;
+      });
+      document.getElementById('crumbB').textContent = currentMemoView === 'flow' ? '瀑布流' : '时间轴';
+    });
+  });
+
+  /* —— Memo 侧栏：随机漫步 / 那年今日（本稿只演示「跳到哪一条」，不接真实数据） —— */
+  function landOn(el) {
+    document.querySelectorAll('.is-walked').forEach(function (x) { x.classList.remove('is-walked'); });
+    if (!el) return;
+    el.classList.add('is-walked');
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  var walk = document.getElementById('randomWalk');
+  if (walk) walk.addEventListener('click', function () {
+    /* 跟着当前视图走：时间轴抽一条，瀑布流抽一张 */
+    var sel = currentMemoView === 'flow' ? '.page--memo .wf' : '.page--memo .tl__item';
+    var items = document.querySelectorAll(sel);
+    if (items.length) landOn(items[Math.floor(Math.random() * items.length)]);
+  });
+
+  var otd = document.getElementById('onThisDay');
+  if (otd) otd.addEventListener('click', function () {
+    /* 那年今日是时间轴上的那一天；在瀑布流里先切回时间轴再跳 */
+    if (currentMemoView === 'flow') {
+      pressGroup(document.querySelector('.seg--view'),
+        document.querySelector('button[data-memo-view="timeline"]'));
+      currentMemoView = 'timeline';
+      document.querySelectorAll('[data-memo-view-pane]').forEach(function (pane) {
+        pane.hidden = pane.dataset.memoViewPane !== 'timeline';
+      });
+      document.getElementById('crumbB').textContent = '时间轴';
+    }
+    landOn(document.querySelector('.page--memo .tl__day[data-date="2024-09-26"]'));
+  });
+
+  /* —— 待办筛选条的两种形态（本稿并列对比用，不属于应用本身） —— */
+  document.getElementById('headSw').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-head]');
+    if (!b) return;
+    pressGroup(this, b);
+    document.body.dataset.tkhead = b.dataset.head;
+  });
+
+  /* —— 待办详情：浮层侧滑（盖在原界面上，不推挤列表/看板） —— */
+  var taskDetail = document.getElementById('taskDetail');
+  var taskDetailTitle = document.getElementById('taskDetailTitle');
+  var detailTimer = null;
+
+  function openTaskDetail(el) {
+    if (!taskDetail) return;
+    document.querySelectorAll('.page--task .is-open').forEach(function (x) { x.classList.remove('is-open'); });
+    el.classList.add('is-open');
+    var t = el.querySelector('.tkrow__title,.tkcard__title');
+    /* 本稿只把标题带过去，其余内容是固定样例 */
+    if (t && taskDetailTitle) taskDetailTitle.textContent = t.textContent;
+    if (detailTimer) { clearTimeout(detailTimer); detailTimer = null; }
+    taskDetail.hidden = false;
+    /* 先落地再滑入，否则 display:none→flex 那一帧没有过渡 */
+    requestAnimationFrame(function () { taskDetail.classList.add('is-in'); });
+  }
+  function closeTaskDetail() {
+    if (!taskDetail || taskDetail.hidden) return;
+    taskDetail.classList.remove('is-in');
+    document.querySelectorAll('.page--task .is-open').forEach(function (x) { x.classList.remove('is-open'); });
+    if (detailTimer) clearTimeout(detailTimer);
+    detailTimer = setTimeout(function () { taskDetail.hidden = true; detailTimer = null; }, 220);
+  }
+
+  /* 点在正文上才开详情；勾选、开始、更多这些按钮交给它们自己 */
+  document.querySelectorAll('.page--task .tkrow,.page--task .tkcard').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('button')) return;
+      openTaskDetail(el);
+    });
+  });
+  var detailClose = document.getElementById('taskDetailClose');
+  if (detailClose) detailClose.addEventListener('click', closeTaskDetail);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeTaskDetail();
+  });
+})();
+</script>
+</body>
+</html>

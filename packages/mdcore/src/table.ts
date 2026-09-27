@@ -487,13 +487,22 @@ function readPipeTable(
     return null;
   }
 
-  if (headerCells.length < columns.length) {
-    return null; // 表头比列定义少：结构对不上，交给上层降级
+  // 表头比数据列还少：结构对不上，交给上层降级（`_id` 那一列可能不写在列定义里，所以只跟数据列比）
+  const dataColumns = columns.filter(
+    (column) => column.id !== rowIdColumn && column.id !== ROW_ID_COLUMN,
+  );
+  if (headerCells.length < dataColumns.length) {
+    return null;
   }
 
   const out: TableNotice[] = [...notices];
   const headerKeys = headerCells.map((cell) => resolveColumnId(cell, columns, rowIdColumn));
-  if (headerCells.length > columns.length) {
+  // 列数对不上时给提示。`columns` 里可能**没有** `_id`（设计 §2.1 的 YAML 示例就只列数据列），
+  // 所以允许表头比列定义多一列（那一列正是 `_id`）
+  const expectedLeast = columns.some((column) => column.id === rowIdColumn || column.id === ROW_ID_COLUMN)
+    ? columns.length
+    : columns.length + 1;
+  if (headerCells.length > expectedLeast) {
     out.push({
       kind: "column_mismatch",
       detail: `表头有 ${headerCells.length} 列，列定义有 ${columns.length} 列（多出的列按原样保留）`,
@@ -530,8 +539,12 @@ function readPipeTable(
 
 /** 渲染表格文档（写规范：列定义、表头、行、附件章节都按固定形状产出） */
 export function renderTableDocument(doc: TableDoc): string {
-  // 表头恒用**列 id**（首列是行 ID 列）：改名不动数据，读回来时按 id 对上
-  const header = [doc.rowIdColumn, ...doc.columns.map((column) => column.id)];
+  // 表头恒用**列 id**（首列是行 ID 列）：改名不动数据，读回来时按 id 对上。
+  // 两种形状都要认：`_id` 在 `columns` 里（界面稿的口径：它是隐藏且受保护的列）时不重复写，
+  // 不在时补在首位——否则会渲染出两列 `_id`，读回来每行多一个同名字段。
+  const columnIds = doc.columns.map((column) => column.id);
+  const hasRowIdColumn = columnIds.some((id) => id === doc.rowIdColumn || id === ROW_ID_COLUMN);
+  const header = hasRowIdColumn ? columnIds : [doc.rowIdColumn, ...columnIds];
   const bodyLines: string[] = [
     renderRow(header),
     `| ${header.map(() => "---").join(" | ")} |`,

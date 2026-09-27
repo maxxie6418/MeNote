@@ -282,8 +282,45 @@ describe("结构损坏判定为降级", () => {
   });
 });
 
-describe("## 附件 章节与同名文件", () => {
-  it("附件行按名称解析，原样保留括号说明", () => {
+describe("`_id` 列写在列定义里时不重复渲染（界面稿口径）", () => {
+  it("columns 已含 `_id` 时表头只有一列 `_id`，往返后行里也只有一个同名字段", () => {
+    const withRowId: TableDoc = {
+      ...doc(),
+      columns: [{ id: ROW_ID_COLUMN, name: "ID", type: "text", hidden: true }, ...doc().columns],
+      rows: [{ [ROW_ID_COLUMN]: "abc123", c1: "甲", c2: "todo" }],
+    };
+    const markdown = renderTableDocument(withRowId);
+    const header = markdown.split("\n").find((line) => line.startsWith("| _id"));
+    expect(header).toBe(`| _id | c1 | c2 |`);
+
+    const parsed = parseTableDocument(markdown);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.doc.rows[0]).toEqual({ [ROW_ID_COLUMN]: "abc123", c1: "甲", c2: "todo" });
+    // 列定义里的 `_id` 也要跟着往返（hidden 保住）
+    expect(parsed.doc.columns[0]).toMatchObject({ id: ROW_ID_COLUMN, hidden: true });
+  });
+
+  it("columns 不含 `_id` 时补在表头首位（设计 §2.1 的 YAML 示例形状）", () => {
+    const bare: TableDoc = {
+      ...doc(),
+      columns: [
+        { id: "c1", name: "名称", type: "text" },
+        { id: "c2", name: "状态", type: "status" },
+      ],
+    };
+    const markdown = renderTableDocument(bare);
+    const header = markdown.split("\n").find((line) => line.startsWith("| _id"));
+    expect(header).toBe(`| _id | c1 | c2 |`);
+
+    const parsed = parseTableDocument(markdown);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.doc.columns.map((column) => column.id)).toEqual(["c1", "c2"]);
+  });
+});
+
+describe("## 附件 章节与同名文件", () => {  it("附件行按名称解析，原样保留括号说明", () => {
     const markdown = renderTableDocument(
       doc({
         rows: [],

@@ -11,5 +11,13 @@
 #   生成：openssl rand -base64 32
 AUTH_PEPPER=<openssl rand -base64 32 的输出>
 
-# 后续里程碑新增的机密在此追加（并同步 wrangler.jsonc 的 secrets.required）：
-# BACKUP_CRED_KEY —— M5：备份内容密钥 K 的包裹键
+# BACKUP_CRED_KEY —— 备份凭据：包裹内容密钥 K 的第二把钥匙（架构 §7.2 / §12.4）
+#   用途：① M3 起「重置隐私密码」时服务端用它解出 K 交回浏览器重新包裹；
+#        ② M5 起 Cron 备份加密时用它解出 K。
+#   派生：SHA-256(机密字节) → 32 字节 AES-GCM 密钥（换机器不用改算法）。
+#   生成：openssl rand -base64 32
+#   注意：**换掉该机密会让已存的 `k_wrapped_backup` 解不开**——在解锁态重新包裹一次 K 即可修复。
+BACKUP_CRED_KEY=<openssl rand -base64 32 的输出>
+
+# 后续里程碑新增的机密在此追加（当前无需在 wrangler.jsonc 里声明 secrets.required，
+# 缺机密时由各端点自己给出明确错误，见 middleware/config-guard.ts 的说明）。

@@ -9,6 +9,7 @@ import { csrfGuard } from "./middleware/csrf";
 import { schemaGuard } from "./middleware/schema";
 import { applySecurityHeaders, securityHeaders } from "./middleware/security-headers";
 import auth from "./routes/auth";
+import crypto from "./routes/crypto";
 import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
@@ -44,6 +45,7 @@ app.route("/api", folders);
 app.route("/api", sync);
 app.route("/api", settings);
 app.route("/api", search);
+app.route("/api", crypto);
 
 app.notFound((c) => {
   applySecurityHeaders(c);

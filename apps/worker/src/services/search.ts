@@ -14,6 +14,7 @@
  * `lower()` 在 SQLite 只处理 ASCII；中文不受大小写影响，所以两边同时 `lower()` 即可正确匹配英文。
  */
 import type { ItemType } from "@menote/shared";
+import { PRIVACY_EXCLUDE_SQL } from "../db/privacy";
 
 export interface SearchQuery {
   text: string;
@@ -53,8 +54,7 @@ export function buildSearchSql(userId: string, query: SearchQuery): SearchSql {
   const conditions = [
     "i.user_id = ?",
     "i.deleted_at IS NULL",
-    "i.enc_self = 0",
-    "i.in_enc_space = 0",
+    PRIVACY_EXCLUDE_SQL,
     "(instr(lower(COALESCE(i.title, '')), ?) > 0 OR instr(lower(i.tags), ?) > 0 OR instr(lower(b.body), ?) > 0)",
   ];
   const params: Array<string | number> = [userId, needle, needle, needle];

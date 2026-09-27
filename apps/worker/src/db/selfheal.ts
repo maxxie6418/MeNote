@@ -12,9 +12,10 @@
 import { MIGRATION_LOCK_TTL_MS } from "@menote/shared";
 import { migration0001, type MigrationScript } from "./migrations/0001_init";
 import { migration0002, TASK_TRIGGER_NAMES } from "./migrations/0002_task_literals";
+import { migration0003 } from "./migrations/0003_user_crypto";
 
 /** 全部迁移脚本，按 version 升序 */
-export const MIGRATIONS: readonly MigrationScript[] = [migration0001, migration0002];
+export const MIGRATIONS: readonly MigrationScript[] = [migration0001, migration0002, migration0003];
 
 /** 代码期望的表结构版本 */
 export const EXPECTED_SCHEMA_VERSION = MIGRATIONS.reduce(
@@ -35,6 +36,8 @@ const REQUIRED_TABLES = [
   "folders",
   "items",
   "item_bodies",
+  // 0003：隐私锁的门禁材料（M3）
+  "user_crypto",
 ] as const;
 
 const REQUIRED_INDEXES = [

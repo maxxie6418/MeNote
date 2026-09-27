@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import {
   DEFAULT_USER_SETTINGS,
+  ENC_SPACE_DEFAULT_NAME,
   SYNC_PAGE_LIMIT,
   base64UrlEncode,
   encodeItemWriteMeta,
@@ -11,7 +12,7 @@ import {
 } from "@menote/shared";
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { freshDatabase } from "./helpers";
+import { asLegacyAccount, freshDatabase } from "./helpers";
 
 const ORIGIN = "https://menote.test";
 
@@ -120,6 +121,7 @@ beforeEach(async () => {
 describe("增量拉取", () => {
   it("空库：空数组、游标不动、无更多（设置载荷每次带回，未写过则为默认值与 rev 0）", async () => {
     const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id); // 空库前提：M3 起注册会补建空间行
     const { status, body } = await pull(user.cookie);
     expect(status).toBe(200);
     expect(body).toEqual({
@@ -132,8 +134,22 @@ describe("增量拉取", () => {
     });
   });
 
+  it("新账号首拉会带上加密空间行（M3 起每个账号自带一条）", async () => {
+    const user = await registerUser("Alice", 1);
+
+    const { body } = await pull(user.cookie, 0);
+    expect(body.folders).toHaveLength(1);
+    const space = body.folders[0]!;
+    expect(space.is_enc_space).toBe(1);
+    expect(space.in_enc_space).toBe(0);
+    expect(space.name).toBe(ENC_SPACE_DEFAULT_NAME);
+    expect(space.depth).toBe(0);
+    expect(body.next_cursor).toBe(space.sync_seq);
+  });
+
   it("新建条目与文件夹后可按游标拉到，且再拉为空", async () => {
     const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
     const noteId = await createNote(user.cookie, "第一版");
     const folderId = await createFolder(user.cookie, "工作");
 
@@ -157,6 +173,7 @@ describe("增量拉取", () => {
 
   it("超过每类上限时分页，且游标取两类末端较小值（不漏拉）", async () => {
     const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
     // items 有 250 行；folders 先放 1 行（序号 1），制造"两类截断点不同"
     await createFolder(user.cookie, "工作");
     await seedItems(user.id, 250, (index) => index + 2);
@@ -186,6 +203,7 @@ describe("增量拉取", () => {
 
   it("某一类没有新行时不把游标拖回原地（否则客户端原地打转）", async () => {
     const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
     await seedItems(user.id, 250, (index) => index + 1);
 
     const page1 = await pull(user.cookie, 0);
@@ -200,6 +218,7 @@ describe("增量拉取", () => {
 
   it("同一 sync_seq 的组不被切开：单组超过上限时返回 413 而不是死循环", async () => {
     const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
     await seedItems(user.id, SYNC_PAGE_LIMIT + 1, () => 1);
 
     const res = await SELF.fetch(`${ORIGIN}/api/sync?cursor=0`, {
@@ -211,6 +230,7 @@ describe("增量拉取", () => {
 
   it("组被截断时整组回退，下一次从该组之前继续（不丢行）", async () => {
     const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
     // 1..199 单行一组，第 200、201 行同组（组跨过上限边界）
     await seedItems(user.id, 199, (index) => index + 1);
     await seedItems(user.id, 2, () => 200, 199);

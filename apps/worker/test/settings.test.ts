@@ -7,7 +7,7 @@
 import { DEFAULT_USER_SETTINGS, base64UrlEncode, type UserSettingsPayload } from "@menote/shared";
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { freshDatabase } from "./helpers";
+import { asLegacyAccount, freshDatabase } from "./helpers";
 
 const ORIGIN = "https://menote.test";
 
@@ -123,6 +123,8 @@ describe("PUT /api/settings", () => {
 
 describe("同步响应里的设置", () => {
   it("每次 pull 都带上设置载荷（不参与游标）", async () => {
+    // M3 起每个账号自带一条加密空间行；这里还原成存量账号形态，好断言"设置不推进游标"
+    await asLegacyAccount(alice.id);
     await SELF.fetch(`${ORIGIN}/api/settings`, {
       method: "PUT",
       headers: writeHeaders(alice.cookie),

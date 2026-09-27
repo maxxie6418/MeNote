@@ -15,6 +15,7 @@ import { newUlid, base64UrlEncode } from "@menote/shared";
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildSearchSql } from "../src/services/search";
+import { PRIVACY_EXCLUDE_SQL } from "../src/db/privacy";
 import { freshDatabase } from "./helpers";
 
 const ORIGIN = "https://menote.test";
@@ -117,6 +118,8 @@ describe("SQL 组装（不依赖 Worker）", () => {
 
     expect(sql).toContain("i.user_id = ?");
     expect(sql).toContain("i.deleted_at IS NULL");
+    // 隐私过滤**必须**来自唯一那处常量（M3-3 起收敛）；这条断言就是防止有人手写字面量后漂移
+    expect(sql).toContain(PRIVACY_EXCLUDE_SQL);
     expect(sql).toContain("i.enc_self = 0");
     expect(sql).toContain("i.in_enc_space = 0");
     expect(sql).toContain("instr(lower(");

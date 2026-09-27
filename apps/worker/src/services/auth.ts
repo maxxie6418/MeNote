@@ -22,6 +22,7 @@ import {
 } from "../db/tables";
 import { DomainError } from "../errors";
 import type { SessionUser } from "../types";
+import { ensureEncSpace } from "./folders";
 import { createSession, invalidateOtherSessions } from "./sessions";
 import {
   deriveAuthVerifier,
@@ -200,6 +201,8 @@ export async function register(
     username: created?.username ?? input.username,
     role: roleOf(created?.role ?? "member"),
   };
+  // M3：加密空间内置行随用户一起建好（未启用隐私锁时空间也要照常显示，设计 §6.2）
+  await ensureEncSpace(db, id, now);
   const session = await createSession(db, id, null, now);
   return { token: session.token, user };
 }
@@ -229,6 +232,8 @@ export async function login(
   }
 
   await clearFailures(db, keys);
+  // M3：存量账号（M1/M2 注册的）在这里补齐加密空间内置行——幂等，已存在则只读一次
+  await ensureEncSpace(db, row.id, now);
   const session = await createSession(db, row.id, null, now);
   return {
     token: session.token,

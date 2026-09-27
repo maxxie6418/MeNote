@@ -18,7 +18,7 @@ import {
   newUlid,
   type ItemWriteMeta,
 } from "@menote/shared";
-import { SELF } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { freshDatabase } from "./helpers";
 
@@ -164,8 +164,15 @@ describe("多用户隔离：知道对方的条目 id 也动不了", () => {
 
     const bobSync = await (
       await SELF.fetch(`${ORIGIN}/api/sync?cursor=0`, { headers: headers(bob) })
-    ).json() as { items: unknown[]; folders: unknown[] };
+    ).json() as { items: unknown[]; folders: Array<{ id: string }> };
     expect(bobSync.items).toEqual([]);
-    expect(bobSync.folders).toEqual([]);
+    // M3 起每个账号自带一条加密空间行：B 只会看到**自己**那一条，看不到 A 的任何行
+    expect(bobSync.folders).toHaveLength(1);
+    const aliceSpace = await env.DB.prepare(
+      `SELECT f.id AS id FROM folders f JOIN users u ON u.id = f.user_id
+        WHERE u.username = 'alice' AND f.is_enc_space = 1`,
+    ).first<{ id: string }>();
+    expect(aliceSpace).not.toBeNull();
+    expect(bobSync.folders.map((folder) => folder.id)).not.toContain(aliceSpace?.id);
   });
 });

@@ -14,6 +14,7 @@ export default defineConfig({
       miniflare: {
         bindings: {
           AUTH_PEPPER: "test-pepper-not-a-real-secret",
+          BACKUP_CRED_KEY: "test-backup-cred-not-a-real-secret",
         },
       },
     }),

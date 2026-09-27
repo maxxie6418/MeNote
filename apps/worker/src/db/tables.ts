@@ -208,3 +208,47 @@ export const SQL_UPSERT_USER_SETTINGS = `INSERT INTO user_settings (user_id, jso
     updated_at = excluded.updated_at`;
 
 export const SQL_BUMP_SYNC_SEQ_ON_SETTINGS = "UPDATE users SET sync_seq = sync_seq + 1 WHERE id = ?";
+
+// —— user_crypto（M3：隐私锁的门禁材料；《隐私锁设计》§4）——
+//
+// **不加 `sync_seq`**：门禁材料走专用端点，不参与普通同步载荷（《同步引擎设计》§7 第 6 条）。
+// BLOB 的打包约定见 `@menote/shared` 的 `crypto.ts`。
+
+export const SQL_SELECT_USER_CRYPTO = `SELECT kdf, kdf_iterations, kdf_salt, verifier,
+       k_wrapped_pw, k_wrapped_backup, rev, updated_at
+  FROM user_crypto
+ WHERE user_id = ?`;
+
+/** 启用 / 改密 / 重置后的整体覆盖；`rev` 自增（后写为准，与设置同一口径） */
+export const SQL_UPSERT_USER_CRYPTO = `INSERT INTO user_crypto (user_id, kdf, kdf_iterations, kdf_salt, verifier, k_wrapped_pw, k_wrapped_backup, rev, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+  ON CONFLICT(user_id) DO UPDATE SET
+    kdf = excluded.kdf,
+    kdf_iterations = excluded.kdf_iterations,
+    kdf_salt = excluded.kdf_salt,
+    verifier = excluded.verifier,
+    k_wrapped_pw = excluded.k_wrapped_pw,
+    k_wrapped_backup = excluded.k_wrapped_backup,
+    rev = user_crypto.rev + 1,
+    updated_at = excluded.updated_at`;
+
+export const SQL_DELETE_USER_CRYPTO = "DELETE FROM user_crypto WHERE user_id = ?";
+
+/** 关闭隐私锁前的校验：**含回收站里的条目**（软删行仍带标记） */
+export const SQL_COUNT_PRIVACY_ITEMS =
+  "SELECT COUNT(*) AS count FROM items WHERE user_id = ? AND (enc_self = 1 OR in_enc_space = 1)";
+
+// —— 加密空间内置行（M3：《隐私锁设计》§6）——
+//
+// 未启用隐私锁时空间也要照常显示，所以这行在**注册与登录时**幂等补建（覆盖 M1/M2 存量账号）。
+// 并发补建由部分唯一索引 `idx_folders_enc_space` 兜底，服务层捕获约束异常后重读。
+
+export const SQL_SELECT_ENC_SPACE =
+  "SELECT id, name, meta_rev FROM folders WHERE user_id = ? AND is_enc_space = 1";
+
+export const SQL_INSERT_ENC_SPACE = `INSERT INTO folders (id, user_id, parent_id, is_enc_space, in_enc_space, name, depth, position, meta_rev, sync_seq, created_at, updated_at, deleted_at)
+SELECT ?, ?, NULL, 1, 0, ?, 0, 0, 1, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, NULL
+ WHERE NOT EXISTS (SELECT 1 FROM folders WHERE user_id = ? AND is_enc_space = 1)`;
+
+export const SQL_BUMP_SYNC_SEQ_ON_ENC_SPACE = `UPDATE users SET sync_seq = sync_seq + 1
+ WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND is_enc_space = 1 AND created_at = ?)`;

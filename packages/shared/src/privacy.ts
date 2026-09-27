@@ -42,6 +42,9 @@ export interface PrivacyItemFlags {
 
 export const DEFAULT_PRIVACY_SCOPE: PrivacyScope = { memo: true };
 
+/** 加密空间内置行的默认名称（可重命名；服务端补建时用，客户端展示时也用） */
+export const ENC_SPACE_DEFAULT_NAME = "加密空间";
+
 /** 带隐私标记的条目（空间内或单篇） */
 export function isPrivacyItem(item: {
   enc_self: 0 | 1;

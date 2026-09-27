@@ -4,12 +4,15 @@
  * 加密空间（`is_enc_space = 1` 的内置记录）属 M3，M1 只处理普通文件夹（depth 1 / 2）。
  * 冲突按 `meta_rev` 乐观锁处理，**不生成冲突副本**（拆解 M13-04）。
  */
-import { isUlid, type FolderPatch } from "@menote/shared";
+import { ENC_SPACE_DEFAULT_NAME, isUlid, newUlid, type FolderPatch } from "@menote/shared";
 import {
+  SQL_BUMP_SYNC_SEQ_ON_ENC_SPACE,
   SQL_BUMP_SYNC_SEQ_ON_FOLDER_CREATE,
   SQL_BUMP_SYNC_SEQ_ON_FOLDER_META,
   SQL_COUNT_FOLDER_CHILDREN,
+  SQL_INSERT_ENC_SPACE,
   SQL_INSERT_FOLDER,
+  SQL_SELECT_ENC_SPACE,
   SQL_SELECT_FOLDER_BY_ID,
   buildUpdateFolder,
   type FolderField,
@@ -47,6 +50,43 @@ function depthUnder(parent: FolderRow | null): number {
     throw new DomainError("invalid", "文件夹最多两层");
   }
   return depth;
+}
+
+/**
+ * M3：幂等补建**加密空间内置行**（注册与登录时调用，覆盖 M1/M2 的存量账号）。
+ *
+ * 三条要点（《隐私锁设计》§6.2）：
+ * 1. **不在读路径写数据**——只在注册 / 登录这两个写路径上补建；
+ * 2. 客户端 UI **不依赖该行存在**（空间节点恒显示），这行只用于挂载空间内条目与文件夹；
+ * 3. 并发补建由部分唯一索引 `idx_folders_enc_space` 兜底：捕获约束异常后重读返回。
+ */
+export async function ensureEncSpace(
+  db: D1Database,
+  userId: string,
+  now: number,
+): Promise<{ id: string; created: boolean }> {
+  const existing = await db
+    .prepare(SQL_SELECT_ENC_SPACE)
+    .bind(userId)
+    .first<{ id: string }>();
+  if (existing) return { id: existing.id, created: false };
+
+  const id = newUlid(now);
+  try {
+    await db.batch([
+      db
+        .prepare(SQL_INSERT_ENC_SPACE)
+        .bind(id, userId, ENC_SPACE_DEFAULT_NAME, userId, now, now, userId),
+      db.prepare(SQL_BUMP_SYNC_SEQ_ON_ENC_SPACE).bind(userId, id, now),
+    ]);
+  } catch (error) {
+    const after = await db.prepare(SQL_SELECT_ENC_SPACE).bind(userId).first<{ id: string }>();
+    if (after) return { id: after.id, created: false };
+    throw error;
+  }
+
+  const created = await db.prepare(SQL_SELECT_ENC_SPACE).bind(userId).first<{ id: string }>();
+  return { id: created?.id ?? id, created: true };
 }
 
 /** 新建文件夹（`POST /api/folders`）：ID 由客户端生成，ID 已存在时按重放处理 */

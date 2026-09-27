@@ -6,7 +6,7 @@
 import { env } from "cloudflare:test";
 import { EXPECTED_SCHEMA_VERSION, ensureSchema, resetSchemaCacheForTests } from "../src/db/selfheal";
 
-/** 0001 迁移应当建立的全部对象（与 docs/modules/Menote-数据模型与迁移设计-v1.md §3.2 一致） */
+/** 迁移应当建立的全部对象（0001 的 8 张 + 0003 的 `user_crypto`；见《数据模型与迁移设计》§3.2 与《隐私锁设计》§4.1） */
 export const TABLES = [
   "app_meta",
   "users",
@@ -16,6 +16,8 @@ export const TABLES = [
   "folders",
   "items",
   "item_bodies",
+  // 0003（M3）：隐私锁的门禁材料
+  "user_crypto",
 ] as const;
 
 export const INDEXES = [
@@ -64,3 +66,17 @@ export async function listObjects(): Promise<Set<string>> {
 }
 
 export { EXPECTED_SCHEMA_VERSION };
+
+/**
+ * 把刚注册的账号还原成 **M1/M2 存量账号**的样子：删掉注册时补建的加密空间行、把用户计数器归零。
+ *
+ * 为什么需要它：M3 起**每个新账号都自带一条空间行**（《隐私锁设计》§6.2），
+ * 于是"空库首拉"这类游标用例的空库前提不再成立。存量账号（还没有空间行）是真实存在的状态，
+ * 所以这里不是绕过断言，而是换一个同样真实的起点。
+ */
+export async function asLegacyAccount(userId: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM folders WHERE user_id = ? AND is_enc_space = 1")
+    .bind(userId)
+    .run();
+  await env.DB.prepare("UPDATE users SET sync_seq = 0 WHERE id = ?").bind(userId).run();
+}

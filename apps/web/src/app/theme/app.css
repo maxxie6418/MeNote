@@ -160,7 +160,9 @@ button {
   min-width: 0;
   border: none;
   background: none;
-  outline: none;
+  /* 不写 `outline: none`（2026-09-27 修）：它特异性高于全局 `:focus-visible`、又没有补偿样式，
+     等于把键盘焦点环抹掉（DESIGN.md 禁止项 #11）。全局 `:focus-visible` 只在键盘聚焦时出现，
+     鼠标点击不会多画外框——所以交给全局规则即可。 */
   font-size: var(--fs-small);
 }
 
@@ -482,7 +484,7 @@ button {
   flex: 1;
   min-width: 0;
   border: none;
-  outline: none;
+  /* 同样不写 `outline: none`：键盘聚焦要能看见（禁止项 #11；详见 `.searchbox input` 的注释） */
   background: none;
   font-size: var(--fs-title);
   font-weight: 600;
@@ -672,7 +674,7 @@ button {
   color: inherit;
   font: inherit;
   min-width: 96px;
-  outline: none;
+  /* 不写 `outline: none`：标签格编辑时键盘聚焦要能看见（禁止项 #11） */
 }
 
 /* 正文里的非图片附件：走链接样式（界面稿 §7.4：不用按钮冒充链接、不沿用正文色） */
@@ -1258,7 +1260,7 @@ button.chip--tag:hover {
   background: var(--panel);
   border: 1px solid var(--primary);
   border-radius: var(--radius-sm);
-  outline: none;
+  /* 不写 `outline: none`：内联命名行是键盘流程（Enter 确认 / Esc 取消），焦点必须可见 */
   font-size: var(--fs-small);
 }
 

@@ -165,6 +165,16 @@ describe("看板", () => {
     await user.click(within(card(container, "t1")).getByRole("button", { name: "开始" }));
     expect(onStatusChange).toHaveBeenCalledWith("t1", "doing");
   });
+
+  it("看板卡片上的「更多」同样是 sprite 的 `i-more`（与清单行同一个字形）", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "看板" }));
+    const kanbanCard = card(container, "t1");
+    expect(kanbanCard.querySelector('use[href="#i-more"]')).not.toBeNull();
+    expect(kanbanCard.textContent ?? "").not.toContain("⋯");
+  });
 });
 
 describe("筛选（纯本地）", () => {
@@ -289,5 +299,13 @@ describe("清单行的结构（原型 `.tkrow`；v0.4.50 从卡片改成横向�
     const { container } = renderPanel();
     // 夹具里 t1（交物业费）是已逾期那条
     expect(card(container, "t1").getAttribute("data-overdue")).toBe("true");
+  });
+
+  it("「更多」用 sprite 的 `i-more` 字形，不是文本字符（原型 `.tkrow__acts` 就是 `#i-more`）", () => {
+    const { container } = renderPanel();
+    const row = container.querySelector(".taskrow");
+    expect(row?.querySelector('use[href="#i-more"]')).not.toBeNull();
+    // 此前这里是 `⋯` 这个文本字符（v0.5.1 换掉）——字形与字号都不受控，且全仓其余「更多」都走 sprite
+    expect(row?.textContent ?? "").not.toContain("⋯");
   });
 });

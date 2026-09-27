@@ -1216,6 +1216,13 @@ button {
   原型与我们的应用**同一套令牌**，只是类名不同（原型 `.memo` / `.tl__*` / `.tkcard*` /
   `.tkkan*` / `.tkgrp*`，我们 `.memo*` / `.timeline*` / `.taskcard*` / `.kanban*` / `.tasklist*`）。
   这里以**覆盖式追加**的方式把取值改成原型的值（后出现者胜，便于按原型逐处微调）。
+
+  【v0.5.1 修正】"覆盖式追加"有个前提：**同一个选择器 + 同一个属性，本块之后不许再出现别的规则**。
+  该前提从 v0.4.44 落地那一刻就不成立（文件末尾还有 M2 时代的 `.memopanel*` / `.timeline*` /
+  `.memo` 与 `.taskpanel*` / `.kanban*` / `.taskcard*` 旧块），于是本块这一整批取值**从未生效**，
+  线上一直是旧值。现在：①旧块里被本块取代的声明一律删掉（每个属性只留本块这一处来源）；
+  ②`test/css-cascade.test.ts` 断言全文件内"同选择器 + 同属性被后置规则用不同值覆盖"为 0，再犯即失败。
+  新增或调整取值请**直接改本块**，不要在文件后面再写一条覆盖。
 */
 
 /* —— memo —— */
@@ -1224,6 +1231,8 @@ button {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* `min-width` 原本只写在文件末尾的旧块里（清理后并入本块，避免丢声明） */
+  min-width: 0;
 }
 
 .memopanel__head {
@@ -1240,11 +1249,16 @@ button {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* 原型 `.page__scroll`：四边同为宽松档。此前这个值由文件末尾的旧块给（sp-4 sp-5，与原型不符）；
+     v0.5.1 起因「后置旧块覆盖」被清理，改由本块按原型给值。 */
+  padding: var(--sp-5);
 }
 
 .timeline {
+  /* 原型 `.tl`：日期组之间是宽松档的上限 sp-6（旧块给的是 sp-5，且它写在文件末尾、会赢） */
   display: flex;
   flex-direction: column;
+  gap: var(--sp-6);
 }
 
 .timeline__day {
@@ -1270,8 +1284,9 @@ button {
 }
 
 .timeline__date {
-  /* 原型 `.tl__date` */
+  /* 原型 `.tl__date`（`margin: 0` 原本只在文件末尾的旧块里，清理后并入本块） */
   display: block;
+  margin: 0;
   color: var(--text);
   font-size: var(--fs-body-lg);
   font-weight: 600;
@@ -1325,15 +1340,6 @@ button {
 .timeline__content {
   min-width: 0;
   padding: var(--sp-1) 0 var(--sp-4);
-}
-
-.timeline__date {
-  /* 原型 `.tl__date` */
-  display: block;
-  color: var(--text);
-  font-size: var(--fs-body-lg);
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .memo {
@@ -1449,20 +1455,24 @@ button {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* `min-width` 原本只写在文件末尾的旧块里（清理后并入本块，避免丢声明） */
+  min-width: 0;
 }
 
 .taskpanel__body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+  /* 原型 `.page__scroll`：四边同为宽松档（此前写的 sp-3 / sp-5 是近似值，且从未生效过） */
+  padding: var(--sp-5);
 }
 
 .taskfilter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2) var(--sp-3);
+  /* 原型 `.tkhead__bar`：单值 sp-2 */
+  gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-5);
   border-bottom: 1px solid var(--line);
 }
@@ -1518,8 +1528,11 @@ button {
 
 .kanban__col {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--sp-2);
+  /* `flex` / `min-width` 原本只写在文件末尾的旧块里（清理后并入本块，避免丢声明） */
+  min-width: 0;
   padding: var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -1547,6 +1560,8 @@ button {
   display: grid;
   flex: 1;
   place-items: center;
+  /* `margin: 0` 原本只在文件末尾的旧块里写着（清理后并入本块，避免被 p 的默认外边距顶偏） */
+  margin: 0;
   padding: var(--sp-4) 0;
   color: var(--muted);
   font-size: var(--fs-micro);
@@ -1583,6 +1598,8 @@ button {
   color: var(--text-2);
   font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
+  /* 分组头是 h3（600），计数得自己降回常规字重——原本只在文件末尾的旧块里写着（清理后并入本块） */
+  font-weight: 400;
 }
 
 /* 分组圆点（原型 `.tkgrp__dot`；状态由模板拼 `--todo / --doing / --done`）
@@ -2810,22 +2827,13 @@ button.chip--tag:hover {
 
 /* ============================================================
    Memo 视图（需求 §8.4；间距按 §4.3 刻度）
+
+   【v0.5.1】以下与文件前部「原型对齐块（memo 与待办）」取值不同的声明**已移除**：
+   `.memopanel` 的重复项、`.memopanel__head`、`.memopanel__body`、`.timeline`、
+   `.timeline__date`、`.memo`、`.memo-empty`。原因是它们的取值与本块之外的同一属性打架，
+   而**后出现的这份会赢**，于是前部那批「按原型对齐」的取值从未生效（详见前部说明与
+   `test/css-cascade.test.ts`）。取值以后只在前部那一处给；本块只保留前部没有的规则。
    ============================================================ */
-.memopanel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.memopanel__head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-4) var(--sp-5) var(--sp-3);
-  border-bottom: 1px solid var(--line);
-}
-
 .memopanel__title {
   margin: 0;
   font-size: var(--fs-body-lg);
@@ -2852,37 +2860,10 @@ button.chip--tag:hover {
   min-width: 0;
 }
 
-.memopanel__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--sp-4) var(--sp-5);
-}
-
-.timeline {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-}
-
 .timeline__day {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-}
-
-.timeline__date {
-  margin: 0;
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.memo {
-  position: relative;
-  padding: var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
 }
 
 .memo__head {
@@ -2969,11 +2950,6 @@ button.chip--tag:hover {
   text-decoration: underline;
 }
 
-.memo-empty {
-  padding: var(--sp-6) 0;
-  text-align: center;
-}
-
 .memo-empty__title {
   margin: 0 0 var(--sp-1);
   font-size: var(--fs-body-lg);
@@ -3009,130 +2985,20 @@ button.chip--tag:hover {
 }
 
 /* ============================================================
-   待办视图（需求 §9.4；列表 / 看板共用同一张卡）
+   待办视图（需求 §9.4）
+
+   【v0.5.1】这一块原先与文件前部「原型对齐块（memo 与待办）」整套重合（`.taskpanel` /
+   `.taskpanel__body` / `.taskfilter` / `.tasklist*` / `.kanban*` / `.taskcard*`），
+   而且因为**写在文件后部**，把前部那批「按原型对齐」的取值全部压掉了（v0.4.44–v0.4.50 白做）。
+   现在重合的规则一律移除：
+   - 取值由文件前部那一处给：`.kanban` 回到原型的三列 grid、看板列体去掉原型没有的虚线框、
+     `.taskcard` 的内边距与标题字号回到原型值、分组头与列头回到原型的字号与字色……
+   - 只留前部没有的 `.taskcard__status`（卡片上的**文字**状态：禁止项 #4 要求状态不能只靠颜色）。
+   以后不要再在这里写待办的取值；`test/css-cascade.test.ts` 会拦住"后置覆盖"。
    ============================================================ */
-.taskpanel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.taskpanel__body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--sp-4) var(--sp-5);
-}
-
-.taskfilter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-5);
-  border-bottom: 1px solid var(--line);
-}
-
-.tasklist {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.tasklist__head,
-.kanban__head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin: 0 0 var(--sp-2);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.tasklist__count {
-  font-variant-numeric: tabular-nums;
-  font-weight: 400;
-}
-
-.tasklist__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.taskcard {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-
-.taskcard__main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.taskcard__title {
-  font-size: var(--fs-body);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskcard__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-1);
-}
-
 .taskcard__status {
   font-size: var(--fs-micro);
   color: var(--muted);
-}
-
-.taskcard__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  flex: none;
-}
-
-.kanban {
-  display: flex;
-  gap: var(--sp-4);
-  align-items: flex-start;
-}
-
-.kanban__col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.kanban__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-height: 80px;
-  padding: var(--sp-2);
-  border: 1px dashed var(--line-2);
-  border-radius: var(--radius);
-}
-
-.kanban__empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  text-align: center;
 }
 
 /* ============================================================

@@ -11,6 +11,7 @@
  */
 import type { LocalItem } from "../../../data/db";
 import { Chip } from "../../../app/ui/Chip";
+import { Icon } from "../../../app/ui/Icon";
 import { DropdownMenu } from "../../../app/ui/Menu";
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, type TaskStatus } from "@menote/mdcore";
 import { statusOf } from "../model";
@@ -81,7 +82,7 @@ export function TaskRow({ task, title, today, onStatusChange, onClearMarker }: T
         <DropdownMenu
           label={`${title} 的更多操作`}
           showChevron={false}
-          trigger={<span aria-hidden="true">⋯</span>}
+          trigger={<Icon name="more" size={13} />}
           items={[
             {
               id: "clear",

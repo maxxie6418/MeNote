@@ -156,6 +156,21 @@ describe("功能栏与录入框占位", () => {
         onViewChange={vi.fn()}
         notebookPanel={null}
         tags={[]}
+        vault={{
+          enabled: false,
+          locked: false,
+          count: 0,
+          onOpen: vi.fn(),
+          onUnlock: vi.fn(),
+          tree: {
+            folders: [],
+            counts: {},
+            selectedId: null,
+            onSelect: vi.fn(),
+            onCreateFolder: vi.fn(),
+            onRenameFolder: vi.fn(),
+          },
+        }}
       />,
     );
 

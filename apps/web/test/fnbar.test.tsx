@@ -26,6 +26,21 @@ function renderFnBar(overrides: Partial<Parameters<typeof FnBar>[0]> = {}) {
       view={{ kind: "notebook" }}
       onViewChange={vi.fn()}
       notebookPanel={<div data-testid="notebook-panel" />}
+      vault={{
+        enabled: false,
+        locked: false,
+        count: 0,
+        onOpen: vi.fn(),
+        onUnlock: vi.fn(),
+        tree: {
+          folders: [],
+          counts: {},
+          selectedId: null,
+          onSelect: vi.fn(),
+          onCreateFolder: vi.fn(),
+          onRenameFolder: vi.fn(),
+        },
+      }}
       tags={[
         { tag: "工作", count: 2 },
         { tag: "dev", count: 1 },
@@ -115,12 +130,66 @@ describe("功能栏结构", () => {
     expect(onViewChange).toHaveBeenCalledWith({ kind: "tag", tag: "工作" });
   });
 
-  it("加密空间是禁用占位并说明原因（M2 只做外观）", () => {
+  it("未启用隐私锁时，加密空间是禁用占位并说明去哪里启用（M3-6）", () => {
     renderFnBar();
     const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;
     expect(vault.disabled).toBe(true);
-    expect(vault.title).toContain("M3");
+    expect(vault.title).toContain("设置 › 隐私锁");
     expect(vault.dataset.locked).toBe("true");
+    expect(vault.textContent).toContain("未启用");
+  });
+
+  it("已锁定：可点且提示去解锁（不展开内容）", () => {
+    const onUnlock = vi.fn();
+    renderFnBar({
+      vault: {
+        enabled: true,
+        locked: true,
+        count: 3,
+        onOpen: vi.fn(),
+        onUnlock,
+        tree: {
+          folders: [],
+          counts: {},
+          selectedId: null,
+          onSelect: vi.fn(),
+          onCreateFolder: vi.fn(),
+          onRenameFolder: vi.fn(),
+        },
+      },
+    });
+
+    const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;
+    expect(vault.disabled).toBe(false);
+    expect(vault.textContent).toContain("已锁定");
+    fireEvent.click(vault);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("已解锁：显示空间内条目数，点击打开空间", () => {
+    const onOpen = vi.fn();
+    renderFnBar({
+      vault: {
+        enabled: true,
+        locked: false,
+        count: 7,
+        onOpen,
+        onUnlock: vi.fn(),
+        tree: {
+          folders: [],
+          counts: {},
+          selectedId: null,
+          onSelect: vi.fn(),
+          onCreateFolder: vi.fn(),
+          onRenameFolder: vi.fn(),
+        },
+      },
+    });
+
+    const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;
+    expect(vault.textContent).toContain("7");
+    fireEvent.click(vault);
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });
 

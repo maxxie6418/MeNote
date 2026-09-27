@@ -14,7 +14,7 @@ import type { TaskPriority } from "@menote/mdcore";
 import { Composer, type ComposerMode } from "./Composer";import { NavList } from "./NavList";
 import { NavSegmented, type BrowsableView } from "./NavSegmented";
 import { TagGroup } from "./TagGroup";
-import { VaultNode } from "./VaultNode";
+import { VaultNode, type VaultNodeProps } from "./VaultNode";
 import type { NotesView } from "../../features/notes/views";
 
 export interface FnBarProps {
@@ -33,6 +33,11 @@ export interface FnBarProps {
    * 不该反向依赖 notes 这个 feature（架构 §2.3.3 的依赖方向）。
    */
   notebookPanel: React.ReactNode;
+  /**
+   * 加密空间节点（M3-6）：三态与计数由 `App` 组装后传入——
+   * 功能栏不认识隐私锁状态机（架构 §2.3.3 的依赖方向）。
+   */
+  vault: VaultNodeProps;
   /** 浏览三段的当前项（M2-4/M2-5/M2-8 接入前恒为空） */
   browseView?: BrowsableView;
   onBrowseChange?: (view: BrowsableView) => void;
@@ -52,6 +57,7 @@ export function FnBar({
   onViewChange,
   tags,
   notebookPanel,
+  vault,
   browseView,
   onBrowseChange,
   showHome = true,
@@ -81,7 +87,7 @@ export function FnBar({
         <TagGroup view={view} onViewChange={onViewChange} tags={tags} />
       </div>
 
-      <VaultNode />
+      <VaultNode {...vault} />
     </aside>
   );
 }

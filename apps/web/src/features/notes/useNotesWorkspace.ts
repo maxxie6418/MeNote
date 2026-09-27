@@ -10,9 +10,7 @@ import { buildDocument, deriveTags, deriveTaskFields } from "@menote/mdcore";
 import {
   clearConflict,
   countItemsByFolder,
-  createLocalFolder,
   createLocalItem,
-  createLocalNote,
   db,
   enqueueBodySave,
   enqueueMetaPatch,
@@ -42,9 +40,9 @@ import {
   type NotesView,
 } from "./views";
 import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
+import { useNoteCreation } from "./useNoteCreation";
+import { useVaultScope } from "./useVaultScope";
 import type { PrivacyGate } from "@menote/shared";
-
-const DEFAULT_TITLE = "未命名笔记";
 
 /** 列表是否等价：只比对界面真正用到的字段 */
 function sameItems(left: LocalItem[], right: LocalItem[]): boolean {
@@ -84,6 +82,26 @@ export interface NotesWorkspace {
   /** 本地文件夹（两层树）与其条目计数 */
   folders: LocalFolder[];
   folderCounts: Record<string, number>;
+  /**
+   * 笔记本树用的文件夹与计数（M3-6）：**排除整个加密空间子树**——
+   * 空间不在笔记本树里，它是导航底部那个贴底节点（设计 §6.2）。
+   */
+  notebookFolders: LocalFolder[];
+  notebookCounts: Record<string, number>;
+  /** 加密空间（M3-6）：根行 / 空间内子夹 / 空间内条目数 */
+  vault: {
+    /** 空间根文件夹 id；服务端补建完成前可能为 null（此时不给建入口） */
+    id: string | null;
+    name: string;
+    /** 空间内的子夹（不含根自己；根就是列表的"根目录"） */
+    folders: LocalFolder[];
+    /** 空间内条目总数（含子夹里的） */
+    count: number;
+  };
+  /** 在空间内新建笔记（创建请求天然带 `in_enc_space`，不走"先建后移"） */
+  createNoteInVault: (options?: { folderId?: string | null }) => Promise<void>;
+  /** 在空间内新建文件夹（与笔记本同一套两层限制） */
+  createVaultFolder: (name: string, parentId: string | null) => Promise<void>;
   /** 列表行的摘要（取自已缓存正文的第一行） */
   summaries: Record<string, string>;
   initialBody: string;
@@ -260,16 +278,15 @@ export function useNotesWorkspace(
     [onLocalWrite, syncConflictState],
   );
 
-  const createNote = useCallback(
-    async (options?: { title?: string; body?: string }) => {
-      const id = newUlid();
-      await createLocalNote(id, options?.title ?? DEFAULT_TITLE, options?.body ?? "", Date.now());
-      await refresh();
-      await open(id);
-      onLocalWrite?.();
-    },
-    [onLocalWrite, open, refresh],
-  );
+  /** 新建动作：新建笔记与新建文件夹（M3-6 起在 `useNoteCreation` 里） */
+  const { createNote, createFolder } = useNoteCreation({
+    folders,
+    view,
+    refresh,
+    open,
+    setView,
+    onLocalWrite,
+  });
 
   /** 放弃本地改动、按最新内容重新打开（跨标签页提示里的"重新载入"） */
   const reloadSelected = useCallback(async () => {
@@ -334,23 +351,6 @@ export function useNotesWorkspace(
     }
     return viewTitle(view);
   }, [folders, view]);
-
-  const createFolder = useCallback(
-    async (name: string, parentId: string | null) => {
-      const parent = parentId === null ? null : (folders.find((row) => row.id === parentId) ?? null);
-      const depth = folderDepthFor(parent);
-      // 客户端先挡一层：界面本该不给出非法入口，真出现了也不该把脏数据写进本地库
-      if (depth > MAX_FOLDER_DEPTH) {
-        throw new Error(`最多支持 ${MAX_FOLDER_DEPTH} 层文件夹`);
-      }
-      const id = newUlid();
-      await createLocalFolder(id, name, parentId, depth, Date.now());
-      await refresh();
-      setView({ kind: "notebook", folderId: id });
-      onLocalWrite?.();
-    },
-    [folders, onLocalWrite, refresh],
-  );
 
   /**
    * 发布 Memo。
@@ -491,6 +491,17 @@ export function useNotesWorkspace(
     [patchItem],
   );
 
+  /** 加密空间的作用域（M3-6）：派生值与空间内新建都在 `useVaultScope` 里 */
+  const vaultScope = useVaultScope({
+    folders,
+    folderCounts,
+    allItems,
+    refresh,
+    open,
+    setView,
+    onLocalWrite,
+  });
+
   /**
    * **必须 memo**：返回值身份不稳定会让调用方的 effect 依赖（如 App 里启动同步引擎的 effect）
    * 每次渲染都变化 → 引擎被反复 stop/create/start → 请求风暴（M1-11 实测：10 秒 35 次 sync）。
@@ -508,6 +519,11 @@ export function useNotesWorkspace(
       selected,
       folders,
       folderCounts,
+      notebookFolders: vaultScope.notebookFolders,
+      notebookCounts: vaultScope.notebookCounts,
+      vault: vaultScope.vault,
+      createNoteInVault: vaultScope.createNoteInVault,
+      createVaultFolder: vaultScope.createVaultFolder,
       summaries,
       initialBody,
       snapshot,
@@ -573,7 +589,7 @@ export function useNotesWorkspace(
       snapshot,
       summaries,
       tags,
-      title,
+      vaultScope,      title,
       togglePinned,
       toggleStarred,
       updateMemo,

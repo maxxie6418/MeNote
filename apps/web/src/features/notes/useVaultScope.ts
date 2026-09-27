@@ -1,0 +1,133 @@
+/**
+ * 加密空间的**作用域**（M3-6）：把"空间在哪、空间里有什么、怎么在空间里新建"这几件事
+ * 从 `useNotesWorkspace` 里分出来（那个 hook 有 500 行预算）。
+ *
+ * 依赖方向：只往下依赖数据层与纯函数（`data/db`、`privacy/vault`），
+ * **不依赖 `features/privacy` 的任何 hook/组件**——门禁判定是纯函数，界面由 `app/` 组装。
+ *
+ * 三条口径：
+ * 1. **笔记本树与空间互不混入**：`notebookFolders` / `notebookCounts` 摘掉整个空间子树；
+ * 2. 空间内新建**天然带标记**（`in_enc_space`），不走"先建后移"；
+ * 3. 空间根还没同步下来时（`vault.id === null`）不给新建入口——报错也要说清原因。
+ */
+import { useCallback, useMemo } from "react";
+import type { LocalFolder, LocalItem } from "../../data/db";
+import { createLocalFolder, createLocalItem } from "../../data/db";
+import { newUlid, ENC_SPACE_DEFAULT_NAME } from "@menote/shared";
+import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
+import {
+  findVaultRoot,
+  notebookFolders,
+  vaultChildFolders,
+  vaultSubtree,
+} from "../privacy/vault";
+import type { NotesView } from "./views";
+
+export interface VaultDescriptor {
+  /** 空间根文件夹 id；服务端补建完成前可能为 null */
+  id: string | null;
+  name: string;
+  /** 空间内的子夹（不含根自己） */
+  folders: LocalFolder[];
+  /** 空间内条目总数（含子夹里的） */
+  count: number;
+}
+
+export interface VaultScopeInput {
+  folders: readonly LocalFolder[];
+  folderCounts: Readonly<Record<string, number>>;
+  allItems: readonly LocalItem[];
+  refresh: () => Promise<void>;
+  open: (id: string) => Promise<void>;
+  setView: (view: NotesView) => void;
+  onLocalWrite?: () => void;
+}
+
+export interface VaultScope {
+  notebookFolders: LocalFolder[];
+  notebookCounts: Record<string, number>;
+  vault: VaultDescriptor;
+  createVaultFolder: (name: string, parentId: string | null) => Promise<void>;
+  createNoteInVault: (options?: { folderId?: string | null }) => Promise<void>;
+}
+
+export function useVaultScope(input: VaultScopeInput): VaultScope {
+  const { folders, folderCounts, allItems, refresh, open, setView, onLocalWrite } = input;
+
+  const vaultRoot = useMemo(() => findVaultRoot(folders), [folders]);
+  const notebookFolderRows = useMemo(() => notebookFolders(folders), [folders]);
+  const notebookCounts = useMemo(() => {
+    const excluded = new Set(vaultSubtree(folders).map((folder) => folder.id));
+    return Object.fromEntries(
+      Object.entries(folderCounts).filter(([folderId]) => !excluded.has(folderId)),
+    );
+  }, [folderCounts, folders]);
+  const vault = useMemo<VaultDescriptor>(
+    () => ({
+      id: vaultRoot?.id ?? null,
+      name: vaultRoot?.name ?? ENC_SPACE_DEFAULT_NAME,
+      folders: vaultChildFolders(folders),
+      count: allItems.filter((item) => item.in_enc_space === 1).length,
+    }),
+    [allItems, folders, vaultRoot],
+  );
+
+  const createVaultFolder = useCallback(
+    async (name: string, parentId: string | null) => {
+      const parent =
+        parentId === null
+          ? (vaultRoot ?? null)
+          : (folders.find((row) => row.id === parentId) ?? null);
+      const depth = folderDepthFor(parent);
+      if (depth > MAX_FOLDER_DEPTH) {
+        throw new Error(`最多支持 ${MAX_FOLDER_DEPTH} 层文件夹`);
+      }
+      const id = newUlid();
+      await createLocalFolder(id, name, parentId, depth, Date.now(), { inEncSpace: true });
+      await refresh();
+      setView({ kind: "notebook", folderId: id });
+      onLocalWrite?.();
+    },
+    [folders, onLocalWrite, refresh, setView, vaultRoot],
+  );
+
+  const createNoteInVault = useCallback(
+    async (options: { folderId?: string | null } = {}) => {
+      if (!vaultRoot) {
+        throw new Error("加密空间还没同步下来，请稍后重试");
+      }
+      const id = newUlid();
+      await createLocalItem(
+        {
+          id,
+          type: "note",
+          title: null,
+          folder_id: options.folderId ?? vaultRoot.id,
+          body: "",
+          inEncSpace: true,
+        },
+        Date.now(),
+      );
+      await refresh();
+      await open(id);
+      onLocalWrite?.();
+    },
+    [onLocalWrite, open, refresh, vaultRoot],
+  );
+
+  /**
+   * **必须 memo**：`useNotesWorkspace` 会把这个对象放进它自己的 memo 依赖，
+   * 每次新建对象会让 workspace 的返回值身份每次都变 → 调用方 effect（同步引擎）反复重建
+   * → 请求风暴（M1-11 实测过；`notes-hook` 的引用稳定性用例专门盯这一点）。
+   */
+  return useMemo(
+    () => ({
+      notebookFolders: notebookFolderRows,
+      notebookCounts,
+      vault,
+      createVaultFolder,
+      createNoteInVault,
+    }),
+    [createNoteInVault, createVaultFolder, notebookCounts, notebookFolderRows, vault],
+  );
+}

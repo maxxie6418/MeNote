@@ -11,7 +11,6 @@ import { useAuth } from "../features/auth/model";
 import { AuthLoading, AuthScreens } from "./AuthScreens";
 import { NoteList } from "../features/notes/ui/NoteList";
 import { NoteWorkspace } from "../features/notes/ui/NoteWorkspace";
-import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
 import { useNotesWorkspace, type NotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { changeLoginPassword } from "../features/settings/model";
 import { PrivacySettingsPage } from "../features/settings/ui/PrivacySettingsPage";
@@ -42,6 +41,9 @@ import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
 import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
 import { AppUnlockModal, PrivacySlot } from "./PrivacySlot";
+import { navPanels } from "./NavPanels";
+import { isInVault } from "../features/privacy/vault";
+import { isScopeGateOpen } from "@menote/shared";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -144,6 +146,40 @@ export default function App() {
     workspaceRef.current = workspace;
   }, [workspace]);
 
+  /** 切换笔记视图时同时退出浏览三段，避免"看起来在 Memo 页、却在改笔记视图" */
+  const showNotesView = useCallback(
+    (view: NotesView) => {
+      setBrowse(null);
+      workspace.setView(view);
+    },
+    [workspace],
+  );
+
+  /**
+   * 功能栏两个插槽（笔记本分组 / 加密空间节点）：装配在 `NavPanels.tsx`，
+   * 行为仍在这里定——切视图、开解锁框、缺空间时提示。
+   */
+  const nav = navPanels({
+    workspace,
+    gate: privacy.gate,
+    enabled: privacy.enabled,
+    onSelectView: showNotesView,
+    onUnlock: requestUnlock,
+    onVaultMissing: () => pushToast("加密空间还没同步下来，请稍后重试", "error"),
+    onOpenVaultFolder: (folderId) => {
+      setBrowse(null);
+      workspace.setView({ kind: "notebook", folderId: folderId ?? workspace.vault.id });
+    },
+  });
+
+  useEffect(() => {
+    if (isScopeGateOpen(privacy.gate)) return;
+    if (workspace.view.kind !== "notebook") return;
+    if (isInVault(workspace.folders, workspace.view.folderId ?? null)) {
+      workspace.setView({ kind: "notebook", folderId: null });
+    }
+  }, [privacy.gate, workspace]);
+
   /**
    * 依赖里带上 `workspace` 是安全的：启动同步引擎的 effect **只依赖登录状态**，
    * 回调经 `refreshAllRef` 间接调用，所以这个 callback 换身份不会重建引擎。
@@ -153,15 +189,6 @@ export default function App() {
     await workspace.refreshEditorState();
     await refreshPending();
   }, [refreshPending, workspace]);
-
-  /** 切换笔记视图时同时退出浏览三段，避免"看起来在 Memo 页、却在改笔记视图" */
-  const showNotesView = useCallback(
-    (view: NotesView) => {
-      setBrowse(null);
-      workspace.setView(view);
-    },
-    [workspace],
-  );
 
   /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
   const focusComposer = useCallback(() => {
@@ -360,17 +387,8 @@ export default function App() {
             showHome={userSettings.settings.start_view === "home"}
             composerMode={composerMode}
             onComposerModeChange={setComposerMode}
-            notebookPanel={
-              <NotebookPanel
-                view={workspace.view}
-                onViewChange={showNotesView}
-                folders={workspace.folders}
-                counts={workspace.folderCounts}
-                onCreateFolder={workspace.createFolder}
-                onRenameFolder={workspace.renameFolder}
-                onMoveFolder={workspace.moveFolder}
-              />
-            }
+            notebookPanel={nav.notebookPanel}
+            vault={nav.vault}
           />
         }
       >

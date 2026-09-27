@@ -15,11 +15,11 @@
  */
 import { useState } from "react";
 import type { LocalFolder } from "../../../data/db";
-import { Button } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
 import { Modal } from "../../../app/ui/Modal";
 import { NavItem } from "../../../app/ui/NavItem";
 import { FolderTree } from "./FolderTree";
+import { FolderRenameModal } from "./FolderRenameModal";
 import { NbAddButton } from "./NbAddButton";
 import { canCreateChildFolder, folderMoveTargets, type MoveTarget } from "../folders";
 import type { NotesView } from "../views";
@@ -45,7 +45,7 @@ export function NotebookPanel({
 }: NotebookPanelProps) {
   const [creatingIn, setCreatingIn] = useState<{ parentId: string | null } | null>(null);
   const [draftName, setDraftName] = useState("");
-  const [renaming, setRenaming] = useState<{ folder: LocalFolder; name: string } | null>(null);
+  const [renaming, setRenaming] = useState<LocalFolder | null>(null);
   const [moving, setMoving] = useState<{ folder: LocalFolder; targets: MoveTarget[] } | null>(null);
 
   const selectedFolderId = view.kind === "notebook" ? (view.folderId ?? null) : null;
@@ -118,47 +118,19 @@ export function NotebookPanel({
         selectedId={selectedFolderId}
         counts={counts}
         onSelect={(folderId) => onViewChange({ kind: "notebook", folderId })}
-        onRename={(folder) => setRenaming({ folder, name: folder.name })}
+        onRename={(folder) => setRenaming(folder)}
         onMove={(folder) => setMoving({ folder, targets: folderMoveTargets(folders, folder.id) })}
         onCreateChild={(folder) => beginCreate(folder)}
       />
 
-      <Modal
-        open={renaming !== null}
-        title="重命名文件夹"
-        onClose={() => setRenaming(null)}
-        footer={
-          <>
-            <Button size="sm" onClick={() => setRenaming(null)}>
-              取消
-            </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={(renaming?.name.trim() ?? "") === ""}
-              title={(renaming?.name.trim() ?? "") === "" ? "名称不能为空" : undefined}
-              onClick={() => {
-                const target = renaming;
-                setRenaming(null);
-                if (target) void onRenameFolder(target.folder.id, target.name.trim());
-              }}
-            >
-              保存
-            </Button>
-          </>
-        }
-      >
-        <input
-          className="field__input"
-          aria-label="文件夹名称"
-          value={renaming?.name ?? ""}
-          onChange={(event) =>
-            setRenaming((previous) =>
-              previous ? { ...previous, name: event.target.value } : previous,
-            )
-          }
+      {renaming ? (
+        <FolderRenameModal
+          key={renaming.id}
+          folder={renaming}
+          onClose={() => setRenaming(null)}
+          onRename={onRenameFolder}
         />
-      </Modal>
+      ) : null}
 
       <Modal
         open={moving !== null}

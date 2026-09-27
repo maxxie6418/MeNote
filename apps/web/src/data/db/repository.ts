@@ -169,12 +169,19 @@ export async function createLocalFolder(
   parentId: string | null,
   depth: number,
   now: number,
+  options: {
+    /**
+     * 在**加密空间内**新建文件夹（M3-6）：`in_enc_space = 1` 表示"本行位于空间内"。
+     * 空间根行本身由服务端补建（`ensureEncSpace`），客户端不建、也不该建第二个。
+     */
+    inEncSpace?: boolean;
+  } = {},
 ): Promise<LocalFolder> {
   const folder: LocalFolder = {
     id,
     parent_id: parentId,
     is_enc_space: 0,
-    in_enc_space: 0,
+    in_enc_space: options.inEncSpace ? 1 : 0,
     name,
     depth,
     position: 0,
@@ -354,6 +361,11 @@ export interface NewLocalItemInput {
   body: string;
   /** 清单标记（仅 Memo 有；由 `@menote/mdcore` 从 YAML 派生，前后端同一份实现） */
   task?: { isTask: boolean; status: string | null; due: string | null; priority: string | null };
+  /**
+   * 在加密空间内新建（M3-6）：create 请求会带上这个标记，**条目天然属于空间**，
+   * 不需要"先建后移"两步——服务端在 `POST/PUT` 时按它写 `in_enc_space`。
+   */
+  inEncSpace?: boolean;
 }
 
 export async function createLocalItem(input: NewLocalItemInput, now: number): Promise<LocalItem> {
@@ -364,7 +376,7 @@ export async function createLocalItem(input: NewLocalItemInput, now: number): Pr
     folder_id: input.folder_id,
     title: input.title,
     enc_self: 0,
-    in_enc_space: 0,
+    in_enc_space: input.inEncSpace ? 1 : 0,
     size_bytes: utf8ByteLength(input.body),
     content_hash: contentHash,
     tags: input.tags ?? [],

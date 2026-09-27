@@ -383,16 +383,21 @@ function Cell({
     const checked = value === "true" || value === "1";
     return (
       <td className="tablegrid__td">
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={checked}
-          aria-label={`${column.name}：${checked ? "已勾选" : "未勾选"}`}
+        {/*
+          复选格用**原生复选框**（界面稿 §2.3：「复选 `checkbox`：直接切换 `Checkbox`（单击即改，
+          无需进入编辑态）」）。仓库里没有 `Checkbox` 组件——既有约定就是原生 `input[type=checkbox]`
+          （设置页、列面板、回收站三处都这么用）。
+          2026-09-27 修：此前是 `<button role="checkbox">` + 绿 chip 里的 `✓` 字形，两个问题——
+          ①与界面稿要求的"复选框控件"不符；②`✓` 是拿**文字符号当状态标记**（`DESIGN.md` 禁止项 #10
+          针对的就是这种代替图标的写法）。顺带：`.tablegrid__check` 此前在 CSS 里**根本不存在**。
+        */}
+        <input
+          type="checkbox"
           className="tablegrid__check"
-          onClick={() => onCellChange(rowId, column.id, checked ? "" : "true")}
-        >
-          {checked ? <Chip tone="green">✓</Chip> : null}
-        </button>
+          checked={checked}
+          aria-label={`${column.name}：${checked ? "已勾选" : "未勾选"}`}
+          onChange={() => onCellChange(rowId, column.id, checked ? "" : "true")}
+        />
       </td>
     );
   }

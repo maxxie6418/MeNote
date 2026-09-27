@@ -60,6 +60,7 @@ export interface HealthResponse {
 // —— 以下按主题分模块，统一从这里再导出（两端只 import "@menote/shared"）——
 export * from "./auth";
 export * from "./base64url";
+export * from "./content";
 export * from "./crypto";
 export * from "./folders";
 export * from "./hash";

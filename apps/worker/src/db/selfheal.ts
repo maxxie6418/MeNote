@@ -13,9 +13,19 @@ import { MIGRATION_LOCK_TTL_MS } from "@menote/shared";
 import { migration0001, type MigrationScript } from "./migrations/0001_init";
 import { migration0002, TASK_TRIGGER_NAMES } from "./migrations/0002_task_literals";
 import { migration0003 } from "./migrations/0003_user_crypto";
+import {
+  M4_INDEX_NAMES,
+  M4_TABLE_NAMES,
+  migration0004,
+} from "./migrations/0004_content_integrity";
 
 /** 全部迁移脚本，按 version 升序 */
-export const MIGRATIONS: readonly MigrationScript[] = [migration0001, migration0002, migration0003];
+export const MIGRATIONS: readonly MigrationScript[] = [
+  migration0001,
+  migration0002,
+  migration0003,
+  migration0004,
+];
 
 /** 代码期望的表结构版本 */
 export const EXPECTED_SCHEMA_VERSION = MIGRATIONS.reduce(
@@ -38,6 +48,8 @@ const REQUIRED_TABLES = [
   "item_bodies",
   // 0003：隐私锁的门禁材料（M3）
   "user_crypto",
+  // 0004：内容完整性六表（M4）
+  ...M4_TABLE_NAMES,
 ] as const;
 
 const REQUIRED_INDEXES = [
@@ -53,6 +65,8 @@ const REQUIRED_INDEXES = [
   "idx_items_trash",
   // 触发器（0002 的任务字段字面量约束）也纳入完整性检查：迁移半途失败时要能发现
   ...TASK_TRIGGER_NAMES,
+  // 0004：内容完整性六表的索引（逐条登记，见迁移文件里的说明）
+  ...M4_INDEX_NAMES,
 ] as const;
 
 export type EnsureSchemaResult =

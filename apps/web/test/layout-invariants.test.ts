@@ -8,6 +8,7 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { assertNoColourLiterals } from "./helpers/css-colors";
 
 const read = (relative: string): string =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -129,12 +130,16 @@ describe("功能栏几何（DESIGN.md §2.5-2 不变量）", () => {
 });
 
 describe("组件硬性规范（DESIGN.md §3.2 / §5.5）", () => {
-  it("组件里不出现硬编码颜色（必须走令牌）", () => {
-    // 允许：tokens.css 定义值、app.css 里的 0/100% 之类无颜色；这里只扫十六进制与 rgb()
-    const hexInApp = app.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
-    const rgbInApp = app.match(/\brgba?\(/g) ?? [];
-    expect(hexInApp).toEqual([]);
-    expect(rgbInApp).toEqual([]);
+  it("组件里不出现硬编码颜色（必须走令牌，DESIGN.md §3.2-1「没有例外」）", () => {
+    /*
+      2026-09-27 补强：原来只扫 `app.css` 的 `#hex` 与 `rgb(`——`hsl(` 与**颜色关键字**
+      （`white` / `black` / `red`…）会被**静默放过**，正是"扫不到"的那一类漏洞。
+      现在走可自证的 `assertNoColourLiterals`（见 `helpers/css-colors.ts` 与 `css-colors.test.ts`），
+      它认 `hsl(`、认颜色关键字、且只看颜色类属性的值（不会把 `white-space` 误判成颜色）；
+      "**src 下全部样式文件 + 全部源码文件**"由 `css-colors.test.ts` 用 Vite 的
+      `import.meta.glob` 铺开（那边不依赖 Node 文件系统 API，与本包的 tsconfig shim 不冲突）。
+    */
+    assertNoColourLiterals(app, "app.css");
   });
 
   it("图标统一 1.6px 描边、无填充、继承文字色（DESIGN.md §5.5）", () => {

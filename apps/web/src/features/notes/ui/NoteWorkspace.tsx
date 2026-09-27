@@ -223,8 +223,12 @@ export function NoteWorkspace({
           添加附件（M4-10；界面稿 §7.1 的"选择文件"入口）：
           真实的 `<input type="file">` 藏起来由按钮代点——这是唯一能唤起系统文件选择器、
           又能在移动端沿用系统选择器（含拍照）的做法。
+
+          **表格条目不显示它**：附件的占位与落库都要插进 Markdown 正文（`EditorHandle.insert`），
+          表格没有这个句柄——文件会照传上去，但**没有任何引用指向它**，30 天后按孤儿清掉
+          （界面稿 §3 的表格正文头也只列了标题 + 锁标识 + 更多菜单，没有添加附件）。
         */}
-        {onFiles ? (
+        {onFiles && !isTable ? (
           <>
             <input
               ref={fileInputRef}
@@ -253,21 +257,27 @@ export function NoteWorkspace({
           </>
         ) : null}
 
-        <div className="segmented" role="group" aria-label="编辑模式" style={{ flex: "none" }}>
-          {(Object.keys(MODE_LABEL) as DocMode[]).map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              className="segmented__item"
-              aria-pressed={mode === candidate}
-              disabled={bodyLocked}
-              title={bodyLocked ? "解锁后才能查看或编辑正文" : undefined}
-              onClick={() => setMode(candidate)}
-            >
-              {MODE_LABEL[candidate]}
-            </button>
-          ))}
-        </div>
+        {/*
+          模式切换只对 Markdown 正文有意义：表格有自己的"表格 / 图册"档位（界面稿 §3 的正文头
+          也只列了标题 + 锁标识 + 更多菜单，**没有模式切换**）。对表格显示它，就是一个点了没反应的控件。
+        */}
+        {isTable ? null : (
+          <div className="segmented" role="group" aria-label="编辑模式" style={{ flex: "none" }}>
+            {(Object.keys(MODE_LABEL) as DocMode[]).map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                className="segmented__item"
+                aria-pressed={mode === candidate}
+                disabled={bodyLocked}
+                title={bodyLocked ? "解锁后才能查看或编辑正文" : undefined}
+                onClick={() => setMode(candidate)}
+              >
+                {MODE_LABEL[candidate]}
+              </button>
+            ))}
+          </div>
+        )}
 
         {encryption ? (
           <DropdownMenu

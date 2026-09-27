@@ -116,6 +116,65 @@ describe("表格接线", () => {
     expect(await screen.findByTestId("editor")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "新增行" })).toBeNull();
   });
+
+  /**
+   * 模式切换（分屏 / 仅编辑 / 仅预览）**只对 Markdown 正文有意义**：
+   * 表格有自己的"表格 / 图册"档位，表格分支根本不看 `mode`——此前它对表格也渲染，
+   * 于是成了一个"点了没反应"的控件（界面稿 §3 的正文头也只列了标题 + 锁标识 + 更多菜单）。
+   */
+  it("表格条目不显示「编辑模式」切换（点了不会有反应的控件不该出现）", async () => {
+    render(
+      <NoteWorkspace item={item("table")} initialBody={tableBody()} snapshot={null} onInput={noop} onTitleChange={noop} />,
+    );
+    expect(await screen.findByRole("button", { name: "新增行" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "编辑模式" })).toBeNull();
+  });
+
+  it("普通笔记仍显示「编辑模式」切换（这是它的正文档位）", async () => {
+    render(
+      <NoteWorkspace
+        item={item("note", "笔记")}
+        initialBody="就一段文字"
+        snapshot={null}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+    expect(await screen.findByRole("group", { name: "编辑模式" })).toBeTruthy();
+  });
+
+  /**
+   * 「添加附件」同理：附件的占位与落库都要插进 Markdown 正文（`EditorHandle.insert`），
+   * 表格没有这个句柄——文件会照传上去，却没有任何引用指向它，30 天后按孤儿清掉。
+   */
+  it("表格条目不显示「添加附件」（传上去也没人引用，会变成孤儿）", async () => {
+    render(
+      <NoteWorkspace
+        item={item("table")}
+        initialBody={tableBody()}
+        snapshot={null}
+        onInput={noop}
+        onTitleChange={noop}
+        onFiles={noop}
+      />,
+    );
+    expect(await screen.findByRole("button", { name: "新增行" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "添加附件" })).toBeNull();
+  });
+
+  it("普通笔记有「添加附件」（给了 onFiles 才出现）", async () => {
+    render(
+      <NoteWorkspace
+        item={item("note", "笔记")}
+        initialBody="就一段文字"
+        snapshot={null}
+        onInput={noop}
+        onTitleChange={noop}
+        onFiles={noop}
+      />,
+    );
+    expect(await screen.findByRole("button", { name: "添加附件" })).toBeTruthy();
+  });
 });
 
 describe("自动降级（界面稿 §2.10：不静默改数据）", () => {

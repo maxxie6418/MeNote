@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CRYPTO_KDF,
   CRYPTO_KDF_ITERATIONS,
+  DEFAULT_PRIVACY_SETTINGS,
   base64UrlEncode,
   cryptoBlobFromBase64Url,
   type PrivacyGate,
@@ -77,8 +78,13 @@ export interface PrivacyLockState {
 export interface UsePrivacyLockOptions {
   /** 未登录时不拉材料、不装广播（材料要会话） */
   authenticated: boolean;
-  /** 用户设置里的隐私锁配置 */
-  config: PrivacySettings;
+  /**
+   * 用户设置里的隐私锁配置。
+   *
+   * **声明成可选是刻意的**：契约里它是可选字段，旧行可能真没有；hook 内部会补齐默认值
+   * （见下方的 `config` 归一化与 2026-09-27 的线上白屏记录）。
+   */
+  config?: PrivacySettings;
 }
 
 function readDeviceFlag(): boolean {
@@ -99,7 +105,26 @@ function writeDeviceFlag(on: boolean): void {
 }
 
 export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState {
-  const { authenticated, config } = options;
+  const authenticated = options.authenticated;
+
+  /**
+   * **配置必须先补齐再用**——2026-09-27 的线上整站白屏正是这里踩的：
+   * `privacy` 在设置契约里是**可选字段**，而本地库里的旧行真的可能没有它；
+   * 消费端直接读 `config.tier` 就抛 TypeError，React 卸载整棵树 → 只剩 CSS 底色。
+   *
+   * 数据层已经补了一道（`data/db/settings.ts` 的 `withSettingsDefaults`，旧行读出来即补齐）；
+   * 这里再加一层**消费端兜底**，因为道理是通用的：**可选字段的消费方不能假定它一定在**。
+   * 用 `useMemo` 兜住身份——这个对象会进 `useMemo`/`useEffect` 依赖，每渲染新建会让下游重算。
+   */
+  const config = useMemo<PrivacySettings>(
+    () => ({
+      ...DEFAULT_PRIVACY_SETTINGS,
+      ...options.config,
+      scope: { ...DEFAULT_PRIVACY_SETTINGS.scope, ...options.config?.scope },
+    }),
+    [options.config],
+  );
+
   const [enabled, setEnabled] = useState(false);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);

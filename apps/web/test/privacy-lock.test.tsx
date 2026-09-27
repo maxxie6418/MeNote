@@ -6,7 +6,7 @@ import "fake-indexeddb/auto";
  * 这里**不 mock 网络**：hook 拉服务端材料会失败（jsdom 里没有后端），于是正好验证
  * 最重要的那条路径——**有本地缓存时离线也能解锁**；服务端那一侧的行为在 worker 用例里测。
  */
-import { renderHook, waitFor, act } from "@testing-library/react";
+import { renderHook, waitFor, act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   CRYPTO_KDF,
@@ -15,6 +15,7 @@ import {
   type CryptoState,
 } from "@menote/shared";
 import { usePrivacyLock } from "../src/features/privacy/usePrivacyLock";
+import { useUserSettings } from "../src/features/settings/useUserSettings";
 import {
   deriveKek,
   makeVerifier,
@@ -161,5 +162,55 @@ describe("设备长期档", () => {
     expect(window.localStorage.getItem("menote:privacy:device-unlocked")).toBeNull();
     // 材料缓存不因锁定而删（离线解锁要用）
     expect(await readCachedCrypto()).toBeDefined();
+  });
+});
+
+/**
+ * **组合回归**（2026-09-27 线上整站白屏）：库里的设置行缺 `privacy` 时，整棵应用会被卸载。
+ *
+ * 这里按真实装配走一遍：`useUserSettings` 读盘 → 把 `settings.privacy` 交给 `usePrivacyLock`。
+ * 修复前这条链路会在 `usePrivacyLock` 的渲染期抛 TypeError（读 `config.tier`），
+ * 于是 `#root` 被清空——只有 CSS 底色、没有任何内容。
+ */
+describe("旧设置行的组合回归", () => {
+  it("行里缺 privacy 时，加载器补齐后隐私锁照常装配", async () => {
+    await db.settings.put({
+      key: "user",
+      json: {
+        start_view: "home",
+        timezone: "Asia/Shanghai",
+        editor_mode: "split",
+        quick_menu: ["theme", "lock"],
+      } as never,
+      rev: 7,
+      updated_at: 7,
+      pending: null,
+    });
+
+    function Harness() {
+      const settings = useUserSettings();
+      const lock = usePrivacyLock({ authenticated: false, config: settings.settings.privacy });
+      // 必须等 `loaded`：读盘是异步的，崩溃发生在"读到旧行之后的那次渲染"，
+      // 断言早于它就会变成假通过（本轮实测踩过）。
+      return <span data-testid="gate">{settings.loaded ? lock.gate.lockState : "loading"}</span>;
+    }
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByTestId("gate").textContent).toBe("disabled"));
+    // 走到这里说明"读到旧行 → 重新渲染"这一跳没有把整棵树带走
+    expect(screen.getByTestId("gate")).toBeTruthy();
+  });
+
+  it("消费端兜底：即便拿到的配置是 undefined，hook 也按默认值装起来（不崩）", async () => {
+    function Harness() {
+      // 故意绕过类型：模拟"某个上游没补齐"的极端情况
+      const lock = usePrivacyLock({ authenticated: false, config: undefined });
+      return <span data-testid="tier">{lock.runtime.tier}</span>;
+    }
+
+    render(<Harness />);
+    await waitFor(() =>
+      expect(screen.getByTestId("tier").textContent).toBe(DEFAULT_PRIVACY_SETTINGS.tier),
+    );
   });
 });

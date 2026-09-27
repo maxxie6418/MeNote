@@ -2,9 +2,9 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.1 |
-| 文档状态 | **评审中**（正文一～六章待用户确认；附录 C 列出的后续章节未写） |
-| 目的和适用范围 | 定义隐私锁的模型、隐私范围、锁定/解锁的状态与时效、界面与 MCP 两张可见性矩阵。M3（隐私锁）与 M4（附件/版本）中一切与隐私门禁有关的实现与验收以此为依据；不含接口与 DDL 细节（见附录 C 待写章节） |
+| 文档版本 | v1.2 |
+| 文档状态 | **评审中**（正文一～八章已成稿；附录 C 列出第九章起的待写章节） |
+| 目的和适用范围 | 定义隐私锁的模型、隐私范围、锁定/解锁的状态与时效、界面与 MCP 两张可见性矩阵、门禁判定契约与代码落点、`user_crypto` 权威 DDL 与端点、会话态与多标签、加密空间内置行、设置契约、批量标记操作。M3（隐私锁）与 M4（附件/版本）中一切与隐私门禁有关的实现与验收以此为依据；状态标识文案、离线与缓存、验收走查表见附录 C 待写章节 |
 | 权威级别 | 模块规则。冲突时以 `wiki/` 定稿为准；本文与 `wiki/` 不一致处**一律记入附录 B 待用户点头后回写**，不擅自改 `wiki/` |
 | 最后更新日期 | 2026-09-27 |
 
@@ -14,6 +14,7 @@
 |---|---|---|---|---|
 | v1 | v0.3.0 | 2026-09-26 | 初稿（正文一～六章）：三机制模型、隐私范围与配置、三档时效与锁定/解锁触发、单篇逐篇解密、界面与 MCP 两张可见性矩阵、计数口径、与相邻功能的边界 | deepseek-v4.1-flash |
 | v1.1 | v0.3.1 | 2026-09-27 | 按用户第三轮修订：**统计计数一律计入**全部内容（含标签云数字）、**空间内条目在解锁期间进入最近编辑/收藏/标签**（推翻 §9.1 的"任何时候都不出现"）、**单篇标题任何状态可被搜到**（正文仅已解密后可搜，"解锁时可搜索"开关只管正文）、本地索引策略改为"照常建索引 + 查询层过滤"、新增 **I5**（服务端兜底搜索暂恒排除，实测后再定），并把 §2.1 对照表与附录 A/B/C 同步 | deepseek-v4.1-flash |
+| v1.2 | v0.3.1 | 2026-09-27 | 补正文第三～八章：**门禁判定纯函数契约**（放 `packages/shared`，含列表/正文/搜索三类判定的完整规则表与三处消费点、服务端 SQL 片段收敛、feature 依赖护栏）、**`user_crypto` 权威 DDL 与迁移 0003**（BLOB 打包约定、不加 `sync_seq`、四个端点、`BACKUP_CRED_KEY` 由 M5 提前到 M3）、**会话态与多标签**（BroadcastChannel 握手、两级"立即锁定"、N 分钟计时、本模型下不再需要的旧机制）、**加密空间内置行**（形状、注册/登录自愈补建、永不可删）、**设置契约**（`privacy` 四字段与默认值、设置页落点）、**批量标记操作**；另记录搜索索引需拆"标题/正文"两段这一实现后果，并把首页最近动态的计数/列示口径标为待确认 | deepseek-v4.1-flash |
 
 ### 标注约定
 
@@ -251,6 +252,249 @@
 
 ---
 
+## 三、门禁判定契约与代码落点
+
+### 3.1 判定要回答的四个问题
+
+| # | 问题 | 谁在问 |
+|---|---|---|
+| 1 | 这条能不能出现在**列表与筛选结果**里 | 最近编辑 / 收藏 / 标签 / 首页最近动态 / 空间内的列表 |
+| 2 | 这条的**正文**能不能渲染 | 编辑器、版本对比、导出 |
+| 3 | 这条按**哪些字段**参与搜索命中 | 本地检索（标题/标签 vs 正文） |
+| 4 | 这条**计不计数** | 首页统计、导航与文件夹计数、标签云 → **一律计入，不需要判定**（见 4.7） |
+
+### 3.2 纯函数契约（`packages/shared/src/privacy.ts`）
+
+放共享包的理由：前端判定用 JS、服务端过滤用 SQL，**两边必须同源**；共享包不依赖 `apps/*`，两端都能引。运行时状态不进共享包（见 3.6）。
+
+```ts
+export type PrivacyLockState = "disabled" | "locked" | "unlocked";
+export interface PrivacyScope { memo: boolean }
+export interface PrivacyGate {
+  lockState: PrivacyLockState;
+  scope: PrivacyScope;
+  /** 本次浏览器会话内已逐篇解密的条目 id（单篇加密） */
+  unlockedItems: ReadonlySet<string>;
+  /** 设置项「解锁时可搜索加密内容」——只作用于**正文**命中 */
+  searchBodiesWhenUnlocked: boolean;
+}
+
+export const DEFAULT_PRIVACY_SCOPE: PrivacyScope = { memo: true };
+
+/** 带隐私标记的条目（空间内或单篇） */
+export function isPrivacyItem(item: { enc_self: 0 | 1; in_enc_space: 0 | 1 }): boolean;
+
+/** 该类内容是否属于隐私范围（space 恒 true；memo 看配置） */
+export function isInPrivacyScope(kind: "space" | "memo", scope: PrivacyScope): boolean;
+
+/** 问题 1：能否出现在列表/筛选结果里 */
+export function canShowInList(item: ItemFlags, gate: PrivacyGate): boolean;
+
+/** 问题 2：正文能否渲染（空间内看隐私锁，单篇看该篇是否已解密；两者兼有时都要满足） */
+export function canReadBody(item: ItemFlags, gate: PrivacyGate): boolean;
+
+/** 问题 3：按哪些字段参与搜索 */
+export function searchFields(item: ItemFlags, gate: PrivacyGate): { title: boolean; body: boolean };
+
+/** Memo 门禁（账户级）：视图整体占位时返回 false */
+export function isMemoVisible(gate: PrivacyGate): boolean;
+```
+
+判定规则（`ItemFlags` = `enc_self` / `in_enc_space` / `deleted_at` / `tags`）：
+
+| 类别 | 列表可见（问题 1） | 正文可读（问题 2） | 搜索：标题/标签 | 搜索：正文 |
+|---|---|---|---|---|
+| 普通内容 | 总是 | 总是 | ✓ | ✓ |
+| 空间内条目 | 仅隐私锁**已解锁**时 | 仅已解锁时 | 仅已解锁时 | 已解锁 **且** 开关开 |
+| 单篇加密条目 | 总是（标题明文） | 仅该篇**已解密**时 | **总是** | 该篇已解密 **且** 开关开 |
+| Memo（在范围内） | 仅已解锁时（两个视图整体占位） | 仅已解锁时 | 仅已解锁时 | 已解锁 **且** 开关开 |
+| Memo（不在范围内） | 总是 | 总是 | ✓ | ✓ |
+| 回收站中的条目 | 不进普通列表 | — | ✗ | ✗ |
+
+### 3.3 前端三处消费点
+
+1. **列表与筛选**：`apps/web/src/features/notes/views.ts` 的筛选纯函数增加 `gate` 入参（`canShowInList`）；首页最近动态同源处理（见下方【待确认】）。
+2. **搜索**：`apps/web/src/data/db/search.ts` —— 索引**照常包含隐私条目**，查询时按 `searchFields()` 过滤（改造细节见 3.5）。
+3. **Memo / 待办 / 首页的锁占位**：`features/memos`、`features/tasks`、`features/home` 现在拿的是 `memoLocked` 恒 `false` 的 prop（`HomePanel`、`TodayTasks`、`RecentActivity`、`StatCards`），M3 改为传真实门禁值。
+
+> 【待确认】首页「最近动态」卡片：定稿"新增④"原文是"条目统计与**最近动态**始终计入加密空间内条目"，但最近动态是**带标题的列表**，若锁定时也列出空间内条目，就与"锁定时不显示标题"冲突。**本文按"计数一律计入、列表按门禁过滤"处理**（锁定时不列空间内条目，解锁后列入），请确认这条解释是否合你的意；若你要锁定时列表也照列，那空间内条目的标题就不再是锁定态隐藏项。
+
+### 3.4 服务端一处（收敛，不加参数）
+
+- 新增 `apps/worker/src/db/privacy.ts`，导出**唯一**的 SQL 片段常量：`PRIVACY_EXCLUDE_SQL = "enc_self = 0 AND in_enc_space = 0"`。现有的 `apps/worker/src/services/search.ts` 里的字面量改为引用它；M6 的 MCP 查询、M5 的分享与导出校验同样引用它。
+- 配一条断言测试：服务端搜索语句里必须出现该常量（防止有人手写字面量后漂移）。
+- **I5 之下 M3 的服务端搜索行为不变**（仍恒排除隐私内容）——本次只是把两份实现收敛成一处。
+
+### 3.5 搜索索引的改造（本次唯一要动地基的地方）
+
+- 索引行**拆成两段文本**：`title_text`（标题 + 标签）与 `body_text`（正文），各自带 haystack/tokens。理由：新规则要求"标题可搜、正文按门禁"，单一合并文本做不到；而"锁定态不入索引、解锁时补索引"会在每次切换门户时重建全表，代价大且有时延。
+- 索引**覆盖全部未删除条目**（含隐私条目）；`isSearchIndexComplete()` 的判定改为只看"未删除"，不再掺门禁。
+- **Dexie 升版**：`searchIndex` 加列（`title_text` / `body_text` 及其 haystack/tokens）；`privacyState` 新表（见 5.1）。
+- **M2 用例改写**：原"加密条目既不进索引也搜不到"改为四组断言——①进索引；②锁定态标题与正文都搜不到；③解锁态标题可搜、开关关闭时正文搜不到、开关打开时正文可搜；④单篇未解密标题可搜、正文搜不到。
+
+### 3.6 结构护栏（feature 之间的依赖）
+
+- **判定纯函数**放 `packages/shared`（两端可用，不引入 feature 依赖）。
+- **运行时状态与界面件**放 `features/privacy/`（解锁框、锁定占位、胶囊状态、`model.ts` 的状态机）；其它 feature **只引共享包的纯函数**，`PrivacyGate` 对象由 `app/` 层组装后按 props 注入——沿用 M2 已确立的"`app/` 作插槽、feature 不互相依赖"模式。
+- ESLint 里"前端 feature 互不依赖"目前**只是注释占位、没有规则**（`eslint.config.js` 末尾）。M3 把它落成**静态守卫测试**（读 `apps/web/src/features/**` 的 import 语句，断言不跨 feature），与 M2 的 `layout-invariants.test.ts` 同一条路子，**不新增依赖**。
+
+---
+
+## 四、`user_crypto` 权威 DDL 与迁移 0003
+
+### 4.1 权威 DDL（迁移 `apps/worker/src/db/migrations/0003_user_crypto.ts`，导出 `{ version: 3, statements }`）
+
+```sql
+CREATE TABLE IF NOT EXISTS user_crypto (
+  user_id            TEXT PRIMARY KEY,
+  kdf                TEXT    NOT NULL CHECK (kdf IN ('PBKDF2-SHA-256')),
+  kdf_iterations     INTEGER NOT NULL CHECK (kdf_iterations BETWEEN 100000 AND 2000000),
+  kdf_salt           BLOB    NOT NULL,
+  verifier           BLOB    NOT NULL,
+  k_wrapped_pw       BLOB    NOT NULL,
+  k_wrapped_backup   BLOB    NOT NULL,
+  rev                INTEGER NOT NULL DEFAULT 1,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL
+);
+```
+
+- **BLOB 自带版本号**（将来换算法不用改表）：`版本(1B) || IV(12B) || 密文 || GCM 标签(16B)`。
+  - `verifier`：`AES-GCM(KEK, 常量 "menote-verifier-v1")`；
+  - `k_wrapped_pw`：`AES-GCM(KEK, K)`（供外部解密工具，架构 §7.3 的信封块与此同构）；
+  - `k_wrapped_backup`：`AES-GCM(BACKUP_CRED_KEY, K)`（供 Worker，架构 §12.4）；
+  - `kdf_salt`：16 字节；`kdf_iterations`：600,000（`PBKDF2-SHA-256`，与登录 KDF 共用实现）。
+- **不存**明文 K、KEK、隐私密码或其裸哈希（除 verifier）。
+- **不加 `sync_seq`**：与《同步引擎设计》§7 的推荐一致——门禁材料走专用端点，不混进普通同步载荷（因此 M3 不改 M1 的同步协议）。
+- 迁移登记：`db/selfheal.ts` 的 `MIGRATIONS` 数组 + `REQUIRED_TABLES`（无新索引）。
+- **不建** `data_keys` / 密文列 / `convertJobs`（v1.1 模型修订已取消）；`items`、`folders` 的标记列 M1 已建，**本次不动热表**。
+
+### 4.2 端点（`routes/crypto.ts` + `services/crypto.ts`）
+
+| 端点 | 用途 | 备注 |
+|---|---|---|
+| `GET /api/crypto` | 取门禁材料：`enabled` / `kdf` / `iterations` / `salt` / `verifier` / 两个包裹 / `rev`（二进制一律 base64） | 需会话鉴权；`Cache-Control: no-store` |
+| `PUT /api/crypto` | 启用 / 改密 / 重置后写入全部字段 | 后写为准，`rev + 1`；响应不回显材料 |
+| `POST /api/crypto/reset` | 忘记隐私密码：服务端用 `BACKUP_CRED_KEY` 解包 K 并返回明文 K（base64） | `no-store`；**不得写入日志或审计正文**；浏览器用完即弃 |
+| `DELETE /api/crypto` | 关闭隐私锁 | **服务端校验"无隐私内容"**：`items` 中 `enc_self = 1 OR in_enc_space = 1` 的条数 > 0（**含回收站中的条目**）→ 409 并返回原因 |
+
+### 4.3 新增 Worker 机密（**属"先确认再动"区，需你点头**）
+
+- 新增机密 **`BACKUP_CRED_KEY`**：原计划 M5，按"`user_crypto` 一次建全"提前到 M3。用途：解包/包裹 K（重置流程现在就要用；Cron 备份加密 M5 用）。
+- 派生：`SHA-256(机密字节)` → 32 字节 AES-GCM 密钥（避免 base64 解码差异）。
+- 落地清单：`.dev.vars.example`（注释从"M5"改为"M3"）、部署页机密项、`apps/worker/src/types.ts` 的 `EnvBindings`、`apps/worker/vitest.config.ts` 的 miniflare 绑定（否则测试跑不起来）。
+- **轮换风险**：更换该机密 → 已存的 `k_wrapped_backup` 解不开 → 解锁态下重新包裹一次即可修复。写进运维注意项（Runbook 属 M6）。
+
+---
+
+## 五、会话态、多标签与档位计时
+
+### 5.1 状态放哪
+
+| 状态 | 存放 | 生命周期 |
+|---|---|---|
+| 隐私锁解锁态 | 内存（`features/privacy/model.ts` 单例 + hook） | 由档位决定；随标签页存在 |
+| 当前档位与到期时间 | 内存 | 同上 |
+| "当前设备长期"档的本机已解锁标记 | `localStorage`（**设备级**，不进同步） | 直到「锁定此设备」 |
+| 单篇已解密集合 | 内存（会话态） | 本次浏览器会话；关闭标签页即失效 |
+| verifier 与 K 包裹的本地缓存 | Dexie 新表 `privacyState` | 支持离线解锁；是否随登出清除见 **Q22【待确认】**（第十章落地） |
+
+### 5.2 多标签一致性
+
+- 复用 M2 的 BroadcastChannel（`menote` 前缀，`data/sync/broadcast.ts`），新增事件：`privacy-unlocked`（带档位与到期时间）、`privacy-locked`、`item-unlocked` / `item-locked`（**只放 id，不放内容**）。
+- **新标签页握手**：加入时先发 `privacy-state-request`，已有标签页回一次当前状态；无人应答说明本次会话还没有解锁态 → 视为锁定（与"所有标签页关闭即锁"一致）。
+- 任一处锁定 → 广播 → 其它标签页立即锁定并重渲染。
+
+### 5.3 本模型下**不再需要**的东西
+
+- 不监听 `visibilitychange` / `pagehide` 做锁定（"标签页隐藏即锁"已作废）；这两个事件不承担门禁语义。
+- 不需要 SharedWorker、不需要持久化不可导出的 CryptoKey、不需要撤销 `blob:` 地址。
+- 锁定时的"清理清单"缩减为界面项：关闭明文视图 → 切占位 → 清内存态（仅"锁全部"时清单篇已解密集合）。
+
+### 5.4 "立即锁定"的两级语义
+
+- 顶栏胶囊「立即锁定」= **锁全部**（隐私范围 + 清单篇已解密集合）【本文决定】；
+- 编辑器/锁标识上的「锁上此篇」= 只清该篇；
+- 列表/空间上的「锁上全部单篇」= 只清单篇集合，不动隐私锁；
+- 「锁定此设备」= 锁全部 + 清 `localStorage` 的设备长期标记。
+
+### 5.5 N 分钟计时
+
+- 活动事件（`pointerdown` / `keydown` / 滚动）刷新到期时间；用一个 `setTimeout` 到点触发，**不轮询**。
+- 标签页隐藏期间计时照走（机器闲置也会锁），这是"无操作 N 分钟"的字面语义。
+- 倒计时剩 30 秒：胶囊闪烁一次 + 编辑器状态栏提示（文案见第九章）。
+
+---
+
+## 六、加密空间内置行
+
+### 6.1 行的形状
+
+`is_enc_space = 1`、`parent_id = NULL`、`in_enc_space = 0`、`name = '加密空间'`、`depth = 0`、`position = 0`、`meta_rev = 1`、`sync_seq = <按 M1 规则分配>`、`id = 服务端新 ULID`、`created_at` / `updated_at`。
+
+M1 已就位的约束直接生效：`CHECK (is_enc_space = 0 OR (depth = 0 AND parent_id IS NULL AND in_enc_space = 0))` 与部分唯一索引 `idx_folders_enc_space ON folders(user_id) WHERE is_enc_space = 1`。
+
+### 6.2 创建与自愈补建
+
+- `services/folders.ts` 新增 `ensureEncSpace(db, userId)`：先 `SELECT`；缺失则 `INSERT OR IGNORE`（含 sync_seq 分配，沿用 M1 的计数器写法）；被唯一索引拦下（并发补建）则重读返回。
+- 调用点：**注册成功**与**登录成功**（都在 `routes/auth.ts` 的服务路径上）——一次覆盖新用户与 M1/M2 存量账号；**不在读路径**（`GET /api/sync`）里写数据。
+- **客户端 UI 不依赖该行存在**：`VaultNode` 恒显示（未启用时"未启用"、锁定时显示计数但不可展开）；该行只用于挂载空间内条目与空间内文件夹。
+- 该行**永不被删除**：服务端拒绝删除 `is_enc_space = 1` 的记录；关闭隐私锁也不删行（空间始终存在，M08-02）。
+
+### 6.3 空间内的结构
+
+- 移入空间根目录 = 一条 `patch_meta`：`folder_id = <空间行 id>` + `in_enc_space = 1`；
+- 空间内文件夹：`parent_id = <空间行 id>`、`depth = 1/2`、`in_enc_space = 1`（两层上限与普通文件夹同一套校验）；
+- 空间内新建的条目天然带标记（客户端创建时置 `in_enc_space = 1`，无需勾选）；
+- 重命名空间：走 M2 已有的文件夹改名路径（`PATCH /api/folders/:id` + `meta_rev`），入口挂在空间节点的「更多」菜单。
+
+---
+
+## 七、设置契约与设置页
+
+### 7.1 契约扩展（`packages/shared/src/settings.ts`）
+
+```ts
+export const PrivacyTierSchema = v.picklist(["session", "minutes", "device"]);
+export const PrivacyMinutesSchema = v.picklist([1, 5, 15, 30, 60]);
+export const PrivacySettingsSchema = v.object({
+  /** 范围成员；加密空间恒在范围内，不落库 */
+  scope: v.object({ memo: v.boolean() }),
+  tier: PrivacyTierSchema,
+  minutes: PrivacyMinutesSchema,
+  /** 「解锁时可搜索加密内容」：只作用于正文命中 */
+  search_bodies_when_unlocked: v.boolean(),
+});
+// UserSettingsSchema 增加 privacy: PrivacySettingsSchema，并进 DEFAULT_USER_SETTINGS
+```
+
+默认值：`scope.memo = true`（与既有"Memo 浏览需要隐私密码"默认开一致）、`tier = 'minutes'`、`minutes = 5`、`search_bodies_when_unlocked = true`【本文决定】。
+
+- 新字段一律**带默认值**，沿用 M2 的做法（部署窗口内新客户端遇旧 Worker 不炸）。
+- `QUICK_MENU_FEATURES` 里 `lock.pendingStep` 由 `"M3"` 改为 `null`（「立即锁定」可用）。
+
+### 7.2 服务端校验
+
+`PUT /api/settings` 复用同一份 schema（M2 已有 422 路径）；旧数据缺字段时按默认值补齐，不改变已有字段语义。
+
+### 7.3 设置页
+
+- 放出「隐私锁」分类（M2 已占位、未进导航）。页内卡片：启用 / 关闭、修改隐私密码、忘记后重置、解锁档位（三档）+ N 分钟、**范围配置**（加密空间只读行 + Memo 开关 + 预留扩展位说明）、「解锁时可搜索加密内容」。
+- 「版本与回收站」仍按 M4；**AI/MCP 可见性不在此页**（在 设置 › MCP，M6）。
+- 文案：启用、关闭、重置三处必须如实写明保护边界（P3），不得出现"加密存储""数据已加密"之类表述。
+
+---
+
+## 八、批量标记操作
+
+- 载体：M2 已有的 `POST /api/batch`（`patch_meta` 操作）＋ outbox 持久化 → **中断续做天然成立**（未推送的 op 还在 outbox 里）。
+- 逐条提交，每批 ≤ `BATCH_MAX_OPS`（10）；进度显示在空间/文件夹名后（如"处理中 12 / 40"）。
+- 单条失败：跳过并记录，结束后给出失败清单 + 「重试」（重试 = 重新入队）。
+- 锁定态发起的移入同样走这条路（无密钥参与）；**整夹移入** = 先标记文件夹行，再批量标记其内部条目，仍受两层文件夹限制校验（超出则入口置灰并说明）。
+- 不做"全成功或全失败"——与 M2 批量写入"逐操作独立判定"的既定口径一致。
+
+---
+
 ## 附录 A　本轮确认记录（2026-09-26）
 
 | # | 议题 | 结论 |
@@ -291,18 +535,16 @@
 | 功能拆解 v2 | Q4 / Q14 / Q15 / Q25 | 状态由"待确认"改为"已确认"，指向本设计 |
 | 功能拆解 v2 | §17.4（`list_folders`）/ M17-03 | 条目数**不含隐私内容**；空间节点不出现在 MCP 的文件夹树里 |
 | 项目架构 v1.11 | §7.1 / §7.5 | 补"范围模型"与"单篇独立门禁"两层；界面落点补两套标识 |
+| 项目架构 v1.11 | §7.2 / §5.1 | 把 `user_crypto` 的**具体列定义**与本设计的 BLOB 打包约定写进定稿（现在只有语义描述）；注明**不加 `sync_seq`**、走专用端点 |
+| 项目架构 v1.11 | §7.5 | 本地索引口径改为"**标题与正文分两段索引 + 查询时按门禁过滤**"（原写"索引包含隐私条目明文、锁定时查询结果过滤"，需补标题/正文的区别） |
+| 项目架构 v1.11 | §12.4 + `.dev.vars.example` | `BACKUP_CRED_KEY` 由 M5 **提前到 M3**（重置隐私密码现在就要用），并写明派生方式（`SHA-256(机密)`）与轮换风险 |
 | 项目架构 v1.11 | §11（MCP） | 补两条不变式（I1/I2）与 MCP 计数排除规则 |
+| 功能拆解 v2 | M18-02 | 隐私锁分类的设置项清单按第七章落（范围配置 / 三档 / N 分钟 / 解锁时可搜索；不含 AI 可见性） |
 | 设计文档 v7.4 | §6 全章 | 按"明文 + 门禁 + 备份加密"重写（随 v7.5 一并执行，本文只登记） |
 
 ## 附录 C　后续待写章节（评审通过后按序补）
 
-1. **第三章**：门禁判定契约与代码落点——纯函数签名（范围成员判定 / 每类门禁规则 / 单篇已解密集合）、配置读取、**合并现有两处重复过滤**（`apps/web/src/data/db/search.ts` 的 `isSearchVisible()` 与 `apps/worker/src/services/search.ts` 的 SQL）、ESLint "feature 互不依赖"那条护栏的落地方式；本地索引策略由"隐私条目不进索引"改为"**照常建索引 + 查询层过滤**"（含 M2 那条"加密条目既不进索引也搜不到"用例的改写），并实测本地索引对隐私内容的召回（决定 I5 是否要加"包含隐私"参数）；
-2. **第四章**：`user_crypto` 权威 DDL 与迁移 `0003`——verifier、内容密钥 K 与其两份包裹（一次建全，M5 直接消费）、KDF 参数；
-3. **第五章**：会话态与多标签——`BroadcastChannel` 事件形状、档位计时器、`visibilitychange`/`pagehide` 的处理、"立即锁定"的两级语义；
-4. **第六章**：加密空间内置行的创建与**自愈补建**（含 M1/M2 存量账号）；
-5. **第七章**：设置契约（`privacy.scope` / `tier` / `minutes` / `unlockSearch`）与设置页落点；
-6. **第八章**：批量标记操作与 outbox（复用 `/api/batch`，逐条提交 + 进度 + 失败清单 + 中断续做）；
-7. **第九章**：状态标识与文案（顶栏胶囊/侧边栏/列表/编辑器四处 + 30 秒倒计时；两套标识的区分）；
-8. **第十章**：离线与缓存失效（含 Q22 的处置）；
-9. **第十一章**：验收走查表（可勾选，含"未启用隐私锁"态）；
-10. **第十二章**：附录 B 的执行情况记录。
+1. **第九章**：状态标识与文案——顶栏胶囊（含倒计时）、侧边栏空间节点、列表、编辑器状态栏四处；**两套标识的区分**（隐私锁态 vs 单篇加密的未解密/已解密）；"未启用 / 已锁定 / 已解锁"三种文案与警告口径；
+2. **第十章**：离线与缓存失效——verifier 与 K 包裹的本地缓存策略、离线解锁的边界、**Q22**（登出是否清除本机缓存）的处置与落实；
+3. **第十一章**：验收走查表——可勾选，行 = 内容类别与界面，列 = 未启用 / 已锁定 / 已解锁 ×（单篇未解密 / 已解密），含计数与搜索两类断言；
+4. **第十二章**：附录 B 的执行情况记录（`wiki/` 回写进度）。

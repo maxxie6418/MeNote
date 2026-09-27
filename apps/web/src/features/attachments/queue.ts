@@ -89,7 +89,23 @@ export function createAttachmentQueue(deps: UploadDeps, callbacks: QueueCallback
     task.reason = null;
     notify();
 
-    const outcome = await uploadAttachment({ file, itemId }, deps);
+    /*
+      `uploadAttachment` 的契约是**不抛错**（一律用返回值表达结果），但**依赖项**（哈希、网络、
+      元数据落库）都可能抛，而调用方是 `void attachments.add(files)`——
+      真抛出来就会被丢掉：任务**永远停在"正在上传"**（状态栏一直显示 N / M）、
+      正文里的占位符也**永久留着**。这里兜住，把它降级成一次普通的"失败"（可重试）。
+    */
+    let outcome: Awaited<ReturnType<typeof uploadAttachment>>;
+    try {
+      outcome = await uploadAttachment({ file, itemId }, deps);
+    } catch (error) {
+      task.status = "failed";
+      task.reason = error instanceof Error ? error.message : "上传失败";
+      // 占位**保留**：文件还在队列里，重试就能接着传（与"超限被拒"要撤占位不同）
+      callbacks.onFailed?.(task, file);
+      notify();
+      return;
+    }
 
     if (outcome.status === "uploaded") {
       task.status = "done";

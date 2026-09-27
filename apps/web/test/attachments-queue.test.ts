@@ -196,6 +196,38 @@ describe("秒传与失败", () => {
     await queue.retryAll("i2");
     expect(putBlob.mock.calls.length).toBe(before);
   });
+
+  it("**依赖项抛错**：不留在「正在上传」，降级成 failed 并可重试（占位保留）", async () => {
+    let broken = true;
+    const putBlob = vi.fn(async () => {
+      if (broken) throw new Error("网关卡住了");
+      return { key: "k", size: 1 };
+    });
+    const { queue, replaced, failed } = harness(
+      deps({
+        api: {
+          check: async () => ({ exists: false, pending: false }),
+          putBlob,
+          finalize: async () => ({ attachmentId: "att-1", thumbId: null }),
+        },
+      }),
+    );
+
+    await queue.add([fileOf("a.png")], "i1");
+
+    // 关键：不是停在 uploading（那会让状态栏永远显示 N / M），而是 failed 且原因可见
+    const [task] = queue.tasks();
+    expect(task?.status).toBe("failed");
+    expect(task?.reason).toBe("网关卡住了");
+    expect(failed).toEqual(["a.png"]);
+    // 占位**保留**（文件还在队列里，重试能接着传；与"超限被拒"要撤占位不同）
+    expect(replaced.filter((entry) => entry.text === "")).toEqual([]);
+
+    // 修好后重试：真的传上去
+    broken = false;
+    await queue.retryAll("i1");
+    expect(queue.tasks()[0]?.status).toBe("done");
+  });
 });
 
 describe("状态栏文案", () => {

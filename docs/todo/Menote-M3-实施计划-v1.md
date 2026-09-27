@@ -19,6 +19,7 @@
 | v1.4 | v0.3.5 | 2026-09-27 | **M3-4 前半完成**：crypto 原语 / 纯函数状态机 / 材料缓存 + Dexie v5 / `PUT /api/crypto` 的 `k` 契约（首次启用由服务端包裹，补掉"浏览器拿不到 BACKUP_CRED_KEY"的设计缺口）；web 337、worker 108、全套 542 通过；剩余组装层（hook / 广播握手 / api 方法） | deepseek-v4.1-flash |
 | v1.5 | v0.3.6 | 2026-09-27 | **M3-4 完成**：`cryptoApi`、五个隐私广播事件（只带状态不带内容）、`usePrivacyLock` 组装层（缓存装门禁 / rev 失效 / 设备长期档 / 计时 / 多标签握手 / 动作集）；修掉"有缓存但离线时门禁不生效"的真 bug；全套 549 通过 | deepseek-v4.1-flash |
 | v1.6 | v0.3.7 | 2026-09-27 | **M3-5 前半完成**：搜索索引拆标题/正文两段（Dexie v6）、`searchLocal` 按门禁过滤、`useSearch` 与 `App` 接线；按授权拆出 `app/AuthScreens.tsx` 守住入口行数预算；全套 553 通过 | deepseek-v4.1-flash |
+| v1.7 | v0.3.8 | 2026-09-27 | **M3-5 后半（一）**：`filterByView`/`recentPreview`/`openTaskPreview` 接门禁、`HomePanel` 用 gate 取代 `memoLocked`、`noPrivacyGate()` 冻结单例（修掉"门禁对象每渲染重建"的引用稳定性陷阱）；全套 556 通过；Memo/待办占位与解锁框一并排入界面批次 | deepseek-v4.1-flash |
 
 ---
 
@@ -78,10 +79,10 @@
 - **涉及文件**：`apps/web/src/features/privacy/model.ts`（状态机 / 档位 / 计时 / 握手）、`apps/web/src/features/privacy/crypto.ts`（PBKDF2 派生、verifier 校验、K 包裹与解包）、`apps/web/src/data/db/privacy.ts`（`privacyState` 缓存 + `rev` 失效）、`apps/web/src/data/db/schema.ts`（Dexie v5：`privacyState` 新表 + `searchIndex` 拆列）、`apps/web/src/data/sync/broadcast.ts`（四个新事件）、`apps/web/src/app/usePrivacyGate.ts`（组装 `PrivacyGate` 供 props 注入）。
 - **验收**：正确/错误密码的 verifier 校验各有用例；K 包裹解包往返一致；服务端 `rev` 变高 → 覆盖缓存并清空解锁态；多标签握手（替身）与"无人应答 = 锁定"；N 分钟计时用假时钟；`BroadcastChannel` 缺失时降级不报错。
 
-### M3-5 门禁接入全局 + 搜索改造 —— 🟡 **前半完成（2026-09-27，v0.3.7）**
+### M3-5 门禁接入全局 + 搜索改造 —— 🟡 **大部分完成（2026-09-27，v0.3.7 + v0.3.8）**
 
-> 已完成：**搜索**（`SearchIndexRow` 拆标题/正文两段 + Dexie v6 + `searchLocal(…, gate)` 按 `searchFields` 过滤、`useSearch` 与 `App` 接线）；顺带按授权把 `App.tsx` 的未登录两屏拆成 `app/AuthScreens.tsx`（入口回到行数预算内）。
-> 待做：**列表与三视图**接 `gate`（`features/notes/views.ts` 的筛选）、**首页**（计数一律计入、最近动态按门禁）、**Memo 与待办**的锁定占位接真值、编辑器锁态的接线。
+> 已完成：**搜索**（索引拆标题/正文两段 + Dexie v6 + `searchLocal(…, gate)` 按 `searchFields` 过滤 + `useSearch`/`App` 接线，v0.3.7）；**列表与三视图**（`filterByView(…, gate)`，标签云/计数不过门禁）；**首页**（`recentPreview`/`openTaskPreview` 接门禁，`homeStats` 口径不变，`HomePanel`/`HomeView` 用 gate 取代 `memoLocked`）；`App` 全面接线；顺带按授权拆出 `app/AuthScreens.tsx`（入口行数预算）、补 `noPrivacyGate()` 冻结单例。
+> 待做：**Memo 与待办视图的锁定占位**——占位上的「解锁」按钮需要一个真的解锁出口，因此**与解锁框（`UnlockModal`）一起做**（排在 M3-6/M3-9 的界面批次里），否则就是 DESIGN 禁止的"点了没反应"；编辑器锁态接线归 M3-7。
 
 - **涉及文件**：`apps/web/src/data/db/search.ts`（索引含隐私条目、拆标题/正文两段、查询按 `searchFields` 过滤）、`apps/web/src/features/search/useSearch.ts`、`apps/web/src/features/notes/views.ts`（`gate` 入参）、`apps/web/src/features/home/*`（计数含全部、最近动态按门禁、Memo 占位接真值）、`apps/web/src/features/memos/*`、`apps/web/src/features/tasks/*`、`apps/web/src/app/fnbar/VaultNode.tsx`（未启用 / 锁定 / 解锁三态）。
 - **验收**：M2 那条"加密条目既不进索引也搜不到"用例改写为四组断言（进索引 / 锁定搜不到 / 解锁标题可搜 / 开关控正文 / 单篇标题可搜正文不可）；锁定态首页最近动态不含空间内条目、计数含；三视图在锁定/解锁切换后**立即重渲染**。

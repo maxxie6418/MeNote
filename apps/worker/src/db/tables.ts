@@ -190,6 +190,32 @@ export const SQL_BUMP_SYNC_SEQ_ON_FOLDER_META = `UPDATE users SET sync_seq = syn
 export const SQL_SELECT_USER_TOMBSTONE_FLOOR =
   "SELECT tombstone_floor FROM users WHERE id = ?";
 
+// —— tombstones（0004；M4-7）——
+
+/** 增量拉取墓碑：与条目/文件夹同一套"从游标之后、按序号升序、多取一行探截断"的写法 */
+export const SQL_SELECT_TOMBSTONES_SINCE = `SELECT entity, entity_id, sync_seq, deleted_at
+  FROM tombstones WHERE user_id = ? AND sync_seq > ? ORDER BY sync_seq ASC LIMIT ?`;
+
+/**
+ * 写墓碑：**同一次删除只留一条**（`(user, entity, entity_id)` 唯一）。
+ *
+ * 用 `INSERT ... ON CONFLICT DO UPDATE` 而不是 `INSERT OR IGNORE`：
+ * 键被删两次（先永久删、后被恢复又删）时，墓碑要跟着**更新到新的 `sync_seq`**，
+ * 否则第二次删除传不出去（客户端游标已经越过旧序号）。
+ */
+export const SQL_UPSERT_TOMBSTONE = `INSERT INTO tombstones (user_id, entity, entity_id, sync_seq, deleted_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT (user_id, entity, entity_id)
+  DO UPDATE SET sync_seq = excluded.sync_seq, deleted_at = excluded.deleted_at`;
+
+/** 每日维护：清理 180 天前的墓碑（配合推进 `tombstone_floor`） */
+export const SQL_DELETE_OLD_TOMBSTONES =
+  "DELETE FROM tombstones WHERE user_id = ? AND deleted_at < ?";
+
+/** 每日维护：把 floor 推到"当前**最小**剩余墓碑序号"，没有剩余则推到当前 `sync_seq` */
+export const SQL_SELECT_MIN_TOMBSTONE_SEQ =
+  "SELECT MIN(sync_seq) AS seq FROM tombstones WHERE user_id = ?";
+
 export const SQL_SELECT_ITEMS_SINCE = `SELECT id, type, folder_id, title, enc_self, in_enc_space, size_bytes,
        content_hash, tags, memo_at, is_task, task_status, task_due, task_priority, pinned, starred,
        rev, meta_rev, sealed_rev, sync_seq, created_at, updated_at, last_edit_at, last_device, deleted_at

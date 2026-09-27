@@ -50,6 +50,7 @@ function page(partial: Partial<SyncResponse> = {}): SyncResponse {
   return {
     items: [],
     folders: [],
+    tombstones: [],
     settings: { settings: DEFAULT_USER_SETTINGS, rev: 0, updated_at: 0 },
     next_cursor: 0,
     has_more: false,
@@ -255,5 +256,146 @@ describe("引擎编排", () => {
     await vi.waitFor(() => expect(pull).toHaveBeenCalled());
     resolvePull?.(page({ next_cursor: 0 }));
     await first;
+  });
+});
+
+describe("墓碑（M4-7：物理删除的传播）", () => {
+  /** 造一条"本地有全套痕迹"的条目：本体 + 正文缓存 + 草稿 + 索引 + 冲突关联 */
+  async function seedLocalNoteWithTraces(id: string): Promise<void> {
+    await createLocalNote(id, "被删的", "正文", 100);
+    await putCachedBody(id, "正文", 1, "h", 100);
+    await db.searchIndex.put({
+      item_id: id,
+      sync_seq: 1,
+      title_text: "被删的",
+      title_haystack: "被删的",
+      title_tokens: "",
+      body_text: "正文",
+      body_haystack: "正文",
+      body_tokens: "",
+      updated_at: 100,
+      indexed_at: 100,
+    });
+    await db.conflicts.put({ copy_id: id, original_id: "other", created_at: 100 });
+  }
+
+  it("墓碑删除本地 items 与正文缓存", async () => {
+    const id = newUlid();
+    await seedLocalNoteWithTraces(id);
+
+    const { applied } = await pullOnce({
+      pull: vi.fn(async () =>
+        page({
+          tombstones: [{ entity: "item", entity_id: id, sync_seq: 9, deleted_at: 500 }],
+          next_cursor: 9,
+        }),
+      ),
+    });
+
+    expect(applied).toBe(1); // 墓碑也算"落库了一行"
+    expect(await db.items.get(id)).toBeUndefined();
+    expect(await getCachedBody(id)).toBeUndefined();
+    expect(await getSyncState()).toMatchObject({ cursor: 9 });
+  });
+
+  it("墓碑同时清 searchIndex 与 drafts", async () => {
+    const id = newUlid();
+    await seedLocalNoteWithTraces(id);
+    expect(await db.searchIndex.get(id)).toBeDefined();
+    expect(await db.drafts.get(id)).toBeDefined();
+
+    await pullOnce({
+      pull: vi.fn(async () =>
+        page({
+          tombstones: [{ entity: "item", entity_id: id, sync_seq: 9, deleted_at: 500 }],
+          next_cursor: 9,
+        }),
+      ),
+    });
+
+    expect(await db.searchIndex.get(id)).toBeUndefined();
+    expect(await db.drafts.get(id)).toBeUndefined();
+  });
+
+  it("墓碑清 conflicts 关联（副本指向了不存在的行会变成幽灵）", async () => {
+    const id = newUlid();
+    await seedLocalNoteWithTraces(id);
+    expect(await db.conflicts.get(id)).toBeDefined();
+
+    await pullOnce({
+      pull: vi.fn(async () =>
+        page({
+          tombstones: [{ entity: "item", entity_id: id, sync_seq: 9, deleted_at: 500 }],
+          next_cursor: 9,
+        }),
+      ),
+    });
+
+    expect(await db.conflicts.get(id)).toBeUndefined();
+  });
+
+  it("墓碑顺带清掉本地待上传的同 id 操作（否则会一直重试报 404）", async () => {
+    const id = newUlid();
+    await createLocalNote(id, "刚建就被别处删了", "正文", 100);
+    expect(await db.outbox.count()).toBeGreaterThan(0);
+
+    await pullOnce({
+      pull: vi.fn(async () =>
+        page({
+          tombstones: [{ entity: "item", entity_id: id, sync_seq: 9, deleted_at: 500 }],
+          next_cursor: 9,
+        }),
+      ),
+    });
+
+    const left = await db.outbox.filter((row) => row.entity_id === id).toArray();
+    expect(left).toEqual([]);
+  });
+
+  it("文件夹墓碑删本地文件夹行", async () => {
+    await db.folders.put({
+      id: "f1",
+      parent_id: null,
+      is_enc_space: 0,
+      in_enc_space: 0,
+      name: "工作",
+      depth: 1,
+      position: 0,
+      meta_rev: 1,
+      sync_seq: 1,
+      created_at: 1,
+      updated_at: 1,
+      deleted_at: null,
+      deleted: false,
+      pending: null,
+    });
+
+    await pullOnce({
+      pull: vi.fn(async () =>
+        page({
+          tombstones: [{ entity: "folder", entity_id: "f1", sync_seq: 9, deleted_at: 500 }],
+          next_cursor: 9,
+        }),
+      ),
+    });
+
+    expect(await db.folders.get("f1")).toBeUndefined();
+  });
+
+  it("未知实体的墓碑被忽略、不报错（将来加新实体时旧客户端不该崩）", async () => {
+    const { applied } = await pullOnce({
+      pull: vi.fn(async () =>
+        page({
+          // 故意绕过类型：模拟服务端将来新增的实体类型
+          tombstones: [
+            { entity: "attachment" as never, entity_id: "x", sync_seq: 9, deleted_at: 1 },
+          ],
+          next_cursor: 9,
+        }),
+      ),
+    });
+
+    expect(applied).toBe(1);
+    expect(await getSyncState()).toMatchObject({ cursor: 9 });
   });
 });

@@ -127,6 +127,7 @@ describe("增量拉取", () => {
     expect(body).toEqual({
       items: [],
       folders: [],
+      tombstones: [],
       settings: { settings: DEFAULT_USER_SETTINGS, rev: 0, updated_at: 0 },
       next_cursor: 0,
       has_more: false,
@@ -276,8 +277,70 @@ describe("增量拉取", () => {
     expect(fresh.body.full_resync).toBe(false);
   });
 
-  it("多用户隔离：只看到自己的行", async () => {
-    const alice = await registerUser("Alice", 1);
+  it("pull 返回 tombstones 数组（物理删除的传播，M4-7）", async () => {
+    const user = await registerUser("Alice", 1);
+    await env.DB.prepare(
+      "INSERT INTO tombstones (user_id, entity, entity_id, sync_seq, deleted_at) VALUES (?, 'item', ?, 5, 1700000000000)",
+    )
+      .bind(user.id, "01JTOMBSTONE000000000000AA")
+      .run();
+
+    const { body } = await pull(user.cookie, 0);
+    expect(body.tombstones).toEqual([
+      {
+        entity: "item",
+        entity_id: "01JTOMBSTONE000000000000AA",
+        sync_seq: 5,
+        deleted_at: 1_700_000_000_000,
+      },
+    ]);
+  });
+
+  it("next_cursor 取三类末端序号的 min（M4-7）", async () => {
+    const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
+
+    // 三类各放一行，序号刻意错开：min 应当取最小的那个（墓碑 3）
+    const noteId = await createNote(user.cookie, "正文");
+    await env.DB.prepare("UPDATE items SET sync_seq = 7 WHERE id = ?").bind(noteId).run();
+    await env.DB.prepare(
+      "INSERT INTO folders (id, user_id, parent_id, is_enc_space, in_enc_space, name, depth, position, meta_rev, sync_seq, created_at, updated_at, deleted_at) VALUES ('f1', ?, NULL, 0, 0, '工作', 1, 0, 1, 5, 1, 1, NULL)",
+    )
+      .bind(user.id)
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO tombstones (user_id, entity, entity_id, sync_seq, deleted_at) VALUES (?, 'folder', 'gone', 3, 1)",
+    )
+      .bind(user.id)
+      .run();
+
+    const { body } = await pull(user.cookie, 0);
+    expect(body.items).toHaveLength(1);
+    expect(body.folders).toHaveLength(1);
+    expect(body.tombstones).toHaveLength(1);
+    expect(body.next_cursor).toBe(3);
+  });
+
+  it("某类为空时不参与 min（不倒退）", async () => {
+    const user = await registerUser("Alice", 1);
+    await asLegacyAccount(user.id);
+    await env.DB.prepare(
+      "INSERT INTO tombstones (user_id, entity, entity_id, sync_seq, deleted_at) VALUES (?, 'item', 'gone', 4, 1)",
+    )
+      .bind(user.id)
+      .run();
+
+    // 只有墓碑：游标推到 4
+    const first = await pull(user.cookie, 0);
+    expect(first.body.next_cursor).toBe(4);
+
+    // 再拉（没有新行）：游标不动，不被打回 0
+    const second = await pull(user.cookie, first.body.next_cursor);
+    expect(second.body.tombstones).toEqual([]);
+    expect(second.body.next_cursor).toBe(4);
+  });
+
+  it("多用户隔离：只看到自己的行", async () => {    const alice = await registerUser("Alice", 1);
     await openRegistration(alice.cookie);
     const bob = await registerUser("Bob", 2);
 

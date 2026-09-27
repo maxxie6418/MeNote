@@ -1,12 +1,13 @@
 /**
  * 增量拉取（架构 §6.1、口径见 `docs/modules/Menote-同步引擎设计-v1.md` §3.2/§3.3）。
  *
- * 三条硬规则：
+ * 四条硬规则：
  * 1. **只回元数据**，正文另取（首屏只需"元数据增量 + 当前条目"）。
  * 2. **每类最多 200 行**，且**不得把同一 `sync_seq` 的组切开**（一个逻辑写操作影响的所有行
  *    共享同一序号；切开会让客户端漏掉同组的其余行）。
- * 3. `next_cursor` 取两类末端序号的**较小值**——两类是两次独立查询，截断点不同，
- *    取较大值会永久跳过另一类落在中间的变更。
+ * 3. `next_cursor` 取**三类**（items / folders / tombstones）末端序号的**较小值**——
+ *    三类是三次独立查询，截断点不同，取较大值会永久跳过另一类落在中间的变更。
+ * 4. **某类没有新行时不参与 min**（其 tail 视作 `+∞`），否则游标会被拖回原地、客户端原地打转。
  */
 import {
   SYNC_PAGE_LIMIT,
@@ -14,10 +15,12 @@ import {
   type ItemMeta,
   type ItemType,
   type SyncResponse,
+  type Tombstone,
 } from "@menote/shared";
 import {
   SQL_SELECT_FOLDERS_SINCE,
   SQL_SELECT_ITEMS_SINCE,
+  SQL_SELECT_TOMBSTONES_SINCE,
   SQL_SELECT_USER_TOMBSTONE_FLOOR,
 } from "../db/tables";
 import { DomainError } from "../errors";
@@ -64,6 +67,13 @@ interface FolderRow {
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
+}
+
+interface TombstoneRow {
+  entity: string;
+  entity_id: string;
+  sync_seq: number;
+  deleted_at: number;
 }
 
 interface PagedRows<T> {
@@ -186,6 +196,7 @@ export async function pullSync(
     return {
       items: [],
       folders: [],
+      tombstones: [],
       settings: await getUserSettings(db, userId),
       next_cursor: 0,
       has_more: false,
@@ -194,25 +205,40 @@ export async function pullSync(
   }
 
   const probe = SYNC_PAGE_LIMIT + 1;
-  const [itemsResult, foldersResult, settings] = await Promise.all([
+  const [itemsResult, foldersResult, tombstonesResult, settings] = await Promise.all([
     db.prepare(SQL_SELECT_ITEMS_SINCE).bind(userId, cursor, probe).all<ItemRow>(),
     db.prepare(SQL_SELECT_FOLDERS_SINCE).bind(userId, cursor, probe).all<FolderRow>(),
+    db.prepare(SQL_SELECT_TOMBSTONES_SINCE).bind(userId, cursor, probe).all<TombstoneRow>(),
     getUserSettings(db, userId),
   ]);
 
   const items = paginate(itemsResult.results, SYNC_PAGE_LIMIT, cursor);
   const folders = paginate(foldersResult.results, SYNC_PAGE_LIMIT, cursor);
+  const tombstones = paginate(tombstonesResult.results, SYNC_PAGE_LIMIT, cursor);
 
-  // 取两类末端序号的较小值；某类没有新行时其 tail 为 +∞，不参与限制
-  const tails = [items.tail, folders.tail].filter((tail) => Number.isFinite(tail));
+  // 取三类末端序号的较小值；某类没有新行时其 tail 为 +∞，不参与限制
+  const tails = [items.tail, folders.tail, tombstones.tail].filter((tail) =>
+    Number.isFinite(tail),
+  );
   const nextCursor = tails.length > 0 ? Math.min(...tails) : cursor;
 
   return {
     items: items.rows.map(toItemMeta),
     folders: folders.rows.map(toFolderMeta),
+    tombstones: tombstones.rows.map(toTombstone),
     settings,
     next_cursor: nextCursor,
-    has_more: items.hasMore || folders.hasMore,
+    has_more: items.hasMore || folders.hasMore || tombstones.hasMore,
     full_resync: false,
+  };
+}
+
+/** 墓碑行 → 载荷（`entity` 在 DDL 里已有 CHECK 约束，这里再收一次口，避免把脏值发给客户端） */
+function toTombstone(row: TombstoneRow): Tombstone {
+  return {
+    entity: row.entity === "folder" ? "folder" : "item",
+    entity_id: row.entity_id,
+    sync_seq: row.sync_seq,
+    deleted_at: row.deleted_at,
   };
 }

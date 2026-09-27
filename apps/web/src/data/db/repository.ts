@@ -14,6 +14,7 @@ import {
   type FolderMeta,
   type ItemMeta,
   type ItemType,
+  type Tombstone,
 } from "@menote/shared";
 import { parseMenoteMeta, stripFrontmatter } from "@menote/mdcore";
 import { db } from "./database";
@@ -96,6 +97,55 @@ export async function applySyncFolders(folders: FolderMeta[]): Promise<void> {
       folders.map((folder) => ({ ...folder, pending: pendingById.get(folder.id) ?? null })),
     );
   });
+}
+
+/**
+ * 应用墓碑：**永久删除在别处发生后，把本地痕迹一起清掉**（M4-7；《M4 设计》§5.3）。
+ *
+ * 一个事务里清六处——少清任何一处都会留下"幽灵"：
+ * - `items` / `folders` 行（本体）；
+ * - `bodies`（正文缓存：不清的话下次打开会显示已删内容）；
+ * - `searchIndex`（否则搜索还能搜到它）；
+ * - `drafts`（草稿里可能留着未保存的编辑）；
+ * - `conflicts`（副本→原条目的关联指向了不存在的行）；
+ * - 出站队列里**待上传**的同 id 操作（用户刚建又被他处永久删除，这条 op 已无意义，
+ *   留着会一直重试并报 404）。
+ *
+ * 未知实体的墓碑**直接忽略**（协议里 `entity` 只有 item / folder，但将来加了新实体时，
+ * 旧客户端不该因此报错）。
+ */
+export async function applyTombstones(tombstones: readonly Tombstone[] | undefined): Promise<void> {
+  // 兼容"部署窗口"：旧 Worker 的响应里没有 `tombstones` 字段（schema 的默认值只在新客户端生效），
+  // 所以这里按"没有墓碑"处理，而不是让整次同步失败
+  if (!tombstones || tombstones.length === 0) return;
+
+  const itemIds = tombstones.filter((row) => row.entity === "item").map((row) => row.entity_id);
+  const folderIds = tombstones.filter((row) => row.entity === "folder").map((row) => row.entity_id);
+
+  await db.transaction(
+    "rw",
+    [db.items, db.folders, db.bodies, db.drafts, db.searchIndex, db.conflicts, db.outbox],
+    async () => {
+      if (itemIds.length > 0) {
+        await db.items.bulkDelete(itemIds);
+        await db.bodies.bulkDelete(itemIds);
+        await db.drafts.bulkDelete(itemIds);
+        await db.searchIndex.bulkDelete(itemIds);
+        await db.outbox.filter((row) => row.entity === "item" && itemIds.includes(row.entity_id)).delete();
+      }
+      if (folderIds.length > 0) {
+        await db.folders.bulkDelete(folderIds);
+        await db.outbox
+          .filter((row) => row.entity === "folder" && folderIds.includes(row.entity_id))
+          .delete();
+      }
+      await db.conflicts
+        .filter(
+          (row) => itemIds.includes(row.original_id) || itemIds.includes(row.copy_id),
+        )
+        .delete();
+    },
+  );
 }
 
 // ——————————————————————————— 本地读 ———————————————————————————

@@ -10,6 +10,7 @@ import {
   applySyncFolders,
   applySyncItems,
   applySyncSettings,
+  applyTombstones,
   clearSyncedLocalContent,
   getSyncState,
   setSyncCursor,
@@ -55,9 +56,11 @@ export async function pullOnce(
 
     await applySyncItems(page.items);
     await applySyncFolders(page.folders);
+    // 墓碑（M4-7）：物理删除的传播。先落墓碑再落条目/文件夹，避免"同页里既删除又更新"时残留旧行
+    await applyTombstones(page.tombstones);
     // 用户设置（M2-7）：不参与游标，每页都带；本地有未上传改动或服务端 rev 不更新时会被跳过
     await applySyncSettings(page.settings);
-    applied += page.items.length + page.folders.length;
+    applied += page.items.length + page.folders.length + (page.tombstones?.length ?? 0);
     cursor = page.next_cursor;
     await setSyncCursor(cursor, now());
 

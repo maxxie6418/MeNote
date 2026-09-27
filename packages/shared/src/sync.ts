@@ -19,16 +19,36 @@ const SETTINGS_FALLBACK = {
   updated_at: 0,
 } as const;
 
+/**
+ * 墓碑（M4；《M4 设计》§5.3）。
+ *
+ * 永久删除之后，条目/文件夹**不会再有那一行**，于是"这条没了"只能靠墓碑告诉其他设备。
+ * 只带定位与序号：`entity` 区分条目与文件夹，`deleted_at` 供界面显示"何时删的"。
+ */
+export const TombstoneSchema = v.object({
+  entity: v.picklist(["item", "folder"]),
+  entity_id: v.string(),
+  /** **与删除那次逻辑写共享同一个 `sync_seq`**（否则游标会漏掉或重复） */
+  sync_seq: v.pipe(IntSchema, v.minValue(0)),
+  deleted_at: IntSchema,
+});
+export type Tombstone = v.InferOutput<typeof TombstoneSchema>;
+
 /** `GET /api/sync?cursor=N` 的响应：只回元数据，正文另取（架构 §6.1） */
 export const SyncResponseSchema = v.object({
   items: v.array(ItemMetaSchema),
   folders: v.array(FolderMetaSchema),
   /**
+   * 物理删除的墓碑（M4）。可选 + 默认空数组：部署窗口里旧 Worker 的响应没有这个字段时，
+   * 新客户端不该因此失败（同 `settings` 的口径）。
+   */
+  tombstones: v.optional(v.array(TombstoneSchema), []),
+  /**
    * 用户设置（M2-7）。**不参与游标**：它只有一行、体积极小，每次同步整份带回更简单可靠
    * （若进游标就要把它并进 `next_cursor` 的取小逻辑，收益不抵复杂度）。客户端按 `rev` 决定是否落库。
    */
   settings: v.optional(UserSettingsPayloadSchema, SETTINGS_FALLBACK),
-  /** 两类末端序号的**较小值**；客户端据此推进唯一游标 */
+  /** 三类（items / folders / tombstones）末端序号的**较小值**；客户端据此推进唯一游标 */
   next_cursor: v.pipe(IntSchema, v.minValue(0)),
   has_more: v.boolean(),
   /** 游标早于 `users.tombstone_floor` 时为 true，客户端须清空本地重建 */

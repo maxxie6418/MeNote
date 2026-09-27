@@ -22,6 +22,7 @@
 | v1.7 | v0.3.8 | 2026-09-27 | **M3-5 后半（一）**：`filterByView`/`recentPreview`/`openTaskPreview` 接门禁、`HomePanel` 用 gate 取代 `memoLocked`、`noPrivacyGate()` 冻结单例（修掉"门禁对象每渲染重建"的引用稳定性陷阱）；全套 556 通过；Memo/待办占位与解锁框一并排入界面批次 | deepseek-v4.1-flash |
 | v1.8 | v0.3.9 | 2026-09-27 | **M3-5 完成 + 界面批次（一）**：`LockedPlaceholder`、`UnlockModal`（含逐次加等待）、`PrivacyCapsule`（三态与菜单）、Memo/待办占位；按授权再拆 `App.tsx`（`PrivacySlot`/`MemoView`/`TaskView`）；全套 570 通过；M3-10 标部分完成（缺 VaultNode / ItemRow / 编辑器状态栏 / 文案红线），胶囊开锁字形待确认 | deepseek-v4.1-flash |
 | v1.9 | v0.3.10 | 2026-09-27 | **M3-9 完成**：`PrivacySettingsPage`（启用/关闭/改密/重置 + 档位 + 范围）、组装层 `changePassword`/`resetPassword`（都不改 K）、`PRIVACY_MINUTES_OPTIONS` 同源常量、`SettingsPanel` 插槽、按授权拆 `app/SettingsView.tsx`；全套 584 通过；线上四条流程走查归 M3-12（需端上配好 BACKUP_CRED_KEY） | deepseek-v4.1-flash |
+| v1.10 | v0.3.11 | 2026-09-27 | **M3-6 完成**：空间节点三态、空间内文件夹树与空间内新建、笔记本树排除空间子树（修真问题）、`FolderRenameModal` 去重、按授权拆 `useVaultScope`/`useNoteCreation`/`NavPanels`；全套 593 通过 | deepseek-v4.1-flash |
 
 ---
 
@@ -88,7 +89,10 @@
 - **涉及文件**：`apps/web/src/data/db/search.ts`（索引含隐私条目、拆标题/正文两段、查询按 `searchFields` 过滤）、`apps/web/src/features/search/useSearch.ts`、`apps/web/src/features/notes/views.ts`（`gate` 入参）、`apps/web/src/features/home/*`（计数含全部、最近动态按门禁、Memo 占位接真值）、`apps/web/src/features/memos/*`、`apps/web/src/features/tasks/*`、`apps/web/src/app/fnbar/VaultNode.tsx`（未启用 / 锁定 / 解锁三态）。
 - **验收**：M2 那条"加密条目既不进索引也搜不到"用例改写为四组断言（进索引 / 锁定搜不到 / 解锁标题可搜 / 开关控正文 / 单篇标题可搜正文不可）；锁定态首页最近动态不含空间内条目、计数含；三视图在锁定/解锁切换后**立即重渲染**。
 
-### M3-6 加密空间视图
+### M3-6 加密空间视图 —— ✅ **完成（2026-09-27，v0.3.11）**
+
+> 已完成：`privacy/vault.ts` 纯函数（**笔记本树排除整个空间子树**——修掉"空间行混进根目录文件夹"）、`VaultNode` 三态（未启用置灰说明 / 已锁定开解锁框 / 已解锁显示计数并可进入）、`VaultTree` 空间内文件夹树（复用 `FolderTree` + 抽出的 `FolderRenameModal`）、空间内新建（`createLocalItem`/`createLocalFolder` 支持空间标记，**不经过先建后移**）、锁定后自动离开空间视图；装配层拆出 `useVaultScope` 与 `useNoteCreation`。
+> **未做**：空间行的"不可删除"守卫——客户端目前没有删除文件夹的入口（删除能力在 M4），所以现在没有可被绕过的路径；守卫随 M4 一起加。空间内"新建笔记"按钮落在功能栏的「新建笔记」上（当前视图在空间里即天然带标记）。
 
 - **涉及文件**：`apps/web/src/features/privacy/ui/VaultPanel.tsx` + `VaultDocEmpty.tsx`（新增）、`apps/web/src/features/notes/*`（空间内的列表与正文复用既有双栏组件）、空间重命名（复用文件夹改名路径）、空间内新建条目（创建时置 `in_enc_space = 1`）。
 - **验收**：锁定时只显示"已锁定 + 解锁"占位且**不展开**；解锁后两层文件夹限制与服务端一致（非法目标置灰并说明）；空间内新建天然带标记；空间行竞态下不可删、不可重建第二个。

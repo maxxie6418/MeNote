@@ -419,6 +419,7 @@ export default function App() {
           /* 回收站（M4-12）：独立页；「← 返回设置」回落到「版本与回收站」分类 */
           <TrashSlot
             gate={privacy.gate}
+            retentionDays={userSettings.settings.version_trash.trash_retention_days}
             onBackToSettings={() => navigate({ name: "settings", page: "versions" })}
             onToast={(message, tone) => pushToast(message, tone)}
           />

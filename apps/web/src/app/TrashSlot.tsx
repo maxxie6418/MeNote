@@ -12,16 +12,19 @@ import type { TrashNotice } from "../features/trash/useTrash";
 
 export interface TrashSlotProps {
   gate: PrivacyGate;
+  /** 回收站保留天数（来自用户设置：「版本与回收站」分类里可改） */
+  retentionDays: number;
   onBackToSettings: () => void;
   onToast: (message: string, tone: TrashNotice["tone"] | "success" | "error" | "info") => void;
 }
 
-export function TrashSlot({ gate, onBackToSettings, onToast }: TrashSlotProps) {
+export function TrashSlot({ gate, retentionDays, onBackToSettings, onToast }: TrashSlotProps) {
   const notify = useCallback(
     (notice: TrashNotice) => onToast(notice.message, notice.tone),
     [onToast],
   );
-  const trash = useTrash(gate, Date.now, notify);
+  // 保留天数**传进去**：回收站页的剩余天数与页头口径都按用户设置算（默认 30）
+  const trash = useTrash(gate, Date.now, notify, retentionDays);
 
   return (
     <TrashPage
@@ -36,6 +39,7 @@ export function TrashSlot({ gate, onBackToSettings, onToast }: TrashSlotProps) {
       failures={trash.failures}
       onRetry={() => void trash.retry()}
       offline={trash.offline}
+      retentionDays={trash.retentionDays}
       onBackToSettings={onBackToSettings}
     />
   );

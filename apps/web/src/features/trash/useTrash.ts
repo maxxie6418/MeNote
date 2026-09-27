@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { PrivacyGate } from "@menote/shared";
+import { TRASH_RETENTION_DAYS_DEFAULT } from "@menote/shared";
 import type { LocalFolder, LocalItem } from "../../data/db";
 import { trashApi } from "../../data/api/endpoints";
 import {
@@ -37,6 +38,8 @@ export interface TrashNotice {
 
 export interface UseTrashResult {
   rows: TrashRowModel[];
+  /** 实际生效的保留天数（界面的口径文案要显示这个值，不是写死的 30） */
+  retentionDays: number;
   loading: boolean;
   offline: boolean;
   selected: ReadonlySet<string>;
@@ -59,6 +62,14 @@ export function useTrash(
   gate: PrivacyGate,
   now: () => number = Date.now,
   notify: (notice: TrashNotice) => void = () => undefined,
+  /**
+   * 回收站保留天数（**来自用户设置**，默认 30）。
+   *
+   * 2026-09-27 修：此前这里写死用默认值，于是"设置里改成 7 天"之后，
+   * 回收站页显示的剩余天数、以及"剩余 N 天"的倒计时**都还按 30 天算**——
+   * 设置改了、界面不跟着变，正是"接上了但接错"。
+   */
+  retentionDays: number = TRASH_RETENTION_DAYS_DEFAULT,
 ): UseTrashResult {
   const [items, setItems] = useState<LocalItem[]>([]);
   /** 回收站里的文件夹（M4-12 补；界面稿 §6.5） */
@@ -227,7 +238,8 @@ export function useTrash(
   }, [failures, runBatches]);
 
   return {
-    rows: trashRows(items, now(), gate, undefined, folders),
+    rows: trashRows(items, now(), gate, retentionDays, folders),
+    retentionDays,
     loading,
     offline,
     selected,

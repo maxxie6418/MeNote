@@ -121,6 +121,51 @@ describe("文件夹进入回收站列表", () => {
   });
 });
 
+describe("保留天数走用户设置（不是写死的 30）", () => {
+  it("页头口径显示实际生效的天数", () => {
+    const { rerender } = render(
+      <TrashPage
+        rows={[]}
+        selected={new Set()}
+        onToggleSelect={vi.fn()}
+        onSelectAll={vi.fn()}
+        onRestore={vi.fn()}
+        onPurge={vi.fn()}
+        onEmpty={vi.fn()}
+        onBackToSettings={vi.fn()}
+      />,
+    );
+    // 没给 retentionDays 时用默认 30
+    expect(screen.getByText("保留 30 天")).toBeTruthy();
+
+    rerender(
+      <TrashPage
+        rows={[]}
+        selected={new Set()}
+        onToggleSelect={vi.fn()}
+        onSelectAll={vi.fn()}
+        onRestore={vi.fn()}
+        onPurge={vi.fn()}
+        onEmpty={vi.fn()}
+        retentionDays={7}
+        onBackToSettings={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("保留 7 天")).toBeTruthy();
+  });
+
+  it("剩余天数也按设置算（设 7 天时删了 5 天的只剩 2 天）", () => {
+    const rows = trashRows(
+      [item("i1", NOW - 5 * 24 * 60 * 60 * 1000)],
+      NOW,
+      openGate,
+      7,
+    );
+    expect(rows[0]?.remainingDays).toBe(2);
+    expect(rows[0]?.urgent).toBe(true);
+  });
+});
+
 describe("文件夹行的界面", () => {
   it("显示类型「文件夹」与文件夹图标，并且**不给可用的永久删除**（服务端还不支持）", () => {
     render(

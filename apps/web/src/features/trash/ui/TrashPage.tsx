@@ -14,6 +14,7 @@
  * 3. 离线时恢复与永久删除**置灰并说明"需要联网"**（看是能看的）。
  */
 import { useState } from "react";
+import { TRASH_RETENTION_DAYS_DEFAULT } from "@menote/shared";
 import { Button } from "../../../app/ui/Controls";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
@@ -43,6 +44,8 @@ export interface TrashPageProps {
   onRetry?: () => void;
   /** 离线：恢复与永久删除不可用并说明原因 */
   offline?: boolean;
+  /** 实际生效的回收站保留天数（来自用户设置；页头口径要显示它） */
+  retentionDays?: number;
   onBackToSettings: () => void;
 }
 
@@ -58,6 +61,7 @@ export function TrashPage({
   failures = [],
   onRetry,
   offline = false,
+  retentionDays = TRASH_RETENTION_DAYS_DEFAULT,
   onBackToSettings,
 }: TrashPageProps) {
   const [pending, setPending] = useState<{ kind: "purge" | "empty"; ids: string[] } | null>(null);
@@ -72,7 +76,14 @@ export function TrashPage({
           ← 返回设置
         </Button>
         <h1 className="trashpage__title">回收站</h1>
-        <span className="trashpage__sub">删除的内容在这里保留 30 天（可在设置里改）</span>
+        {/*
+          保留期口径用**实际生效的天数**（来自用户设置）：此前写死"30 天"，
+          用户在设置里改成 7 天之后这句话仍然是 30——文案与事实不符。
+        */}
+        <span className="trashpage__sub">
+          删除的内容在这里保留 <TrashRetentionChip days={retentionDays} />
+          （可在设置里改）
+        </span>
         <Button
           variant="danger"
           size="sm"
@@ -241,7 +252,7 @@ export function TrashPage({
   );
 }
 
-/** 页头副标题里的口径也走 Chip 提示（供设置页复用同一句） */
+/** 页头副标题里的保留天数（单独一个组件：口径文案在一处，改口径只改这里） */
 export function TrashRetentionChip({ days }: { days: number }) {
   return <Chip variant="compact">{`保留 ${days} 天`}</Chip>;
 }

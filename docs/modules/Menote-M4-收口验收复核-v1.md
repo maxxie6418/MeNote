@@ -24,15 +24,16 @@
 |---|---|---|
 | 代码规范 | `pnpm lint` | exit 0 |
 | 类型 | `pnpm typecheck` | exit 0（四个包全通过） |
-| 测试 | `pnpm test` | **1041** 通过（shared 59 + mdcore 65 + web 721 + worker 196） |
+| 测试 | `pnpm test` | **1057** 通过（shared 59 + mdcore 65 + web 737 + worker 196） |
 | 构建 | `pnpm build` | exit 0 |
-| 首屏体积 | `pnpm check:size` | **164.2 KB** gzip（上限 200 KB；M3 收口时 146.9 KB，M4 增加 17.3 KB——其中约 5 KB 是收口期间补的表格接线、标签 chip、行拖动与回收站文件夹） |
+| 首屏体积 | `pnpm check:size` | **165.2 KB** gzip（上限 200 KB；M3 收口时 146.9 KB，M4 增加 18.3 KB——含收口期间的表格接线、标签 chip、行拖动、回收站文件夹，以及**按用户原型做的整屏样式还原**） |
 | 迁移演练 **0003 → 0004** | `pnpm --filter @menote/worker test -- schema-upgrade` | **5/5 通过**（版本推到 4、六表与索引齐全、**存量数据逐字段不变**、幂等、半升级可补齐、新表可写可查） |
 | 原型不变量 | `node prototype/verify-prototype.js` | 通过 55 / 失败 0 |
 | 线框页 | `node prototype/verify-framework.js` | 通过 35 / 失败 0 |
 | 部署配置 | `npx wrangler deploy --dry-run` | 通过；绑定清单含 `env.ATTACHMENTS (menote-attachments) R2 Bucket`；生成的部署配置带 `r2_buckets` 与 `triggers.crons` |
-| **调用点审计（前端）** | 只读脚本：从 `main.tsx` 沿静态 + 动态 import 递归 | **24/24 关键模块可达**（共 135 个模块） |
+| **调用点审计（前端）** | 只读脚本：从 `main.tsx` 沿静态 + 动态 import 递归 | **146/146 源码文件可达**（M4 收口末期重跑；收口期间新增的 `TaskRow`、`empty-ico` 用法等都在图内） |
 | **调用点审计（服务端）** | 逐个端点查测试覆盖 | **17/17 M4 端点有用例走过** |
+| **"写了没渲染"审计** | 扫 `.tsx` 导出的大写标识符，查别处是否使用 | **4 处**全为"同文件内使用"或"测试使用"（`COMPOSER_MODES` / `AUTO_LOCK_NOTICE_MS` / `EMPTY_SEARCH_STATE` / `TrashRetentionChip`——后者在 v0.4.29 已真正用上），**无死组件** |
 
 M4 期间共 **42 个含 M4 的提交**（v0.4.0 期间起 → v0.4.24），其中 **1 次是用户报的线上问题修复**（v0.4.23：设置页进得去出不来）。
 

@@ -130,6 +130,20 @@ export const CryptoStateSchema = v.object({
 export type CryptoState = v.InferOutput<typeof CryptoStateSchema>;
 
 /**
+ * 写入用的材料形状：与读取相比，`k_wrapped_backup` 是**可选**的——
+ * 首次启用时浏览器给的是明文 `k`，第二份包裹由服务端包（见 `CryptoWriteSchema`）。
+ */
+export const CryptoMaterialsInputSchema = v.object({
+  kdf: v.literal(CRYPTO_KDF),
+  kdf_iterations: v.pipe(IntSchema, v.minValue(100_000), v.maxValue(2_000_000)),
+  kdf_salt: Base64UrlSchema,
+  verifier: Base64UrlSchema,
+  k_wrapped_pw: Base64UrlSchema,
+  k_wrapped_backup: v.optional(Base64UrlSchema),
+});
+export type CryptoMaterialsInput = v.InferOutput<typeof CryptoMaterialsInputSchema>;
+
+/**
  * `PUT /api/crypto` 的请求体。
  *
  * `k` 只在**首次启用**时提供：浏览器没有（也不该有）`BACKUP_CRED_KEY`，
@@ -137,7 +151,7 @@ export type CryptoState = v.InferOutput<typeof CryptoStateSchema>;
  * 改密 / 重置时浏览器手里已有旧的备份包裹，原样带回来即可，不必再传 K。
  */
 export const CryptoWriteSchema = v.object({
-  materials: CryptoMaterialsSchema,
+  materials: CryptoMaterialsInputSchema,
   k: v.optional(Base64UrlSchema),
 });
 export type CryptoWrite = v.InferOutput<typeof CryptoWriteSchema>;

@@ -134,7 +134,10 @@ export function createSyncEngine(options: SyncEngineOptions = {}): SyncEngine {
       // 别的标签页写入/同步完 → 本页刷新（M2-9）。**不做成"再来一次同步"**：
       // 它们已经把数据落到本地库了，这里只需要重新读库，省掉一轮网络往返。
       unsubscribe = channel.subscribe((event) => {
-        options.onRemoteChange?.(event.kind);
+        // 广播通道是共用的，M3 起还承载隐私事件；同步引擎只关心这两种，其余交给各自的订阅方
+        if (event.kind === "item-updated" || event.kind === "cursor-advanced") {
+          options.onRemoteChange?.(event.kind);
+        }
       });
 
       if (typeof window === "undefined") return; // 非浏览器环境（测试）不挂监听

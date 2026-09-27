@@ -152,8 +152,11 @@ describe("PUT /api/crypto（启用 / 改密）", () => {
     expect(second.state.materials?.k_wrapped_backup).toBe(first.state.materials?.k_wrapped_backup);
   });
 
-  it("首次启用不带 K：422（服务端无法自己造出内容密钥）", async () => {
-    const { status } = await putCrypto(alice.cookie, { materials: fakeMaterials() });
+  it("首次启用既不带 K 也不带备份包裹：422（服务端无法自己造出内容密钥）", async () => {
+    const { kdf, kdf_iterations, kdf_salt, verifier, k_wrapped_pw } = fakeMaterials();
+    const { status } = await putCrypto(alice.cookie, {
+      materials: { kdf, kdf_iterations, kdf_salt, verifier, k_wrapped_pw },
+    });
     expect(status).toBe(422);
   });
 

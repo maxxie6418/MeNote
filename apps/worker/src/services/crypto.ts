@@ -141,11 +141,21 @@ export async function putCryptoMaterials(
       throw new DomainError("invalid", "内容密钥长度不合法");
     }
     backupWrap = await wrapContentKeyWithBackupSecret(secret, contentKey);
-  } else if (!existing) {
-    throw new DomainError("invalid", "首次启用隐私锁必须随请求提供内容密钥");
+  } else if (backupWrap === undefined) {
+    throw new DomainError(
+      "invalid",
+      existing ? "缺少备份包裹" : "首次启用隐私锁必须随请求提供内容密钥",
+    );
   }
 
-  const materials: CryptoMaterials = { ...input.materials, k_wrapped_backup: backupWrap };
+  const materials: CryptoMaterials = {
+    kdf: input.materials.kdf,
+    kdf_iterations: input.materials.kdf_iterations,
+    kdf_salt: input.materials.kdf_salt,
+    verifier: input.materials.verifier,
+    k_wrapped_pw: input.materials.k_wrapped_pw,
+    k_wrapped_backup: backupWrap,
+  };
   const { salt, verifier, wrappedPw, wrappedBackup } = assertMaterials(materials);
   await db
     .prepare(SQL_UPSERT_USER_CRYPTO)

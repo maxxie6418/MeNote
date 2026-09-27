@@ -72,6 +72,35 @@ describe("广播通道", () => {
     ]);
   });
 
+  it("隐私事件（M3）：只带档位 / 到期时刻 / 条目 id，形状不对就丢", () => {
+    const channels: FakeChannel[] = [];
+    const channel = createSyncChannel({ createChannel: fakeFactory(channels) });
+    const seen: unknown[] = [];
+    channel.subscribe((event) => seen.push(event));
+
+    // 形状不对：档位非法、expiresAt 类型不对、itemId 缺失
+    channels[0]?.listener?.({ data: { kind: "privacy-unlocked", tier: "forever", expiresAt: null } });
+    channels[0]?.listener?.({ data: { kind: "privacy-unlocked", tier: "minutes" } });
+    channels[0]?.listener?.({ data: { kind: "privacy-item-unlocked" } });
+    expect(seen).toEqual([]);
+
+    channels[0]?.listener?.({
+      data: { kind: "privacy-unlocked", tier: "minutes", expiresAt: 123 },
+    });
+    channels[0]?.listener?.({ data: { kind: "privacy-locked" } });
+    channels[0]?.listener?.({ data: { kind: "privacy-item-unlocked", itemId: "x1" } });
+    channels[0]?.listener?.({ data: { kind: "privacy-item-locked", itemId: "x1" } });
+    channels[0]?.listener?.({ data: { kind: "privacy-state-request" } });
+
+    expect(seen).toEqual([
+      { kind: "privacy-unlocked", tier: "minutes", expiresAt: 123 },
+      { kind: "privacy-locked" },
+      { kind: "privacy-item-unlocked", itemId: "x1" },
+      { kind: "privacy-item-locked", itemId: "x1" },
+      { kind: "privacy-state-request" },
+    ]);
+  });
+
   it("通道名带应用前缀（不与其它应用撞名）", () => {
     const channels: FakeChannel[] = [];
     createSyncChannel({ createChannel: fakeFactory(channels) });

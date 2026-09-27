@@ -5,6 +5,8 @@
  */
 import {
   BatchResponseSchema,
+  CryptoResetResponseSchema,
+  CryptoStateSchema,
   ITEM_BASE_REV_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
@@ -17,6 +19,9 @@ import {
   type BatchOp,
   type BatchResponse,
   type ChangePasswordResponse,
+  type CryptoResetResponse,
+  type CryptoState,
+  type CryptoWrite,
   type FolderCreate,
   type SearchResponse,
   type UserSettingsPayload,
@@ -152,6 +157,34 @@ export const searchApi = {
     // 响应同样过一遍共享 schema（喂界面的数据不做无条件信任）
     const raw = await apiRequest<unknown>(`/api/search?${query.toString()}`);
     return v.parse(SearchResponseSchema, raw);
+  },
+};
+
+/**
+ * 隐私锁门禁材料（M3；《隐私锁设计》§4.2）。
+ *
+ * 四个端点都返回 `no-store` 的材料，响应过一遍共享 schema。
+ * `put` 的 `k` 只在**首次启用**时给（服务端用 `BACKUP_CRED_KEY` 包第二份包裹）。
+ */
+export const cryptoApi = {
+  get: async (): Promise<CryptoState> => {
+    const raw = await apiRequest<unknown>("/api/crypto");
+    return v.parse(CryptoStateSchema, raw);
+  },
+
+  put: async (input: CryptoWrite): Promise<CryptoState> => {
+    const raw = await apiRequest<unknown>("/api/crypto", { method: "PUT", body: input });
+    return v.parse(CryptoStateSchema, raw);
+  },
+
+  reset: async (): Promise<CryptoResetResponse> => {
+    const raw = await apiRequest<unknown>("/api/crypto/reset", { method: "POST", body: {} });
+    return v.parse(CryptoResetResponseSchema, raw);
+  },
+
+  remove: async (): Promise<CryptoState> => {
+    const raw = await apiRequest<unknown>("/api/crypto", { method: "DELETE" });
+    return v.parse(CryptoStateSchema, raw);
   },
 };
 

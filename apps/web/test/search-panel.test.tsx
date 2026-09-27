@@ -17,6 +17,7 @@ import {
   type SearchResult,
 } from "../src/features/search/ui/SearchPanel";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -86,6 +87,8 @@ function renderPanel(overrides: Partial<Parameters<typeof SearchPanel>[0]> = {})
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）。这里**只有按钮**：搜索框在功能栏，
   // 结果面板本身没有输入控件（`fields` 不给下限，给了会假失败——这条是下限机制抓出来的）
   assertLabelledControls(container, { buttons: 1 });
+  // DESIGN.md §5.1：这块区域最多一个实心主色按钮
+  assertSinglePrimaryAction(container);
   return { container, onOpen, onClose, onFiltersChange };
 }
 

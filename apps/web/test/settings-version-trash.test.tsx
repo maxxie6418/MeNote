@@ -14,6 +14,7 @@ import {
   type VersionsTrashPageProps,
 } from "../src/features/settings/ui/VersionsTrashPage";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -31,6 +32,7 @@ function renderPage(overrides: Partial<VersionsTrashPageProps> = {}) {
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）：这一屏有数字输入与开关，最容易漏名字
   assertLabelledControls(container, { buttons: 1, fields: 1 });
+  assertSinglePrimaryAction(container);
   return { onPatchSettings, onOpenTrash };
 }
 

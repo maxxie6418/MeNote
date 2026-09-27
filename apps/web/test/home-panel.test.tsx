@@ -13,6 +13,7 @@ import { noPrivacyGate, privacyGateFrom } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { HomePanel } from "../src/features/home/ui/HomePanel";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -86,6 +87,8 @@ function renderPanel(overrides: Partial<Parameters<typeof HomePanel>[0]> = {}) {
   );
   // 读屏底线：首页每个按钮/输入都要有可访问名字（渲染层断言，见 helpers/a11y.ts）
   assertLabelledControls(container, { buttons: 1 });
+  // DESIGN.md §5.1：这块区域最多一个实心主色按钮
+  assertSinglePrimaryAction(container);
   return {
     container,
     onNewNote,

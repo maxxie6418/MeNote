@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LocalFolder } from "../src/data/db";
 import { NotebookPanel } from "../src/features/notes/ui/NotebookPanel";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -62,6 +63,7 @@ function renderPanel(overrides: Partial<Parameters<typeof NotebookPanel>[0]> = {
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）
   assertLabelledControls(container, { buttons: 1 });
+  assertSinglePrimaryAction(container);
   return { container, onCreateFolder, onRenameFolder, onMoveFolder, onViewChange };
 }
 

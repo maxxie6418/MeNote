@@ -14,6 +14,7 @@ import { noPrivacyGate, privacyGateFrom } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { TaskPanel } from "../src/features/tasks/ui/TaskPanel";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -79,6 +80,7 @@ function renderPanel(overrides: Partial<Parameters<typeof TaskPanel>[0]> = {}) {
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）——看板卡片上的状态按钮最容易漏名字
   assertLabelledControls(container, { buttons: 1 });
+  assertSinglePrimaryAction(container);
   return { container, onStatusChange, onClearMarker, onUnlock };
 }
 

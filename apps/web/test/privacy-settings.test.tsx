@@ -14,6 +14,7 @@ import {
   type PrivacyLockActions,
 } from "../src/features/settings/ui/PrivacySettingsPage";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -45,6 +46,7 @@ function renderPage(options: {
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）：设置页控件最多，也最容易漏名字
   assertLabelledControls(container, { buttons: 1 });
+  assertSinglePrimaryAction(container);
   return { container, lock, onPatchSettings };
 }
 
@@ -53,6 +55,27 @@ function typeInto(label: string, value: string): void {
 }
 
 describe("启用隐私锁", () => {
+  /**
+   * 回归（2026-09-27 发现并修）：启用表展开后，卡片里的「启用隐私锁」与表单里的「启用」
+   * **同时是实心主色按钮**，违反 `DESIGN.md` §5.1【禁止】同一区域两个并列主色按钮。
+   * 修法：表单展开时收起那个入口（表单自带「取消」，用户不会没有退路）。
+   */
+  it("表单展开时**只有一个主色按钮**（入口收起，主操作是「启用」）", () => {
+    const { container } = renderPage();
+
+    // 收起态：仅「启用隐私锁」一个主色按钮
+    expect(container.querySelectorAll(".btn--primary")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "启用隐私锁" }));
+
+    const primaries = [...container.querySelectorAll(".btn--primary")];
+    expect(primaries).toHaveLength(1);
+    expect(primaries[0]?.textContent).toContain("启用");
+    // 入口确实收起了（不是靠禁用装样子）
+    expect(screen.queryByRole("button", { name: "启用隐私锁" })).toBeNull();
+    // 表单仍能取消
+    expect(screen.getByRole("button", { name: "取消" })).toBeTruthy();
+  });
+
   it("默认未启用：按钮打开表单，两次不一致时给出可见错误且不提交", () => {
     const { lock } = renderPage();
 

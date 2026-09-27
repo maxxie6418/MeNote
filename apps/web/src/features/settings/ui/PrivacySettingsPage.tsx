@@ -211,7 +211,13 @@ export function PrivacySettingsPage({ lock, settings, onPatchSettings }: Privacy
             <Button size="sm" variant="danger" disabled={lock.busy} onClick={() => void submitDisable()}>
               关闭隐私锁
             </Button>
-          ) : (
+          ) : enableOpen ? null : (
+            /*
+              展开启用表时**收起这个入口**：否则卡片里会同时出现「启用隐私锁」与表单里的「启用」
+              两个实心主色按钮，违反 `DESIGN.md` §5.1【禁止】同一区域两个并列主色按钮；
+              界面稿 §四① 也只要一个主按钮（"未启用：……+ 主按钮「启用隐私锁」"）。
+              表单自带「取消」链接，用户不会没有退路。
+            */
             <Button size="sm" variant="primary" onClick={() => setEnableOpen(true)}>
               启用隐私锁
             </Button>

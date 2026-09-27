@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountQuickMenu } from "../src/app/topbar/AccountQuickMenu";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -34,6 +35,7 @@ function renderMenu(overrides: Partial<Parameters<typeof AccountQuickMenu>[0]> =
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）：账号菜单是"图标 + 文字"混排，值得钉住
   assertLabelledControls(container, { buttons: 1 });
+  assertSinglePrimaryAction(container);
   return { onOpenSettings, onLogout, onThemeMode, onFocusSearch };
 }
 

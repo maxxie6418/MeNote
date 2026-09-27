@@ -16,6 +16,7 @@ import {
 import { lineDiff, versionRows } from "../src/features/versions/model";
 import type { VersionMeta } from "@menote/shared";
 import { assertLabelledControls } from "./helpers/a11y";
+import { assertSinglePrimaryAction } from "./helpers/design";
 
 afterEach(cleanup);
 
@@ -57,6 +58,7 @@ function renderPanel(overrides: Partial<VersionHistoryPanelProps> = {}) {
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）
   assertLabelledControls(container, { buttons: 1 });
+  assertSinglePrimaryAction(container);
   return { container, ...actions };
 }
 

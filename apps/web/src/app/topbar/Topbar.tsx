@@ -53,7 +53,7 @@ export function Topbar({
     <header className="topbar">
       {/* ① 品牌 */}
       <div className="topbar__brand">
-        <span className="brandmark" aria-hidden="true" />
+        <img className="brandmark" src="/icon.svg" alt="" aria-hidden="true" />
         <span>Menote</span>
       </div>
 

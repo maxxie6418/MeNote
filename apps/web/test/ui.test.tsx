@@ -75,6 +75,11 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
     expect(within(topbar).getByText("Menote")).toBeTruthy();
     expect(within(topbar).getByText("全部笔记")).toBeTruthy();
 
+    // 品牌标记 = 站点图标本体（`public/icon.svg`，与浏览器标签页同一张图），
+    // 2026-09-27 用户确认改用图标，不再用 `--primary-grad` 渐变方块
+    const brandMark = topbar.querySelector(".topbar__brand img.brandmark");
+    expect(brandMark?.getAttribute("src")).toBe("/icon.svg");
+
     // 搜索框：M2-6 起可用（不再是禁用占位）
     const search = within(topbar).getByLabelText("搜索") as HTMLInputElement;
     expect(search.disabled).toBe(false);
@@ -279,6 +284,11 @@ describe("登录与注册页", () => {
       <LoginPage onLogin={onLogin} onGoRegister={vi.fn()} showRegisterEntry={false} />,
     );
     expect(screen.queryByRole("button", { name: /注册/ })).toBeNull();
+
+    // 登录 / 注册页品牌区与顶栏用同一张站点图标
+    expect(document.querySelector(".authcard__brand img.brandmark")?.getAttribute("src")).toBe(
+      "/icon.svg",
+    );
 
     await user.type(screen.getByLabelText("用户名"), "alice");
     await user.type(screen.getByLabelText("登录密码"), "pw");

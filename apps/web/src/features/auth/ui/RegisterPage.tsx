@@ -48,7 +48,7 @@ export function RegisterPage({ onRegister, onGoLogin, firstUser }: RegisterPageP
     <div className="authpage">
       <div className="authcard">
         <div className="authcard__brand">
-          <span className="brandmark" aria-hidden="true" />
+          <img className="brandmark" src="/icon.svg" alt="" aria-hidden="true" />
           Menote
         </div>
 

@@ -1253,11 +1253,17 @@ button.chip--tag:hover {
   color: var(--muted);
 }
 
+/* 品牌标记 = 站点图标本体（`public/icon.svg`，与浏览器标签页同一个文件）。
+   裸放、不加容器（2026-09-27 用户确认）：它是全站唯一使用**彩色插画**的位置，
+   其余图标一律走 §5.5 的 1.6px 描边 + 继承文字色。
+   已知代价：浅色主题下笔记本的白页面与白色顶栏同色（对比稿见
+   `deliverables/visual-proposal/brandmark-icon-compare-2026-09-27.html`），
+   想让它更清楚就把这里换成 `background: var(--panel-2)` + `1px solid var(--line)` 的切片形态。 */
 .brandmark {
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-sm);
-  background: var(--primary-grad);
+  flex: none;
+  display: block;
 }
 
 /* ——————————————————————————— 认证页 ——————————————————————————— */

@@ -1491,6 +1491,108 @@ button {
   }
 }
 
+/*
+  笔记列表与首页导航：按原型（`notes-tables.html` 的 `.docrow*` / `index.html` 的 `.nav-group*`）对齐
+  ——————————————————————————————————————————————————————————————
+  **结构差异（待议）**：原型 `.docrow` 是横向一行（26px 图标块 + 主块 + 右侧时间），
+  我们的 `.itemrow` 是**竖向排列**（标题 → 摘要 → 时间），且没有图标块。
+  本轮只对齐"不需要改结构"的取值，结构差异留待细节讨论（用户口径："先简单还原，细节后面再讨论"）。
+*/
+.itemrow {
+  /* 原型 `.docrow`：padding 用 `--sp-2`、圆角 `--radius`、悬停整块变色、选中态走主色浅底 */
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius);
+  transition: background 0.16s;
+}
+
+.itemrow[aria-current="true"] .itemrow__title {
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+.itemrow__title {
+  /* 原型 `.docrow__t`：常态不加粗，选中态才 600（见上一条） */
+  font-weight: 400;
+}
+
+.itemrow__excerpt {
+  /* 原型 `.docrow__sub`：`--fs-micro` + 与标题贴紧 */
+  margin-top: 1px;
+  font-size: var(--fs-micro);
+}
+
+.itemrow__meta {
+  /* 原型 `.docrow__when`：等宽数字，右侧不参与压缩 */
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 列表栏的状态提示条（此前**没有规则**）：一行小字 + 右侧链接，占位不抢眼 */
+.panel-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) var(--sp-2) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* 首页快捷导航的分组（此前**没有规则**）：照原型 `.nav-group` */
+.home-nav__grp {
+  margin-bottom: var(--sp-3);
+}
+
+.home-nav__title {
+  /* 原型 `.nav-group__title` */
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  padding: 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* 隐私胶囊的两种胶囊变体（此前**没有规则**）：中性态只换字色；可点的那种给指针与悬停态 */
+.pill--neutral {
+  color: var(--text-2);
+}
+
+.pill--action {
+  cursor: pointer;
+}
+
+.pill--action:hover {
+  color: var(--text);
+}
+
+/* 菜单里的说明行（此前**没有规则**）：一行小字，不抢菜单项的注意力 */
+.menu__note {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+}
+
+/* 设置行的"控件 + 单位"（此前**没有规则**）：输入框与单位文字同排、单位不参与压缩 */
+.setrow__control {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+.setrow__unit {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
 /* 标签格的 chip 编辑（M4-9 补）：输入框跟在 chip 后面，整体像一格里的多个值 */
 .tagchips {
   display: inline-flex;

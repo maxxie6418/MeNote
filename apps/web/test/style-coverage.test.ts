@@ -15,11 +15,12 @@ import { describe, expect, it } from "vitest";
 /**
  * 允许"暂时还没样式"的类名上限。
  *
- * 现状：**49**（表格 64 个已在 v0.4.43 清零；memo 与待办在 v0.4.44 按原型对齐后只剩
- * `memo__cancel` 一个新增规则）。剩下的集中在**回收站页（24）与版本面板/对比（25）**，
- * 外加首页 / 隐私胶囊 / 设置的几处零散类名。每补完一屏就调小；到 0 时改成 `toEqual([])`。
+ * 现状：**42**。已清零：表格（v0.4.43，64 个，按用户原型）；memo / 待办（v0.4.44，按用户原型）；
+ * 笔记列表与首页导航 + 零散类（v0.4.45，按用户原型 / 同族语言）。
+ * **剩下的全部集中在两屏**：回收站页（16）与版本面板 / 版本对比（25）——**这两屏没有用户原型页**，
+ * 暂按 `DESIGN.md` 令牌与同族组件补。每补完一屏就调小；到 0 时改成 `toEqual([])`。
  */
-const UNSTYLED_BUDGET = 49;
+const UNSTYLED_BUDGET = 42;
 
 const app = readFileSync(new URL("../src/app/theme/app.css", import.meta.url), "utf8").replace(
   /\/\*[\s\S]*?\*\//g,

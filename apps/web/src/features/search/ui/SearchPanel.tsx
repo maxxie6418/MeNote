@@ -30,6 +30,12 @@ export interface SearchItemLike {
   title: string | null;
   tags: string[];
   updated_at: number;
+  /**
+   * 隐私标记（M3-10）。**服务端兜底那条来源永远是空的**——服务端的搜索恒排除隐私内容，
+   * 所以缺省就是"没有隐私标记"，不需要额外区分。
+   */
+  enc_self?: 0 | 1;
+  in_enc_space?: 0 | 1;
 }
 
 export interface SearchResult {
@@ -210,6 +216,24 @@ export function SearchPanel({
                   onClick={() => onOpen(result.item.id)}
                 >
                   <span className="searchrow__title">
+                    {/*
+                      M3-10 的搜索标注（设计 §9.2-③）：
+                      - 空间内条目（解锁期间能搜到）→ "解锁期间可见"；
+                      - 未解密的单篇条目被**标题**命中 → "已加密"（它与隐私锁无关，所以是另一句）；
+                      两者可同时出现（一条既在空间里、又被单篇加密）。
+                    */}
+                    {result.item.in_enc_space === 1 ? (
+                      <span className="itemrow__mark" title="这条在加密空间里；锁定后它就不再出现在结果中">
+                        <Icon name="lock" size={13} />
+                        解锁期间可见
+                      </span>
+                    ) : null}
+                    {result.item.enc_self === 1 ? (
+                      <span className="itemrow__mark" title="单篇加密：正文需逐篇解锁">
+                        <Icon name="lock" size={13} />
+                        已加密
+                      </span>
+                    ) : null}
                     {result.item.title ??
                       (result.item.type === "memo" ? "Memo" : (folderNames[result.item.id] ?? "未命名"))}
                   </span>

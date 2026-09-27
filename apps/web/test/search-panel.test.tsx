@@ -108,8 +108,55 @@ describe("搜索结果", () => {
     expect(rows[1]?.textContent).toContain("Memo");
   });
 
-  it("点结果行打开该条目；「关闭」清空查询", async () => {
-    const user = userEvent.setup();
+  it("隐私标注：空间内条目「解锁期间可见」、单篇加密「已加密」（M3-10）", () => {
+    const { container } = renderPanel({
+      results: [
+        {
+          item: item("space", { in_enc_space: 1 }),
+          snippet: { before: "", match: "发布", after: "" },
+          score: 5,
+        },
+        {
+          item: item("single", { enc_self: 1 }),
+          snippet: { before: "", match: "发布", after: "" },
+          score: 4,
+        },
+        {
+          item: item("both", { enc_self: 1, in_enc_space: 1 }),
+          snippet: { before: "", match: "发布", after: "" },
+          score: 3,
+        },
+      ],
+    });
+
+    const rows = [...container.querySelectorAll(".searchrow")];
+    // ① 空间内条目：解锁期间可见
+    expect(rows[0]?.textContent).toContain("解锁期间可见");
+    expect(rows[0]?.textContent).not.toContain("已加密");
+    // ② 单篇加密：已加密（与隐私锁无关，所以不说"解锁期间可见"）
+    expect(rows[1]?.textContent).toContain("已加密");
+    expect(rows[1]?.textContent).not.toContain("解锁期间可见");
+    // ③ 两者同时成立时两句都在（两套标识可同时出现且能分辨）
+    expect(rows[2]?.textContent).toContain("解锁期间可见");
+    expect(rows[2]?.textContent).toContain("已加密");
+  });
+
+  it("没有隐私标记的结果不加任何标注（服务端兜底那条来源永远如此）", () => {
+    const { container } = renderPanel({
+      results: [
+        {
+          item: item("plain"),
+          snippet: { before: "", match: "发布", after: "" },
+          score: 5,
+        },
+      ],
+    });
+    const row = container.querySelector(".searchrow");
+    expect(row?.textContent).not.toContain("解锁期间可见");
+    expect(row?.textContent).not.toContain("已加密");
+  });
+
+  it("点结果行打开该条目；「关闭」清空查询", async () => {    const user = userEvent.setup();
     const { onOpen, onClose } = renderPanel();
 
     await user.click(screen.getAllByRole("button", { name: /今天讨论了/ })[0] as HTMLElement);

@@ -119,6 +119,12 @@ function FolderNode({
       >
         <Icon name="folder" size={13} />
         <span className="nav-item__label">{folder.name}</span>
+        {/* 空间内的文件夹带小锁角标（设计 §9.2-②：解锁后空间内文件夹仍然一眼可辨） */}
+        {inVault ? (
+          <span className="itemrow__mark" title="这个文件夹在加密空间里">
+            <Icon name="lock" size={13} />
+          </span>
+        ) : null}
         {folder.pending ? <span className="nav-item__count">待上传</span> : null}
         <span className="nav-item__count">{count}</span>
       </button>

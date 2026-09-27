@@ -216,3 +216,62 @@ describe("文件夹的重命名与移动", () => {
     expect(within(menu).getByRole("menuitem", { name: "重命名" })).toBeTruthy();
   });
 });
+
+describe("空间内文件夹的标识与整夹移入（M3-10 / M3-8）", () => {
+  const vaultBase = {
+    enabled: true,
+    locked: false,
+    isInVault: (folder: LocalFolder) => folder.in_enc_space === 1,
+    canMoveIn: () => true,
+    onMoveIn: vi.fn(async () => ({ done: 0, failures: [] })),
+    onMoveOut: vi.fn(async () => ({ done: 0, failures: [] })),
+  };
+
+  it("空间内的文件夹带小锁角标（解锁后也一眼可辨）", () => {
+    const { container } = renderPanel({
+      folders: [folder("v1", "旅行", null, 1)],
+      counts: { v1: 3 },
+      vault: vaultBase,
+    });
+    // 该行选择"空间内"的判据来自 isInVault —— 这里直接让入参为空间内
+    const row = [...container.querySelectorAll(".tree-row")][0];
+    expect(row?.querySelector(".itemrow__mark")).toBeNull(); // TREE 里的 f1 不在空间内
+
+    const { container: inside } = renderPanel({
+      folders: [{ ...folder("v1", "旅行", null, 1), in_enc_space: 1 }],
+      counts: { v1: 3 },
+      vault: vaultBase,
+    });
+    const insideRow = [...inside.querySelectorAll(".tree-row")][0];
+    expect(insideRow?.querySelector(".itemrow__mark")?.getAttribute("title")).toContain("加密空间");
+  });
+
+  it("整夹移入：进度行显示「处理中 x / y」，失败时给失败清单与「重试」", async () => {
+    const user = userEvent.setup();
+    // 用"闸门"把动作卡在中间，好观察进度行（promise executor 同步执行，所以 release 一定已赋值）
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onMoveIn = vi.fn(
+      async (
+        _folder: LocalFolder,
+        onProgress: (progress: { done: number; total: number }) => void,
+      ) => {
+        onProgress({ done: 1, total: 3 });
+        await gate;
+        return { done: 3, failures: [{ item: { id: "x" } as never, reason: "目标文件夹不存在" }] };
+      },
+    );
+
+    renderPanel({ vault: { ...vaultBase, onMoveIn } });
+    await user.click(screen.getByRole("button", { name: "学习 的更多操作" }));
+    await user.click(screen.getByRole("menuitem", { name: "移入加密空间" }));
+
+    expect(await screen.findByText(/处理中 1 \/ 3/)).toBeTruthy();
+
+    release();
+    expect(await screen.findByText(/1 条没能处理/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
+  });
+});

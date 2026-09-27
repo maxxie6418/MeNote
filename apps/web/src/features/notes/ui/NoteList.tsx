@@ -42,6 +42,11 @@ export interface NoteListProps {
   onTogglePinned?: (id: string) => void;
   onToggleStarred?: (id: string) => void;
   /**
+   * 删除（M4-12）：**只报事件**，二次确认与"移入回收站"由上层做——
+   * 列表行不该自己弹确认框（同一个确认逻辑还要给编辑器「更多」菜单用）。
+   */
+  onDelete?: (id: string) => void;
+  /**
    * 加密空间的移入/移出（M3-8；《隐私锁设计》§6.3、§8）。
    *
    * 三条口径直接体现在菜单里：
@@ -99,6 +104,7 @@ export function NoteList({
   onToggleStarred,
   vault,
   unlockedItemIds,
+  onDelete,
 }: NoteListProps) {
   const empty = emptyCopy(title);
   /** 这一篇在本次浏览器会话里是否已解密（单篇门禁与隐私锁态无关，故单独问） */
@@ -262,6 +268,18 @@ export function NoteList({
                                 onSelect: () => vault.onMoveIn(item.id, folder.id),
                               })),
                             ] satisfies MenuItemSpec[])
+                        : []),
+                      // 删除（M4-12）：破坏性操作 → 危险色，且执行前必须二次确认（确认框在 NotesPane 里）
+                      ...(onDelete
+                        ? ([
+                            {
+                              id: "delete",
+                              label: "删除",
+                              icon: "logout" as const,
+                              danger: true,
+                              onSelect: () => onDelete(item.id),
+                            },
+                          ] satisfies MenuItemSpec[])
                         : []),
                     ]}
                   />

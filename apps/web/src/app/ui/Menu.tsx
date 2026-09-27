@@ -19,6 +19,11 @@ export interface MenuItemSpec {
    * 其余项点完即收起。
    */
   keepOpen?: boolean;
+  /**
+   * 破坏性操作（删除、清空、永久删除）：用危险色文字（`DESIGN.md` §5.1 的"危险操作"）。
+   * 危险操作在**执行前**仍必须二次确认——样式只负责提醒，不代替确认。
+   */
+  danger?: boolean;
 }
 
 export interface DropdownMenuProps {
@@ -132,7 +137,7 @@ export function DropdownMenu({
               }}
               type="button"
               role="menuitem"
-              className="menu__item"
+              className={item.danger ? "menu__item menu__item--danger" : "menu__item"}
               disabled={item.disabled}
               title={item.title}
               onClick={() => {

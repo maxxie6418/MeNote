@@ -10,3 +10,4 @@ export * from "./repository";
 export * from "./schema";
 export * from "./search";
 export * from "./settings";
+export * from "./trash";

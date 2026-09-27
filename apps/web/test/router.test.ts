@@ -34,4 +34,9 @@ describe("设置分类的路由往返", () => {
     expect(parseRoute("#/notes")).toEqual({ name: "notes" });
     expect(parseRoute("")).toEqual({ name: "notes" });
   });
+
+  it("回收站是独立页（M4-12）：有自己的路由与 hash", () => {
+    expect(parseRoute("#/trash")).toEqual({ name: "trash" });
+    expect(routeToHash({ name: "trash" })).toBe("#/trash");
+  });
 });

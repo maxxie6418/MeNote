@@ -7,6 +7,10 @@
  *    都来自隐私锁组装层，界面只负责呈现原因（禁用必须带 `title`）。
  */
 import type { PrivacyGate } from "@menote/shared";
+import { useState } from "react";
+import { Button } from "../ui/Controls";
+import { Modal } from "../ui/Modal";
+import { moveToTrash } from "../../features/trash/useTrash";
 import type { NotesWorkspace } from "../../features/notes/useNotesWorkspace";
 import type { DocMode } from "../../features/notes/ui/NoteWorkspace";
 import { NoteList } from "../../features/notes/ui/NoteList";
@@ -27,7 +31,8 @@ export interface NotesPaneProps {
   };
   /** 单篇加密开关的落地（含成功/失败提示） */
   onToggleEncryption: (itemId: string, encrypted: boolean) => void;
-  onToast: (message: string, tone: "success" | "error") => void;
+  /** 提示条：破坏性操作成功后用警告态（`DESIGN.md` §6.6） */
+  onToast: (message: string, tone: "success" | "warn" | "error") => void;
   /** 加密空间的移入/移出（M3-8）；锁定时内部层级为空，只能入根 */
   vault: {
     enabled: boolean;
@@ -56,9 +61,16 @@ export function NotesPane({
   vault,
 }: NotesPaneProps) {
   const selected = workspace.selected;
+  /** 待确认删除的条目 id（确认框在下方渲染；列表行只报事件） */
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const pendingTitle =
+    workspace.allItems.find((item) => item.id === pendingDelete)?.title ??
+    workspace.selected?.title ??
+    "这条内容";
 
   return (
-    <TwoPane
+    <>
+      <TwoPane
       list={
         <NoteList
           items={workspace.items}
@@ -84,6 +96,7 @@ export function NotesPane({
           }}
           vault={vault}
           unlockedItemIds={encryption.gate.unlockedItems}
+          onDelete={(id) => setPendingDelete(id)}
         />
       }
       doc={
@@ -130,6 +143,43 @@ export function NotesPane({
           privacyLine={privacyLine}
         />
       }
-    />
+      />
+
+      {/* 删除确认（M4-12）：写明去向、保留期与可恢复性；破坏性操作必须二次确认（DESIGN.md §6.5） */}
+      <Modal
+        open={pendingDelete !== null}
+        title="删除"
+        desc={`「${pendingTitle}」将移入回收站，保留 30 天，可在回收站恢复。`}
+        onClose={() => setPendingDelete(null)}
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setPendingDelete(null)}>
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                const id = pendingDelete;
+                setPendingDelete(null);
+                if (!id) return;
+                void moveToTrash(id)
+                  .then(async () => {
+                    await workspace.refresh();
+                    onToast(`「${pendingTitle}」已移入回收站，30 天内可恢复`, "warn");
+                  })
+                  .catch((error: unknown) => {
+                    onToast(error instanceof Error ? error.message : "删除失败，请稍后重试", "error");
+                  });
+              }}
+            >
+              移入回收站
+            </Button>
+          </>
+        }
+      >
+        <p>删除后这一篇会从列表里消失；在回收站里可以在 30 天内恢复。</p>
+      </Modal>
+    </>
   );
 }

@@ -29,6 +29,7 @@ import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { HomeView } from "./workarea/HomeView";
 import { NotesSlot } from "./NotesSlot";
+import { TrashSlot } from "./TrashSlot";
 import { MemoView } from "./workarea/MemoView";
 import { TaskView } from "./workarea/TaskView";
 import { SearchView } from "./workarea/SearchView";
@@ -391,7 +392,14 @@ export default function App() {
           />
         }
       >
-        {route.name === "settings" ? (
+        {route.name === "trash" ? (
+          /* 回收站（M4-12）：独立页；「← 返回设置」回落到「版本与回收站」分类 */
+          <TrashSlot
+            gate={privacy.gate}
+            onBackToSettings={() => navigate({ name: "settings", page: "versions" })}
+            onToast={(message, tone) => pushToast(message, tone)}
+          />
+        ) : route.name === "settings" ? (
           <SettingsView
             page={route.page}
             onNavigate={(page) => navigate({ name: "settings", page })}

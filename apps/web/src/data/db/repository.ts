@@ -517,8 +517,7 @@ export async function createLocalNote(
  * **保留 `pending != null` 的条目及其正文/草稿**：这些是还没上传的改动，清掉就等于丢数据。
  * 设计稿说的"导出为本地备份文件"是 M5 的导出模块；M1 先用"不删未上传项"达到同样的目的。
  */
-export async function clearSyncedLocalContent(): Promise<void> {
-  await db.transaction("rw", db.items, db.folders, db.bodies, async () => {
+export async function clearSyncedLocalContent(): Promise<void> {  await db.transaction("rw", db.items, db.folders, db.bodies, async () => {
     const items = await db.items.toArray();
     const keepIds = new Set(items.filter((row) => row.pending !== null).map((row) => row.id));
     await db.items.filter((row) => row.pending === null).delete();

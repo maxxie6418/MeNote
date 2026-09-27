@@ -12,6 +12,8 @@ import {
   ITEM_META_HEADER,
   SearchResponseSchema,
   SyncResponseSchema,
+  TrashFolderResponseSchema,
+  TrashItemResponseSchema,
   UserSettingsPayloadSchema,
   encodeItemWriteMeta,
   type AuthKdfParams,
@@ -24,6 +26,8 @@ import {
   type CryptoWrite,
   type FolderCreate,
   type SearchResponse,
+  type TrashFolderResponse,
+  type TrashItemResponse,
   type UserSettingsPayload,
   type UserSettingsWrite,
   type FolderPatch,
@@ -134,6 +138,53 @@ export const syncApi = {
   pull: async (cursor: number): Promise<SyncResponse> => {
     const raw = await apiRequest<unknown>(`/api/sync?cursor=${cursor}`);
     return v.parse(SyncResponseSchema, raw);
+  },
+};
+
+/**
+ * 回收站（M4-12；《M4 设计》§5.1/§5.2）。
+ *
+ * 四个动作都需要联网：软删/恢复要服务端算"原位置还在不在"、永久删除要在一个 D1 batch 里
+ * 写墓碑并登记 R2 待删——这些都不是客户端能自己拍板的事，所以离线和"没配隐私锁"一样，
+ * 界面把入口置灰并说明原因，而不是先本地改了再对账。
+ */
+export const trashApi = {
+  /** 移入回收站（软删） */
+  deleteItem: async (id: string): Promise<TrashItemResponse> => {
+    const raw = await apiRequest<unknown>(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+    return v.parse(TrashItemResponseSchema, raw);
+  },
+
+  /** 恢复：回原位置；原文件夹没了会到根目录（响应里的 folder_id 是**实际**落点） */
+  restoreItem: async (id: string): Promise<TrashItemResponse> => {
+    const raw = await apiRequest<unknown>(`/api/items/${encodeURIComponent(id)}/restore`, {
+      method: "POST",
+      body: {},
+    });
+    return v.parse(TrashItemResponseSchema, raw);
+  },
+
+  /** 永久删除一批（**每批最多 10 条**，调用方按 `chunkIds` 切） */
+  purge: (ids: readonly string[]) =>
+    apiRequest<{ deleted: number; sync_seq: number }>("/api/trash/permanent", {
+      method: "POST",
+      body: { ids },
+    }),
+
+  /** 清空回收站（服务端自己分批） */
+  empty: () => apiRequest<{ deleted: number; batches: number }>("/api/trash/empty", { method: "POST", body: {} }),
+
+  deleteFolder: async (id: string): Promise<TrashFolderResponse> => {
+    const raw = await apiRequest<unknown>(`/api/folders/${encodeURIComponent(id)}`, { method: "DELETE" });
+    return v.parse(TrashFolderResponseSchema, raw);
+  },
+
+  restoreFolder: async (id: string): Promise<TrashFolderResponse> => {
+    const raw = await apiRequest<unknown>(`/api/folders/${encodeURIComponent(id)}/restore`, {
+      method: "POST",
+      body: {},
+    });
+    return v.parse(TrashFolderResponseSchema, raw);
   },
 };
 

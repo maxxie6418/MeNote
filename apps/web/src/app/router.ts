@@ -33,6 +33,7 @@ export type Route =
   | { name: "login" }
   | { name: "register" }
   | { name: "notes" }
+  | { name: "trash" }
   | { name: "settings"; page: SettingsPageId };
 
 export function parseRoute(hash: string): Route {
@@ -40,6 +41,8 @@ export function parseRoute(hash: string): Route {
 
   if (path === "login") return { name: "login" };
   if (path === "register") return { name: "register" };
+  // 回收站是**独立页**（功能拆解 Q2：不进功能栏），所以有自己的一档路由
+  if (path === "trash") return { name: "trash" };
 
   if (path.startsWith("settings")) {
     const page = path.split("/")[1] ?? "";
@@ -56,6 +59,8 @@ export function routeToHash(route: Route): string {
       return "#/login";
     case "register":
       return "#/register";
+    case "trash":
+      return "#/trash";
     case "settings":
       return `#/settings/${route.page}`;
     default:

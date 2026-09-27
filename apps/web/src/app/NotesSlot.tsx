@@ -20,7 +20,7 @@ export interface NotesSlotProps {
   /** 隐私锁组装层的返回值（整份传进来，少一层手工转写） */
   privacy: PrivacyLockState;
   onRequestUnlock: () => void;
-  onToast: (message: string, tone: "success" | "error") => void;
+  onToast: (message: string, tone: "success" | "warn" | "error") => void;
 }
 
 /** 把动作里的异常转成一句能读的提示（服务端 message 已经是中文可读文案） */

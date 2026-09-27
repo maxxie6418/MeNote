@@ -19,6 +19,14 @@ export interface EnvBindings {
    * （否则一个没配的机密会让整个隐私锁功能全灭）。派生：`SHA-256(机密字节)` → 32 字节 AES-GCM 密钥。
    */
   BACKUP_CRED_KEY?: string;
+  /**
+   * 附件与版本正文的对象存储（M4；架构 §5.2）。
+   *
+   * **可选**：新增绑定不会自动供给——没在 Cloudflare 端建好桶并写进 `wrangler.jsonc` 之前，
+   * 本地与线上的 `env.BUCKET` 都是 `undefined`。所有用到它的代码都必须**容忍缺失**
+   * （明确报错或跳过），否则一个没配的绑定会让整个 Worker 起不来。
+   */
+  BUCKET?: R2Bucket;
 }
 
 /** 已通过会话鉴权的用户（挂到 Hono 的 context 上） */

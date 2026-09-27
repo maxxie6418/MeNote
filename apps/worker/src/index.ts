@@ -10,6 +10,7 @@ import { schemaGuard } from "./middleware/schema";
 import { applySecurityHeaders, securityHeaders } from "./middleware/security-headers";
 import auth from "./routes/auth";
 import crypto from "./routes/crypto";
+import { runScheduled } from "./services/jobs";
 import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
@@ -68,6 +69,15 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  // Cron 分派器自 M4 起接入（架构 §12.1）；M0-M1 为空壳占位
-  scheduled: () => {},
+  /**
+   * Cron 分派器（M4-8；架构 §12.1）。
+   *
+   * 入口**只转调**：任务顺序、配额、游标、幂等口径全在 `services/jobs.ts` 与 `jobs/maintenance.ts`，
+   * 入口文件的行数预算与"只装配"约束见架构 §2.3.1。
+   *
+   * 用 `ctx.waitUntil` 让 workerd 知道这轮还没结束——否则 Cron 可能在删除进行到一半时就回收 isolate。
+   */
+  scheduled: (_event, env, ctx) => {
+    ctx.waitUntil(runScheduled(env));
+  },
 } satisfies ExportedHandler<EnvBindings>;

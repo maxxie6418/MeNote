@@ -24,6 +24,7 @@
 | v1.9 | v0.3.10 | 2026-09-27 | **M3-9 完成**：`PrivacySettingsPage`（启用/关闭/改密/重置 + 档位 + 范围）、组装层 `changePassword`/`resetPassword`（都不改 K）、`PRIVACY_MINUTES_OPTIONS` 同源常量、`SettingsPanel` 插槽、按授权拆 `app/SettingsView.tsx`；全套 584 通过；线上四条流程走查归 M3-12（需端上配好 BACKUP_CRED_KEY） | deepseek-v4.1-flash |
 | v1.10 | v0.3.11 | 2026-09-27 | **M3-6 完成**：空间节点三态、空间内文件夹树与空间内新建、笔记本树排除空间子树（修真问题）、`FolderRenameModal` 去重、按授权拆 `useVaultScope`/`useNoteCreation`/`NavPanels`；全套 593 通过 | deepseek-v4.1-flash |
 | v1.11 | v0.3.12 | 2026-09-27 | **M3-7 完成**：`enc_self` 补丁（补上白名单漏掉的一列）+ 两条服务端硬约束、`LockedDocPanel`、编辑器「更多」四动作（锁定态可加密 / 取消须先解锁）、按授权拆 `NotesPane`；全套 603 通过。**过程事故**：批量改名时误用 PowerShell 写坏一个源文件（BOM + 乱码），已重写并全仓扫描确认无其它受损 | deepseek-v4.1-flash |
+| v1.12 | v0.3.13 | 2026-09-27 | **M3-8 前半完成**：`in_enc_space` 契约与四条服务端自洽校验、`moveItemToVault`/`moveItemOutOfVault`、列表行菜单四态、按授权拆 `NotesSlot`、worker 隐私用例拆到 `items-privacy.test.ts`（两个文件都到行数预算）；全套 611 通过 | deepseek-v4.1-flash |
 
 ---
 
@@ -107,10 +108,12 @@
 - **涉及文件**：`apps/web/src/features/privacy/ui/LockedDocPanel`（新增，或复用 `app/workarea` 的占位件）、编辑器「更多」菜单（`apps/web/src/app/editor/*` 或 `features/notes/ui/DocStatusBar.tsx` 一带）、`features/privacy/model.ts`（逐篇已解密集合）。
 - **验收**：**锁定态**开启成功且该篇立即按锁定显示（Q25）；逐篇独立（解开 A 后 B 仍锁）；取消必须解锁；「锁上此篇」与「锁上全部单篇」行为正确；分享撤销接口留位（M5 接）。
 
-### M3-8 移入 / 移出与批量标记
+### M3-8 移入 / 移出与批量标记 —— 🟡 **前半完成（2026-09-27，v0.3.13）**
 
 - **涉及文件**：`apps/web/src/features/notes/*`（"移动到…"的目标集合：加密空间节点）、`apps/web/src/data/db/repository.ts`（`patch_meta` 的标记变更）、批量走 `POST /api/batch` 与 outbox（M2 已有）、进度与失败清单 UI。
 - **验收**：锁定态单篇只能移到空间根、目标菜单不展开空间内文件夹；整夹移入/移出受两层限制校验；批量进度"处理中 12/40"、单条失败跳过并列失败清单 + 重试；中断后重开继续（outbox 未清）。
+- **已完成**：`in_enc_space` 契约（必须与 `folder_id` 同一条补丁）+ 服务端四条自洽校验 + `moveItemToVault`/`moveItemOutOfVault` + 列表行菜单四态（未启用置灰说明 / **锁定只入根** / 解锁可选层级 / 空间内条目可移出且锁定时置灰）——验收里的第一条已满足。
+- **待做**：**整夹移入/移出**（先标文件夹行再批量标内部条目）、**批量进度与失败清单**（"处理中 12 / 40"、单条失败跳过 + 重试 = 重新入队）。
 
 ### M3-9 设置页「隐私锁」分类 —— ✅ **完成（2026-09-27，v0.3.10）**
 

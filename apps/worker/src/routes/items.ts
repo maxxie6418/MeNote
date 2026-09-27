@@ -5,6 +5,7 @@ import {
   BATCH_MAX_OPS,
   BatchRequestSchema,
   ITEM_BASE_REV_HEADER,
+  ITEM_DEVICE_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
   ItemMetaPatchSchema,
@@ -27,15 +28,14 @@ import { readJsonBody } from "../validation";
 const app = new Hono<AppEnv>();
 
 /** 客户端可选上报的设备标识：写进 `items.last_device`（需求 §12.2-3 的"跨会话"判断要用） */
-const DEVICE_HEADER = "X-Menote-Device";
-
 function requireUlid(id: string): string {
   if (!isUlid(id)) throw new DomainError("invalid", "ID 格式不合法");
   return id;
 }
 
 function deviceOf(c: Context<AppEnv>): string | null {
-  return c.req.header(DEVICE_HEADER) ?? null;
+  // 头名来自共享包：客户端与服务端必须用同一个（此前只在 Worker 里定义，客户端从没发过）
+  return c.req.header(ITEM_DEVICE_HEADER) ?? null;
 }
 
 /**

@@ -114,6 +114,15 @@ export const ITEM_BASE_REV_HEADER = "If-Match";
 /** `PUT /api/items/:id/body` 的内容哈希头（架构 §6.1） */
 export const ITEM_HASH_HEADER = "X-Menote-Hash";
 
+/**
+ * 设备标识请求头（需求 §12.2-3 的"跨会话 / 跨设备"判断要用）。
+ *
+ * **2026-09-27 提到共享包**：服务端一直支持它（`items.last_device` 由这个头写入），
+ * 但常量只写在 `apps/worker/src/routes/items.ts` 里、**客户端从没发过**——
+ * 于是那一列永远是 null，"另一台设备改过"这件事无从判断。两端共用同一个名字才不会再次漂移。
+ */
+export const ITEM_DEVICE_HEADER = "X-Menote-Device";
+
 /** `PATCH /api/items/:id/meta`：逐字段可选，独立判定 `meta_rev` 冲突 */
 export const ItemMetaPatchSchema = v.object({
   base_meta_rev: IntSchema,

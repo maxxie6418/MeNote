@@ -8,6 +8,7 @@ import {
   CryptoResetResponseSchema,
   CryptoStateSchema,
   ITEM_BASE_REV_HEADER,
+  ITEM_DEVICE_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
   SearchResponseSchema,
@@ -100,13 +101,18 @@ export const itemsApi = {
     };
   },
 
-  saveBody: (id: string, baseRev: number, contentHash: string, body: string) =>
+  saveBody: (id: string, baseRev: number, contentHash: string, body: string, deviceId?: string) =>
     apiRequest<ItemBodyWriteResponse>(`/api/items/${encodeURIComponent(id)}/body`, {
       method: "PUT",
       body,
       headers: {
         [ITEM_BASE_REV_HEADER]: String(baseRev),
         [ITEM_HASH_HEADER]: contentHash,
+        /*
+          上报设备标识（`items.last_device`）：服务端一直支持这个头，但客户端此前从没发过，
+          于是那一列永远是 null、"另一台设备改过"无从判断（需求 §12.2-3）。
+        */
+        ...(deviceId ? { [ITEM_DEVICE_HEADER]: deviceId } : {}),
       },
     }),
 

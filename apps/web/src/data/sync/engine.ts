@@ -6,7 +6,7 @@
  * 不做实时推送（需求 §15.2）。
  */
 import { SYNC_FOREGROUND_INTERVAL_MS } from "@menote/shared";
-import { outboxCount } from "../db";
+import { getSyncState, outboxCount } from "../db";
 import { createSyncChannel, type SyncChannel } from "./broadcast";
 import { withSyncLock } from "./leader";
 import { pullOnce, type PullApi, type PullResult } from "./pull";
@@ -20,6 +20,8 @@ export interface SyncEngineOptions {
   now?: () => number;
   random?: () => number;
   deviceLabel?: string | null;
+  /** 本机设备标识（`syncState.device_id`）：随正文保存上报，服务端写进 `items.last_device` */
+  deviceId?: string | null;
   onStatus?: (status: SyncStatus) => void;
   /** 别的标签页同步完了：本页据此刷新（M2-9 跨标签页通知） */
   onRemoteChange?: (event: "item-updated" | "cursor-advanced") => void;
@@ -67,11 +69,18 @@ export function createSyncEngine(options: SyncEngineOptions = {}): SyncEngine {
     options.onStatus?.("syncing");
     try {
       const outcome = await withSyncLock(async () => {
+        /*
+          设备标识**在这里读**（`syncState.device_id`，本地首次生成后持久化）：
+          与 `pullOnce` 读游标同一个来源，省得从 `App` 一路传下来。
+          `options.deviceId` 仍可覆盖（测试用）。
+        */
+        const deviceId = options.deviceId ?? (await getSyncState()).device_id;
         const pushed = await pushQueue({
           api: options.api,
           now,
           random: options.random,
           deviceLabel: options.deviceLabel,
+          deviceId,
         });
         const pulled = await pullOnce(options.pullApi, now);
         return { pushed, pulled };

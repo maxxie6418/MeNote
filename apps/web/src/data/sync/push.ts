@@ -85,11 +85,17 @@ const httpPushApi: PushApi = {
   batch: itemsApi.batch,
 };
 
-export interface PushContext {
-  api?: PushApi;
+export interface PushContext {  api?: PushApi;
   now?: () => number;
   random?: () => number;
   deviceLabel?: string | null;
+  /**
+   * 本机设备标识（`syncState.device_id`），随正文保存上报，服务端写进 `items.last_device`。
+   *
+   * 为什么要上报：需求 §12.2-3 的"**另一台设备改过**"就靠它判断（M11-01 的 `session` 封存触发）。
+   * 服务端一直支持这个头，但客户端此前从没发过 → 那一列永远是 null、这个判断无从做起。
+   */
+  deviceId?: string | null;
 }
 
 interface ResolvedContext {
@@ -97,6 +103,7 @@ interface ResolvedContext {
   now: () => number;
   random: () => number;
   deviceLabel: string | null;
+  deviceId: string | null;
 }
 
 export interface PushBatchResult {
@@ -501,10 +508,24 @@ async function applyBatchResult(
 /** 推送队列：按顺序处理到点的项，最多 `MAX_OPS_PER_RUN` 项 */
 export async function pushQueue(context: PushContext = {}): Promise<PushBatchResult> {
   const ctx: ResolvedContext = {
-    api: context.api ?? httpPushApi,
+    /*
+      默认 API 在这里**按上下文包一层**：`PushApi.saveBody` 的签名是"服务端接口的形状"，
+      不含设备标识，而正文保存要带上它（`X-Menote-Device` → `items.last_device`）。
+      用包装而不是模块级可变：没有隐藏的全局状态，注入替身的测试也照旧。
+    */
+    api:
+      context.api ??
+      (context.deviceId
+        ? {
+            ...httpPushApi,
+            saveBody: (id, baseRev, contentHash, body) =>
+              itemsApi.saveBody(id, baseRev, contentHash, body, context.deviceId ?? undefined),
+          }
+        : httpPushApi),
     now: context.now ?? Date.now,
     random: context.random ?? Math.random,
     deviceLabel: context.deviceLabel ?? null,
+    deviceId: context.deviceId ?? null,
   };
 
   const result: PushBatchResult = {

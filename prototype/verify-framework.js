@@ -214,32 +214,79 @@ step('加密空间：无分组小标题，贴底固定在功能栏底部（2026-
   if (!n.includes('贴底')) throw new Error('加密空间未标注「贴底」：' + n);
   if (!n.includes('小标题')) throw new Error('加密空间未标注去掉小标题：' + n);
 });
-step('Memo 页：只剩时间轴 / 瀑布流，清单已移出（v2 Q1 / M06-10）', () => {
+step('Memo 页：页内二级侧栏 + 时间轴 / 瀑布流互斥，清单已移出（v2 Q1 / M06-10 / 2026-09-27 调整）', () => {
   gotoPage('Memo');
+  ['memoHead', 'memoMode', 'memoAdd', 'dayGroup', 'memoItem', 'waterfall', 'gateState',
+   'subStat', 'subHeat', 'subWalk', 'subDay', 'subFilter'].forEach(id => {
+    if (!$('#canvas [data-b="' + id + '"]')) throw new Error('Memo 页缺区块 ' + id);
+  });
   const tabs = noteOf('memoMode');
   if (!tabs.includes('时间轴') || !tabs.includes('瀑布流')) throw new Error('缺时间轴/瀑布流：' + tabs);
   if (tabs.includes('清单并入')) throw new Error('仍写「清单并入 Memo」：' + tabs);
-  if (!$('#canvas [data-b="memoAdd"]')) throw new Error('Memo 页缺「添加」按钮');
-  ['taskList', 'kanban', 'taskFilters'].forEach(id => {
+  /* 侧栏是一个容器，五段都在里面；两种视图在它右侧的主区里，不被塞进侧栏 */
+  const side = $('#canvas [data-b="subStat"]').parentElement;
+  if (!side.contains($('#canvas [data-b="subFilter"]'))) throw new Error('侧栏的几段不在同一个容器里');
+  if (side.contains($('#canvas [data-b="waterfall"]'))) throw new Error('瀑布流被塞进了侧栏');
+  ['taskList', 'kanban', 'taskFilterPills', 'taskFilterFloat', 'taskDetail'].forEach(id => {
     if ($('#canvas [data-b="' + id + '"]')) throw new Error('Memo 页仍包含清单区块 ' + id);
   });
+  /* —— 文字检查（blockText 会重渲染，故放在结构检查之后）—— */
+  if (!blockText('memoMode').includes('互斥')) throw new Error('视图切换未说明两者互斥');
+  const wfText = blockText('waterfall');
+  ['4 列', '840'].forEach(x => {
+    if (!wfText.includes(x)) throw new Error('瀑布流未写「' + x + '」：' + wfText);
+  });
 });
 
-step('待办页：列表 / 看板 + 筛选 + 添加 + 门禁（v2 M07-05）', () => {
+step('待办页：页头一条 + 筛选条两形态 + 列表 / 看板互斥 + 详情浮层 + 门禁（2026-09-27 调整）', () => {
   gotoPage('待办');
-  ['taskHead', 'taskAdd', 'taskFilters', 'taskList', 'kanban', 'gateState'].forEach(id => {
+  ['taskHead', 'taskMode', 'taskAdd', 'taskFilterPills', 'taskFilterFloat',
+   'taskList', 'kanban', 'taskDetail', 'gateState'].forEach(id => {
     if (!$('#canvas [data-b="' + id + '"]')) throw new Error('待办页缺区块 ' + id);
   });
-  const f = noteOf('taskFilters');
-  if (!f.includes('列表') || !f.includes('看板')) throw new Error('待办筛选未说明两种渲染：' + f);
+  /* —— 结构检查先做：blockText 会点块触发重渲染，之后旧的 DOM 引用会失效 —— */
+  const mode = $('#canvas [data-b="taskMode"]');
+  const add = $('#canvas [data-b="taskAdd"]');
+  if (mode.parentElement !== add.parentElement) throw new Error('视图切换与添加不在页头同一行');
+  if (!(mode.compareDocumentPosition(add) & 4)) throw new Error('视图切换应排在添加之前');
+  const pillsEl = $('#canvas [data-b="taskFilterPills"]');
+  const floatEl = $('#canvas [data-b="taskFilterFloat"]');
+  if (pillsEl.parentElement !== floatEl.parentElement) throw new Error('筛选条两形态不在同一容器里');
+  /* —— 文字检查 —— */
+  const pills = noteOf('taskFilterPills');
+  if (!pills.includes('胶囊')) throw new Error('胶囊形态未说明造型：' + pills);
+  const float = noteOf('taskFilterFloat');
+  ['悬浮', '不占横排空间', '列表模式'].forEach(x => {
+    if (!float.includes(x)) throw new Error('悬浮形态未写「' + x + '」：' + float);
+  });
+  if (!blockText('taskFilterPills').includes('920')) throw new Error('胶囊形态未说明与列表同一上限');
+  if (!blockText('taskFilterFloat').includes('设置')) throw new Error('悬浮形态未说明将来在设置里自选');
+  if (!blockText('kanban').includes('80%')) throw new Error('看板未说明宽度 = 主操作区 80%');
+  const dt = blockText('taskDetail');
+  ['不推挤', '遮罩'].forEach(x => {
+    if (!dt.includes(x)) throw new Error('详情浮层未说明「' + x + '」：' + dt);
+  });
 });
 
-step('首页页：概括预览 / 快捷方式 / 快速导航三类齐全（v2 M02-03）', () => {
+step('首页页：概括预览改为甲板（一主两副）+ 单行快捷方式 + 分组快速导航（v2 M02-03 / 2026-09-27 调整）', () => {
   gotoPage('首页');
-  ['homeStats', 'homeToday', 'homeRecent', 'homeActs', 'homeNav'].forEach(id => {
+  ['homeHead', 'homeStats', 'homeToday', 'homeRecent', 'homeActs', 'homeNav'].forEach(id => {
     if (!$('#canvas [data-b="' + id + '"]')) throw new Error('首页缺区块 ' + id);
   });
   if (!blockText('homeStats').includes('本地')) throw new Error('条目统计未说明本地计算');
+  // 甲板：今日待办与「统计 + 最近动态」在同一行，今日待办在前
+  const today = $('#canvas [data-b="homeToday"]');
+  const stats = $('#canvas [data-b="homeStats"]');
+  const recent = $('#canvas [data-b="homeRecent"]');
+  if (today.parentElement !== stats.parentElement.parentElement)
+    throw new Error('今日待办与右栏不在同一行的甲板里');
+  if (stats.parentElement !== recent.parentElement) throw new Error('统计与最近动态不在同一栏');
+  if (!(today.compareDocumentPosition(stats) & 4)) throw new Error('今日待办应排在右栏之前');
+  // 快捷方式收成一条动作带、快速导航分三组
+  if (!noteOf('homeActs').includes('动作带')) throw new Error('快捷方式未说明收成动作带：' + noteOf('homeActs'));
+  ['文件夹', '标签', '常用视图'].forEach(x => {
+    if (!noteOf('homeNav').includes(x)) throw new Error('快速导航缺「' + x + '」');
+  });
 });
 
 step('快速录入框：模式为 Memo / 待办 / 笔记 三档', () => {

@@ -1,9 +1,9 @@
 # 智能体本地工作数据，不入库
-.agents/
+#.agents/
 .workbuddy/
 
 # 评审产物，不入库
-deliverables/
+#deliverables/
 
 # 依赖与构建产物
 node_modules/

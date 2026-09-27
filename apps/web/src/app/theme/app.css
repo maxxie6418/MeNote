@@ -1545,18 +1545,8 @@ button {
   margin-bottom: var(--sp-3);
 }
 
-.home-nav__title {
-  /* 原型 `.nav-group__title` */
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-  padding: 0 var(--sp-2);
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-}
+/* 注意：`.home-nav__title` 的既有规则在文件**末尾**（后出现者胜），
+   所以它的原型取值改在那里，不在这里重复定义。 */
 
 /* 隐私胶囊的两种胶囊变体（此前**没有规则**）：中性态只换字色；可点的那种给指针与悬停态 */
 .pill--neutral {
@@ -3203,9 +3193,449 @@ button.chip--tag:hover {
 }
 
 .home-nav__title {
-  margin-bottom: var(--sp-1);
+  /* 原型 `.nav-group__title`（2026-09-27 对齐：底距改 `--sp-2`、加左右内边距与行内排布） */
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  padding: 0 var(--sp-2);
   color: var(--muted);
   font-size: var(--fs-micro);
   font-weight: 600;
   letter-spacing: 0.06em;
+}
+
+/*
+  回收站页、版本面板与版本对比的样式（用户 2026-09-27："没有原型页的你自己先按需求简单补一下，
+  到时候再定细节"）
+  ——————————————————————————————————————————————————————————————
+  这两屏**没有用户原型页**，所以按 `DESIGN.md` 的令牌与控件用法、并沿用已经按原型对齐的那几屏
+  （表格 / memo / 待办 / 笔记列表）的同一套语言来补：面板 = 头（下边框）+ 可滚动主体；
+  列表行 = 圆角 + 悬停整块变色；空状态 = 居中；危险操作用危险色（`--red*`）。
+  放在**文件末尾**：CSS 后出现者胜，这样这些取值不会被前面的旧规则盖掉（`.home-nav__title`
+  就吃过这个亏——我原先把自己的覆盖写在中段，被末尾的旧规则赢了）。
+*/
+
+/* —— 大小标签（`DocStatusBar` / `TableSizeBar`，此前**没有规则**；它由模板拼接类名而来） —— */
+.size-tag {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.size-tag--soft {
+  color: var(--amber);
+}
+
+.size-tag--hard {
+  color: var(--red);
+}
+
+/* 列面板里"当前正在编辑的那一行"（模板拼接类名，此前没有规则） */
+.columndef__row--active {
+  background: var(--primary-soft);
+  border-color: var(--primary-line);
+}
+
+/* —— 回收站页 —— */
+.trashpage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.trashpage__head {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.trashpage__title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
+.trashpage__sub {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+/* 「清空回收站」是危险操作，靠右（`DESIGN.md` §5.1） */
+.trashpage__head > :last-child {
+  margin-left: auto;
+}
+
+.trashpage__progress {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-5);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+/* 失败清单：留在列表上方、**可见**（禁止项 #8 不许把它收进提示里） */
+.trashpage__failures {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: var(--sp-3) var(--sp-5) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--red-line);
+  border-radius: var(--radius);
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: var(--fs-small);
+}
+
+.trashpage__batchbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-5);
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.trashpage__selectall {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-small);
+}
+
+.trashpage__count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.trashpage__list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-height: 0;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  overflow: auto;
+  list-style: none;
+}
+
+.trashrow {
+  display: grid;
+  grid-template-columns: auto 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius);
+  transition: background 0.16s;
+}
+
+.trashrow:hover {
+  background: var(--panel-2);
+}
+
+/* 类型图标块（模板拼接类名，此前没有规则）：与笔记行的 `.docrow__ico` 同一形态 */
+.trashrow__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.trashrow__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trashrow__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.trashrow__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  justify-self: end;
+}
+
+.trashpage__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.trashpage__empty-title {
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.trashpage__empty-hint {
+  max-width: 340px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+/* —— 版本面板（`DESIGN.md` §2.6：主操作区独立页） —— */
+.versionpanel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.versionpanel__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.versionpanel__title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
+.versionpanel__sub {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.versionpanel__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 列表与对比区**各**是一个滚动容器（DESIGN.md §2.7"每层一个"，两区互不嵌套） */
+.versionpanel__list {
+  flex: none;
+  width: 320px;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+}
+
+.versionlist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-2);
+  list-style: none;
+}
+
+.versionrow {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius);
+  transition: background 0.16s;
+}
+
+.versionrow:hover {
+  background: var(--panel-2);
+}
+
+.versionrow__pick {
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.versionrow__time {
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.versionrow__size,
+.versionrow__label {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.versionrow__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 行菜单：默认淡出，悬停或键盘聚焦时出现（与 memo 的更多按钮同一口径） */
+.versionrow__menu {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  opacity: 0.55;
+  transition: 0.16s;
+}
+
+.versionrow:hover .versionrow__menu,
+.versionrow__menu:focus-visible {
+  opacity: 1;
+}
+
+.versionpanel__diff {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.versionpanel__fulltext {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-5);
+  overflow: auto;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  white-space: pre-wrap;
+}
+
+.versionpanel__foot {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+/* 「存为版本」是底部唯一的主操作，靠右（`DESIGN.md` §5.1） */
+.versionpanel__foot > :last-child {
+  margin-left: auto;
+}
+
+/* —— 版本对比（行级 diff：加绿删红，前缀列不参与复制） —— */
+.versiondiff {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.versiondiff__head {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.versiondiff__side {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.versiondiff__side:last-child {
+  text-align: right;
+}
+
+.versiondiff__arrow {
+  color: var(--muted);
+}
+
+.versiondiff__summary {
+  flex: none;
+  padding: var(--sp-1) var(--sp-4) var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.versiondiff__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.versiondiff__lines {
+  margin: 0;
+  padding: var(--sp-2) 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  line-height: 1.6;
+}
+
+/* 行种类由模板拼接（`versiondiff__line--${kind}`）：same / add / remove */
+.versiondiff__line {
+  display: flex;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-3);
+}
+
+.versiondiff__line--add {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.versiondiff__line--remove {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.versiondiff__line--same {
+  color: var(--text-2);
+}
+
+.versiondiff__prefix {
+  flex: none;
+  width: 2ch;
+  color: var(--muted);
+  text-align: center;
+  user-select: none;
+}
+
+.versiondiff__text {
+  min-width: 0;
+  word-break: break-word;
+  white-space: pre-wrap;
 }

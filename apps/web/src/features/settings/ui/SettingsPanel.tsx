@@ -86,6 +86,14 @@ export interface SettingsPanelProps {
    * 设置页负责分类与版式，策略设置与回收站的数据在 features 里，两边互不认识。
    */
   versionsPage?: ReactNode;
+  /**
+   * 返回笔记区（设置是独立页，需要有出口）。
+   *
+   * 缺口背景：设置页此前**只有"退出登录"能离开**——功能栏的视图切换只改笔记视图状态、
+   * 搜索框的结果被 `route === "settings"` 分支挡住。现在这里给可见出口，
+   * `App` 另外让"去笔记区干活"的动作（切视图 / 搜 / 新建 / 发布）一律先把路由拉回笔记。
+   */
+  onBackToNotes?: () => void;
 }
 
 export function SettingsPanel({
@@ -102,6 +110,7 @@ export function SettingsPanel({
   onLogout,
   privacyPage,
   versionsPage,
+  onBackToNotes,
 }: SettingsPanelProps) {
   const pages = NAV_ORDER.filter((candidate) => candidate !== "instance" || role === "owner");
   const meta = PAGE_META[page];
@@ -130,6 +139,16 @@ export function SettingsPanel({
           <p>
             {meta.summary} · 共 {pages.length} 个分类
           </p>
+          {/*
+            出口（2026-09-27 修复）：设置是**主操作区独立页**，此前除了"退出登录"没有别的路回笔记区——
+            功能栏的视图切换只改笔记视图状态、搜索框的结果也被 `route === "settings"` 的分支挡住，
+            于是"进了设置就出不去"。这里补一个与回收站页「← 返回设置」对称的次操作。
+          */}
+          {onBackToNotes ? (
+            <Button variant="secondary" size="sm" onClick={onBackToNotes}>
+              ← 返回笔记
+            </Button>
+          ) : null}
         </header>
 
         {page === "general" ? (

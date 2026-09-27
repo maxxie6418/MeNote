@@ -43,7 +43,7 @@ import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
 import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
 import { AppUnlockModal, PrivacySlot } from "./PrivacySlot";
-import { navPanels } from "./NavPanels";
+import { fnbarWiring, navPanels } from "./NavPanels";
 import { isInVault } from "../features/privacy/vault";
 import { isScopeGateOpen } from "@menote/shared";
 import type { NotesView } from "../features/notes/views";
@@ -151,12 +151,22 @@ export default function App() {
   }, [workspace]);
 
   /** 切换笔记视图时同时退出浏览三段，避免"看起来在 Memo 页、却在改笔记视图" */
+  /**
+   * 去笔记区干活（M4 QA 修复）：设置与回收站是**独立页**，从它们进去之后，
+   * 功能栏的视图切换 / 分栏浏览 / 搜索 / 新建 / 发布都只改笔记区的状态、不改路由——
+   * 结果就是"进了设置就出不去"。所以这些动作统一先走这里把路由拉回笔记区。
+   */
+  const goNotes = useCallback(() => {
+    if (route.name !== "notes") navigate({ name: "notes" });
+  }, [navigate, route.name]);
+
   const showNotesView = useCallback(
     (view: NotesView) => {
+      goNotes();
       setBrowse(null);
       workspace.setView(view);
     },
-    [workspace],
+    [goNotes, workspace],
   );
 
   /**
@@ -366,7 +376,11 @@ export default function App() {
                       : workspace.viewTitle
             }
             searchQuery={search.query}
-            onSearchChange={search.setQuery}
+            onSearchChange={(next) => {
+              // 搜索框在设置/回收站页上仍然可见：一开始输入就回笔记区，否则结果会被那两个分支挡住
+              if (next.trim() !== "") goNotes();
+              search.setQuery(next);
+            }}
             userSettings={userSettings.settings}
             themeMode={theme.mode}
             onThemeMode={theme.setMode}
@@ -383,32 +397,21 @@ export default function App() {
         }
         fnbar={
           <FnBar
-            onNewNote={() => {
-              void workspace.createNote();
-            }}
-            onPublishNote={(title, body) => {
-              void workspace.createNote({ title, body });
-              pushToast("已新建笔记", "success");
-            }}
-            onPublishMemo={(text, options) => {
-              // 乐观发布：条目先落本地并标"待上传"，由 outbox 后台上传
-              void workspace.publishMemo(text, options);
-              pushToast("已记录", "success");
-            }}
-            onPublishTask={(text, options) => {
-              void workspace.publishMemo(text, { asTask: true, ...options });
-              pushToast("已加入待办", "success");
-            }}
-            view={workspace.view}
-            onViewChange={showNotesView}
-            tags={workspace.tags}
-            browseView={browse ?? undefined}
-            onBrowseChange={(next) => setBrowse(next)}
-            showHome={userSettings.settings.start_view === "home"}
-            composerMode={composerMode}
-            onComposerModeChange={setComposerMode}
-            notebookPanel={nav.notebookPanel}
-            vault={nav.vault}
+            {...fnbarWiring({
+              workspace,
+              view: workspace.view,
+              browseView: browse ?? undefined,
+              tags: workspace.tags,
+              showHome: userSettings.settings.start_view === "home",
+              composerMode,
+              notebookPanel: nav.notebookPanel,
+              vault: nav.vault,
+              goNotes,
+              onViewChange: showNotesView,
+              onBrowseChange: (next) => setBrowse(next ?? null),
+              onComposerModeChange: setComposerMode,
+              toast: pushToast,
+            })}
           />
         }
       >
@@ -452,6 +455,7 @@ export default function App() {
                 onOpenTrash={() => navigate({ name: "trash" })}
               />
             }
+            onBackToNotes={goNotes}
           />
         ) : search.query.trim() !== "" ? (
           <SearchView

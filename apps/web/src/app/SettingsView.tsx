@@ -29,6 +29,8 @@ export interface SettingsViewProps {
   privacyPage?: ReactNode;
   /** 「版本与回收站」分类的内容（M4-11）：策略设置 + 回收站入口 */
   versionsPage?: ReactNode;
+  /** 返回笔记区（设置是独立页，需要有出口） */
+  onBackToNotes?: () => void;
 }
 
 export function SettingsView({
@@ -43,6 +45,7 @@ export function SettingsView({
   onLogout,
   privacyPage,
   versionsPage,
+  onBackToNotes,
 }: SettingsViewProps) {
   const [registration, setRegistration] = useState<RegistrationState | null>(null);
 
@@ -78,6 +81,7 @@ export function SettingsView({
       onLogout={onLogout}
       privacyPage={privacyPage}
       versionsPage={versionsPage}
+      onBackToNotes={onBackToNotes}
     />
   );
 }

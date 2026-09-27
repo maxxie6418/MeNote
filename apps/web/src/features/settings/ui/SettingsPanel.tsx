@@ -8,7 +8,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import type { EditorMode, StartView, UserSettings } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
 import type { ThemeMode } from "../../../app/theme/useTheme";
-import type { SettingsPageId } from "../../../app/router";
+import { SETTINGS_PAGES, type SettingsPageId } from "../../../app/router";
 import { APP_VERSION, PROJECT_REPO_URL } from "../../../app/about";
 import { CardQuickMenu } from "./CardQuickMenu";
 
@@ -26,16 +26,11 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
  * 导航顺序即需求 §7.5 的最终形态顺序，但**只列出本里程碑已实现的分类**（避免点进去空页面）：
  * 备份 / 分享 / MCP / 数据管理 等各自里程碑再进导航。
  * 「关于」是用户 2026-09-27 追加的第 11 个分类（需求 §7.5 的 10 个之外），放最后。
+ *
+ * **清单直接引用路由那一份**（2026-09-27 修复）：两处各写一份会漂移——M3 加「隐私锁」时只加了
+ * 这里、没加路由白名单，点「隐私锁」会落到「通用」。
  */
-const NAV_ORDER: readonly SettingsPageId[] = [
-  "general",
-  "account",
-  "editor",
-  "privacy",
-  "versions",
-  "instance",
-  "about",
-];
+const NAV_ORDER: readonly SettingsPageId[] = SETTINGS_PAGES;
 
 /** 常用时区（第一版给常见几档 + 当前值；完整时区表等有需要再补） */
 const TIMEZONE_OPTIONS = [

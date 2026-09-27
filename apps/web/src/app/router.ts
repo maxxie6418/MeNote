@@ -6,29 +6,34 @@
 import { useEffect, useState } from "react";
 
 /**
- * 设置分类 id。M2-7 起是需求 §7.5 的分类（备份 / 分享 / MCP / 数据管理 等各自里程碑再加入）。
+ * 设置分类清单——**唯一一份真源**：URL 解析的白名单、设置页的导航顺序、分类 id 的类型都出自它。
+ *
+ * 踩过的坑（2026-09-27 修复）：原先 `SettingsPageId`（联合类型）与这份白名单是**两份手维护的清单**，
+ * M2 加「编辑器」、M3 加「隐私锁」与「版本与回收站」时只动了联合类型与设置页的 `PAGE_META`，
+ * 忘了动白名单——于是 `#/settings/privacy` 匹配不到，`parseRoute` **静默**回落到 `general`：
+ * 点「隐私锁」显示「通用」，M3-9 的设置页在界面上根本进不去，而且不报错、不白屏。
+ *
+ * 现在类型由清单推导（`as const` + `typeof [number]`），所以**新增分类只可能在一个地方发生**，
+ * 漏改的另一半会直接编译不过（设置页的 `PAGE_META: Record<SettingsPageId, …>` 就是那另一半的守卫）。
  */
-export type SettingsPageId =
-  | "general"
-  | "account"
-  | "editor"
-  | "privacy"
-  | "versions"
-  | "instance"
-  | "about";
+export const SETTINGS_PAGES = [
+  "general",
+  "account",
+  "editor",
+  "privacy",
+  "versions",
+  "instance",
+  "about",
+] as const;
+
+/** 设置分类 id：**从清单推导**，不再手写第二份 */
+export type SettingsPageId = (typeof SETTINGS_PAGES)[number];
 
 export type Route =
   | { name: "login" }
   | { name: "register" }
   | { name: "notes" }
   | { name: "settings"; page: SettingsPageId };
-
-export const SETTINGS_PAGES: readonly SettingsPageId[] = [
-  "general",
-  "account",
-  "instance",
-  "about",
-];
 
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, "").replace(/\/$/, "");

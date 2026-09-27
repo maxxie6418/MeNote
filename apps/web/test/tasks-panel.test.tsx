@@ -95,7 +95,11 @@ describe("待办列表", () => {
   it("按状态分组显示，计数不含非清单条目", () => {
     const { container } = renderPanel();
 
-    expect(container.textContent).toContain("共 3 条 · 待办 1 · 进行中 1 · 已完成 1");
+    // 概览给"总数 + 完成率"（原型 `.tksum`），**分状态计数挂在筛选条上**（原型如此，不重复）
+    expect(container.textContent).toContain("共 3 条 · 已完成 1 条");
+    expect(screen.getByRole("button", { name: "待办 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "进行中 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "已完成 1" })).toBeTruthy();
     expect(container.textContent).toContain("交物业费");
     expect(container.textContent).not.toContain("随手一记"); // is_task = 0
   });
@@ -168,7 +172,7 @@ describe("筛选（纯本地）", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "已完成" }));
+    await user.click(screen.getByRole("button", { name: /^已完成/ }));
     expect(container.querySelectorAll(".taskrow")).toHaveLength(1);
     expect(container.textContent).toContain("买牛奶");
   });
@@ -200,7 +204,7 @@ describe("筛选（纯本地）", () => {
     const user = userEvent.setup();
     renderPanel({ tasks: [task("t1", { task_status: "todo" })] });
 
-    await user.click(screen.getByRole("button", { name: "已完成" }));
+    await user.click(screen.getByRole("button", { name: /^已完成/ }));
     expect(screen.getByText("没有符合条件的待办")).toBeTruthy();
     expect(screen.getByText(/在录入框切到「待办」记一条/)).toBeTruthy();
   });
@@ -219,6 +223,33 @@ describe("筛选（纯本地）", () => {
 
     await user.click(screen.getByRole("button", { name: /解锁/ }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("概览（原型 `.tksum`；v0.4.51 补）", () => {
+  it("显示「共 N 条 · 已完成 M 条（P%）」与三段进度条", () => {
+    const { container } = renderPanel();
+    const summary = container.querySelector(".tksum");
+    expect(summary?.textContent).toContain("共 3 条");
+    expect(summary?.textContent).toContain("已完成");
+    // 三段：done / doing / todo（原型顺序）
+    const segments = [...(summary?.querySelectorAll(".tksum__bar span") ?? [])].map(
+      (node) => node.className,
+    );
+    expect(segments).toEqual(["bar__done", "bar__doing", "bar__todo"]);
+  });
+
+  it("进度条是 `role=\"img\"` 且读屏文案把分段说清楚（条本身念不出占比）", () => {
+    const { container } = renderPanel();
+    const bar = container.querySelector(".tksum__bar");
+    expect(bar?.getAttribute("role")).toBe("img");
+    expect(bar?.getAttribute("aria-label")).toMatch(/待办 \d+ 条、进行中 \d+ 条、已完成 \d+ 条，共 \d+ 条/);
+  });
+
+  it("一条待办都没有时不画退化进度条（只留计数）", () => {
+    const { container } = renderPanel({ tasks: [] });
+    expect(container.querySelector(".tksum__bar")).toBeNull();
+    expect(container.querySelector(".tksum")?.textContent).toContain("共 0 条");
   });
 });
 

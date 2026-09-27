@@ -1467,6 +1467,47 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
+/* 待办概览（原型 `.tksum`）：细进度条 + 「共 N 条 · 已完成 M 条（P%）」
+   ——条是纯视觉的（三段按条数占比、颜色只是辅助），所以它带 `role="img"` + 读屏文案。 */
+.tksum {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.tksum b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tksum__bar {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  width: 150px;
+  height: 5px;
+  background: transparent;
+}
+
+.tksum__bar span {
+  display: block;
+  border-radius: var(--radius-pill);
+}
+
+.bar__todo {
+  background: var(--line-2);
+}
+
+.bar__doing {
+  background: var(--amber);
+}
+
+.bar__done {
+  background: var(--green);
+}
+
 /* —— 待办：看板（原型 `.tkkan*`）—— */
 .kanban {
   display: grid;

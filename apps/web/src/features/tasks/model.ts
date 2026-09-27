@@ -87,6 +87,36 @@ export function countByStatus(tasks: readonly TaskLike[]): Record<TaskStatus, nu
   return counts;
 }
 
+/** 待办概览（原型 `.tksum`：细进度条 + 总数与完成率） */
+export interface TaskSummary {
+  total: number;
+  todo: number;
+  doing: number;
+  done: number;
+  /** 完成率（四舍五入到整数百分比；没有待办时为 0） */
+  donePercent: number;
+  /**
+   * 进度条的读屏文案（原型同款措辞）。
+   *
+   * 为什么进度条要有 `aria-label`：条本身是**纯视觉**的（三段按条数占比、颜色只是辅助），
+   * 读屏念不出占比——所以把"待办 5 条、进行中 3 条、已完成 6 条，共 14 条"写进 `role="img"` 的名字。
+   */
+  barLabel: string;
+}
+
+export function summarizeTasks(tasks: readonly TaskLike[]): TaskSummary {
+  const counts = countByStatus(tasks);
+  const total = counts.todo + counts.doing + counts.done;
+  return {
+    total,
+    todo: counts.todo,
+    doing: counts.doing,
+    done: counts.done,
+    donePercent: total === 0 ? 0 : Math.round((counts.done / total) * 100),
+    barLabel: `待办 ${counts.todo} 条、进行中 ${counts.doing} 条、已完成 ${counts.done} 条，共 ${total} 条`,
+  };
+}
+
 export const DUE_RANGES = [
   { value: "all", label: "全部" },
   { value: "overdue", label: "已逾期" },

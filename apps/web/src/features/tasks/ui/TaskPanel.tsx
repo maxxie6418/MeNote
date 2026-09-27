@@ -12,7 +12,14 @@ import { isMemoVisible, type PrivacyGate } from "@menote/shared";
 import { LockedPlaceholder } from "../../../app/ui/LockedPlaceholder";
 import { SegmentedControl } from "../../../app/ui/SegmentedControl";
 import type { TaskStatus } from "@menote/mdcore";
-import { countByStatus, EMPTY_TASK_FILTER, filterTasks, TASK_COLUMNS, type TaskFilter } from "../model";
+import {
+  countByStatus,
+  EMPTY_TASK_FILTER,
+  filterTasks,
+  summarizeTasks,
+  TASK_COLUMNS,
+  type TaskFilter,
+} from "../model";
 import { TaskFilterBar } from "./TaskFilterBar";
 import { TaskKanban } from "./TaskKanban";
 import { TaskListView } from "./TaskListView";
@@ -56,6 +63,8 @@ export function TaskPanel({
   const visible = filterTasks(tasks, filter, today);
   const counts = countByStatus(tasks);
   const total = TASK_COLUMNS.reduce((sum, column) => sum + counts[column.status], 0);
+  /** 概览（原型 `.tksum`）：总数、完成率与进度条的分段比例 */
+  const summary = summarizeTasks(tasks);
 
   if (!isMemoVisible(gate)) {
     // 锁定时整屏占位：保留标题与计数（统计口径不变），筛选与内容一律不渲染
@@ -80,8 +89,23 @@ export function TaskPanel({
     <section className="taskpanel" aria-label="待办">
       <header className="memopanel__head">
         <h2 className="memopanel__title">待办</h2>
-        <span className="listpane__count">
-          共 {total} 条 · 待办 {counts.todo} · 进行中 {counts.doing} · 已完成 {counts.done}
+        {/*
+          概览照原型 `.tksum`：细进度条 + 「共 N 条 · 已完成 M 条（P%）」。
+          原型有意**不在概览里重复分状态计数**（那些挂在筛选条上），所以这里也不重复。
+          进度条是纯视觉的（三段按条数占比、颜色只是辅助），所以给它 `role="img"` + 读屏文案。
+        */}
+        <span className="tksum">
+          {summary.total > 0 ? (
+            <span className="tksum__bar" role="img" aria-label={summary.barLabel}>
+              <span className="bar__done" style={{ flex: summary.done }} />
+              <span className="bar__doing" style={{ flex: summary.doing }} />
+              <span className="bar__todo" style={{ flex: summary.todo }} />
+            </span>
+          ) : null}
+          <span>
+            共 <b>{summary.total}</b> 条 · 已完成 <b>{summary.done}</b> 条（
+            <b>{summary.donePercent}%</b>）
+          </span>
         </span>
         <SegmentedControl
           ariaLabel="待办视图切换"
@@ -92,7 +116,7 @@ export function TaskPanel({
         />
       </header>
 
-      <TaskFilterBar filter={filter} onChange={setFilter} />
+      <TaskFilterBar filter={filter} onChange={setFilter} counts={counts} />
 
       <div className="taskpanel__body scroll-thin">
         {mode === "list" ? (

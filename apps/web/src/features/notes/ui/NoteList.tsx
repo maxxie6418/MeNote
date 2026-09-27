@@ -3,28 +3,15 @@
  *
  * 规则：点条目**在右列直接打开**（不许走侧滑详情，DESIGN.md 禁止项 #15）；
  * 空列表必须给出口（DESIGN.md §5.4-3）；键盘可选中并用 `Enter` 打开。
+ *
+ * 这个文件只管**列表外壳**（提示条 / 表头 / 骨架 / 空状态 / 行循环）；
+ * 单行的结构与它的渲染成本守卫在 `NoteRow.tsx`（那一层必须 `memo`，否则整表重渲染）。
  */
 import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
-import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { ItemListHead } from "../../../app/workarea/ItemListHead";
-
-const PENDING_LABEL: Record<string, string> = {
-  create: "待上传",
-  save_body: "待上传",
-  patch_meta: "待上传",
-};
-
-function formatTime(ms: number): string {
-  const date = new Date(ms);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function summaryOf(item: LocalItem): string {
-  return item.title ?? "（无标题）";
-}
+import { NoteRow } from "./NoteRow";
 
 export interface NoteListProps {
   items: LocalItem[];
@@ -53,6 +40,8 @@ export interface NoteListProps {
    * - **未启用隐私锁**：不提供移入入口，菜单项置灰并说明去哪里启用；
    * - **锁定态**：只能移入**空间根**（`folders` 传空即可，内部层级此时不可见）；**移出**不可用（要先解锁）；
    * - 已在空间里的条目才显示「移出加密空间」。
+   *
+   * **必须是稳定引用**（`NotesPane` 用 `useMemo` 保证）：它进 `NoteRow` 的 props 浅比较。
    */
   vault?: {
     enabled: boolean;
@@ -121,7 +110,7 @@ export function NoteList({
 }: NoteListProps) {
   const empty = emptyCopy(title);
   /** 这一篇在本次浏览器会话里是否已解密（单篇门禁与隐私锁态无关，故单独问） */
-  const itemUnlocked = (itemId: string): boolean => unlockedItemIds?.has(itemId) ?? false;
+  const isUnlocked = (itemId: string): boolean => unlockedItemIds?.has(itemId) ?? false;
 
   return (
     <section className="listpane" aria-label="笔记列表">
@@ -158,163 +147,20 @@ export function NoteList({
         ) : (
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {items.map((item) => (
-              <li key={item.id} className="itemrow__wrap">
-                <button
-                  type="button"
-                  className="itemrow"
-                  aria-current={item.id === selectedId}
-                  onClick={() => onSelect(item.id)}
-                >
-                  {/*
-                    行结构照原型 `.docrow`：**26px 图标块 + 主块（标题/摘要两行）+ 右侧时间**。
-                    图标按条目类型给（笔记 / 表格），它是**辅助**——标题文字才是主要信息。
-                  */}
-                  <span className="itemrow__ico" aria-hidden="true">
-                    <Icon name={item.type === "table" ? "table" : "note"} size={13} />
-                  </span>
-                  <span className="itemrow__main">
-                    <span className="itemrow__title">
-                    {item.pinned === 1 ? (
-                      <span className="itemrow__mark" title="已置顶">
-                        置顶
-                      </span>
-                    ) : null}
-                    {item.starred === 1 ? (
-                      <span className="itemrow__mark" title="已收藏">
-                        收藏
-                      </span>
-                    ) : null}
-                    {/*
-                      M3-10 的两套标识（设计 §9.2-③）必须能分辨、也可同时出现：
-                      - **单篇加密态**：未解密 → 锁 + "已加密"；本次已解密 → "已解密"；
-                      - **空间归属**：解锁期间出现在三视图里 → 锁 + "加密空间"。
-                      标题本身是明文，所以标识与标题并存不冲突。
-                    */}
-                    {item.enc_self === 1 ? (
-                      <span
-                        className="itemrow__mark"
-                        title={
-                          itemUnlocked(item.id)
-                            ? "单篇加密：本次会话已解密"
-                            : "单篇加密：正文需逐篇解锁"
-                        }
-                      >
-                        <Icon name="lock" size={13} />
-                        {itemUnlocked(item.id) ? "已解密" : "已加密"}
-                      </span>
-                    ) : null}
-                    {item.in_enc_space === 1 ? (
-                      <span className="itemrow__mark" title="这一条在加密空间里">
-                        <Icon name="lock" size={13} />
-                        加密空间
-                      </span>
-                    ) : null}
-                    {summaryOf(item)}
-                    </span>
-                    {/*
-                      摘要在锁定时换成"已加密"：正文没解密就不该露内容面的任何线索
-                      （连摘要也不给——摘要就是从正文里取的）
-                    */}
-                    {item.enc_self === 1 && !itemUnlocked(item.id) ? (
-                      <span className="itemrow__excerpt">已加密</span>
-                    ) : summaries[item.id] ? (
-                      <span className="itemrow__excerpt">{summaries[item.id]}</span>
-                    ) : null}
-                  </span>
-                  <span className="itemrow__meta">
-                    <span>{formatTime(item.updated_at)}</span>
-                    {item.pending ? <span>{PENDING_LABEL[item.pending] ?? "待上传"}</span> : null}
-                  </span>
-                </button>
-
-                <div className="itemrow__menu">
-                  <DropdownMenu
-                    label={`${summaryOf(item)} 的更多操作`}
-                    showChevron={false}
-                    trigger={<Icon name="more" size={13} />}
-                    items={[
-                      {
-                        id: "move-root",
-                        label: "移动到 根目录",
-                        icon: "note",
-                        disabled: (item.folder_id ?? null) === null,
-                        title: (item.folder_id ?? null) === null ? "已经在根目录" : "移到根目录",
-                        onSelect: () => onMove?.(item.id, null),
-                      },
-                      ...folders.map((folder) => ({
-                        id: `move-${folder.id}`,
-                        label: `移动到 ${folder.name}`,
-                        icon: "folder" as const,
-                        disabled: (item.folder_id ?? null) === folder.id,
-                        title:
-                          (item.folder_id ?? null) === folder.id ? "已经在这个文件夹里" : undefined,
-                        onSelect: () => onMove?.(item.id, folder.id),
-                      })),
-                      {
-                        id: "pin",
-                        label: item.pinned === 1 ? "取消置顶" : "置顶",
-                        icon: "note",
-                        onSelect: () => onTogglePinned?.(item.id),
-                      },
-                      {
-                        id: "star",
-                        label: item.starred === 1 ? "取消收藏" : "收藏",
-                        icon: "star",
-                        onSelect: () => onToggleStarred?.(item.id),
-                      },
-                      ...(vault
-                        ? item.in_enc_space === 1
-                          ? ([
-                              {
-                                id: "vault-out",
-                                label: "移出加密空间",
-                                icon: "lock" as const,
-                                // 移出意味着要处理面明文：必须先解锁（走查表第 16 行）
-                                disabled: vault.locked,
-                                title: vault.locked
-                                  ? "先解锁隐私锁，才能把内容移出加密空间"
-                                  : "移到根目录，之后按普通内容对待",
-                                onSelect: () => vault.onMoveOut(item.id),
-                              },
-                            ] satisfies MenuItemSpec[])
-                          : ([
-                              {
-                                id: "vault-in",
-                                label: "移入加密空间",
-                                icon: "lock" as const,
-                                disabled: !vault.enabled || vault.id === null,
-                                title: !vault.enabled
-                                  ? "先在「设置 › 隐私锁」启用隐私锁"
-                                  : vault.id === null
-                                    ? "加密空间还没同步下来，请稍后重试"
-                                    : undefined,
-                                onSelect: () => vault.onMoveIn(item.id, null),
-                              },
-                              // 锁定时 `folders` 为空 → 只给"入根"这一条（设计 §6.3 与走查第 15 行）
-                              ...vault.folders.map((folder) => ({
-                                id: `vault-in-${folder.id}`,
-                                label: `移入 加密空间/${folder.name}`,
-                                icon: "folder" as const,
-                                onSelect: () => vault.onMoveIn(item.id, folder.id),
-                              })),
-                            ] satisfies MenuItemSpec[])
-                        : []),
-                      // 删除（M4-12）：破坏性操作 → 危险色，且执行前必须二次确认（确认框在 NotesPane 里）
-                      ...(onDelete
-                        ? ([
-                            {
-                              id: "delete",
-                              label: "删除",
-                              icon: "logout" as const,
-                              danger: true,
-                              onSelect: () => onDelete(item.id),
-                            },
-                          ] satisfies MenuItemSpec[])
-                        : []),
-                    ]}
-                  />
-                </div>
-              </li>
+              <NoteRow
+                key={item.id}
+                item={item}
+                selected={item.id === selectedId}
+                summary={summaries[item.id]}
+                unlocked={isUnlocked(item.id)}
+                folders={folders}
+                vault={vault}
+                onSelect={onSelect}
+                onMove={onMove}
+                onTogglePinned={onTogglePinned}
+                onToggleStarred={onToggleStarred}
+                onDelete={onDelete}
+              />
             ))}
           </ul>
         )}

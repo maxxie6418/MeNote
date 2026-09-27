@@ -599,7 +599,11 @@ export default function App() {
             editorMode={userSettings.settings.editor_mode}
             privacy={privacy}
             onRequestUnlock={requestUnlock}
-            onToast={(message, tone) => pushToast(message, tone)}
+            /*
+              直接传模块级的 `pushToast`，**不要写成内联箭头**：它经 `NotesSlot` 进
+              `NoteRow` 的 `memo` 浅比较（列表行的重渲染守卫，2026-09-27 性能修复）。
+            */
+            onToast={pushToast}
           />
         )}
       </AppShell>

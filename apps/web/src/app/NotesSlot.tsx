@@ -8,6 +8,7 @@
  */
 import type { NotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { isScopeGateOpen } from "@menote/shared";
+import { useCallback, useMemo } from "react";
 import type { DocMode } from "../features/notes/ui/NoteWorkspace";
 import { formatCountdown } from "../features/privacy/model";
 import type { PrivacyLockState } from "../features/privacy/usePrivacyLock";
@@ -49,6 +50,58 @@ export function NotesSlot({
    * 倒计时在这里算（每秒 tick），DocStatusBar 只负责显示。
    */
   const nowMs = useTicker(unlocked && tier === "minutes" && expiresAt !== null);
+
+  /*
+    加密空间这一组 props 进列表行的 `memo` 浅比较（`NoteRow`），所以三样都要稳定：
+    - 映射出来的文件夹数组（`.map()` 每次渲染都是新数组，必须 memo）；
+    - 移入 / 移出两个回调（内联箭头每次渲染都是新函数）；
+    - 于是整个对象可以 memo 成稳定引用。
+    `workspace.moveItemToVault` 等由 `useNotesWorkspace` 保证身份稳定；`onToast` 由调用方
+    直接传模块级的 `pushToast`（App 里已改），不要写成内联箭头。
+  */
+  const vaultFolders = useMemo(
+    () =>
+      unlocked ? workspace.vault.folders.map((folder) => ({ id: folder.id, name: folder.name })) : [],
+    [unlocked, workspace.vault.folders],
+  );
+  /** 取出来再包（依赖里不能写 `workspace`：它每次渲染换身份，会让回调跟着换） */
+  const { moveItemToVault, moveItemOutOfVault } = workspace;
+  const moveIntoVault = useCallback(
+    (itemId: string, folderId: string | null) => {
+      void moveItemToVault(itemId, folderId)
+        .then(() => onToast("已移入加密空间", "success"))
+        .catch(toastError(onToast, "移入失败，请稍后重试"));
+    },
+    [moveItemToVault, onToast],
+  );
+  const moveOutOfVault = useCallback(
+    (itemId: string) => {
+      void moveItemOutOfVault(itemId, null)
+        .then(() => onToast("已移出加密空间", "success"))
+        .catch(toastError(onToast, "移出失败，请稍后重试"));
+    },
+    [moveItemOutOfVault, onToast],
+  );
+  const vault = useMemo(
+    () => ({
+      enabled: privacy.enabled,
+      locked: !unlocked,
+      id: workspace.vault.id,
+      // 锁定时内部层级不可见 → 只留"移入空间根"
+      folders: vaultFolders,
+      onMoveIn: moveIntoVault,
+      onMoveOut: moveOutOfVault,
+    }),
+    [
+      moveIntoVault,
+      moveOutOfVault,
+      privacy.enabled,
+      unlocked,
+      vaultFolders,
+      workspace.vault.id,
+    ],
+  );
+
   const privacyLine = (() => {
     if (privacy.runtime.lockState === "disabled") return null;
     const prefix =
@@ -101,27 +154,7 @@ export function NotesSlot({
           .catch(toastError(onToast, "操作失败，请稍后重试"));
       }}
       onToast={onToast}
-      vault={{
-        enabled: privacy.enabled,
-        locked: !unlocked,
-        id: workspace.vault.id,
-        // 锁定时内部层级不可见 → 只留"移入空间根"
-        folders: unlocked
-          ? workspace.vault.folders.map((folder) => ({ id: folder.id, name: folder.name }))
-          : [],
-        onMoveIn: (itemId, folderId) => {
-          void workspace
-            .moveItemToVault(itemId, folderId)
-            .then(() => onToast("已移入加密空间", "success"))
-            .catch(toastError(onToast, "移入失败，请稍后重试"));
-        },
-        onMoveOut: (itemId) => {
-          void workspace
-            .moveItemOutOfVault(itemId, null)
-            .then(() => onToast("已移出加密空间", "success"))
-            .catch(toastError(onToast, "移出失败，请稍后重试"));
-        },
-      }}
+      vault={vault}
     />
   );
 }

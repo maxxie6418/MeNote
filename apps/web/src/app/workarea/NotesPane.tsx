@@ -7,7 +7,7 @@
  *    都来自隐私锁组装层，界面只负责呈现原因（禁用必须带 `title`）。
  */
 import type { PrivacyGate } from "@menote/shared";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "../ui/Controls";
 import { Modal } from "../ui/Modal";
 import { moveToTrash, undoTrash } from "../../features/trash/useTrash";
@@ -90,6 +90,58 @@ export function NotesPane({
     workspace.selected?.title ??
     "这条内容";
 
+  /*
+    传给列表的动作**必须身份稳定**：`NotesPane` 每次渲染都重跑（编辑器每敲一个字都会经
+    `workspace` 换身份走到这里），内联箭头会让 `NoteRow` 的 `memo` 全部失效 ——
+    2000 篇的库里，那就等于**每次交互一条 130–230ms 的主线程长任务**（2026-09-27 实测）。
+
+    先把要用的动作从 `workspace` 里取出来（它们是 `useNotesWorkspace` 做过身份稳定化的），
+    再 `useCallback` 包一层：依赖里只写这些函数本身，而**不能写 `workspace`**（它每次渲染换身份）。
+  */
+  const { createNote, moveItemToFolder, open, togglePinned, toggleStarred } = workspace;
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      void open(id);
+    },
+    [open],
+  );
+  const handleNewNote = useCallback(() => {
+    void createNote();
+  }, [createNote]);
+  const handleMove = useCallback(
+    (id: string, folderId: string | null) => {
+      void moveItemToFolder(id, folderId);
+    },
+    [moveItemToFolder],
+  );
+  const handleTogglePinned = useCallback(
+    (id: string) => {
+      void togglePinned(id);
+    },
+    [togglePinned],
+  );
+  const handleToggleStarred = useCallback(
+    (id: string) => {
+      void toggleStarred(id);
+    },
+    [toggleStarred],
+  );
+  const handleDelete = useCallback((id: string) => setPendingDelete(id), []);
+
+  /** 加密空间那一组 props 同样是行的 `memo` 比较项，整体 memo 成稳定引用 */
+  const vaultForRows = useMemo(
+    () => ({
+      enabled: vault.enabled,
+      locked: vault.locked,
+      id: vault.id,
+      folders: vault.folders,
+      onMoveIn: vault.onMoveIn,
+      onMoveOut: vault.onMoveOut,
+    }),
+    [vault.enabled, vault.folders, vault.id, vault.locked, vault.onMoveIn, vault.onMoveOut],
+  );
+
   return (
     <>
       {versionsOpen && selected ? (
@@ -125,24 +177,14 @@ export function NotesPane({
           loading={workspace.loading}
           summaries={workspace.summaries}
           folders={workspace.folders}
-          onSelect={(id) => {
-            void workspace.open(id);
-          }}
-          onNewNote={() => {
-            void workspace.createNote();
-          }}
-          onMove={(id, folderId) => {
-            void workspace.moveItemToFolder(id, folderId);
-          }}
-          onTogglePinned={(id) => {
-            void workspace.togglePinned(id);
-          }}
-          onToggleStarred={(id) => {
-            void workspace.toggleStarred(id);
-          }}
-          vault={vault}
+          onSelect={handleSelect}
+          onNewNote={handleNewNote}
+          onMove={handleMove}
+          onTogglePinned={handleTogglePinned}
+          onToggleStarred={handleToggleStarred}
+          vault={vaultForRows}
           unlockedItemIds={encryption.gate.unlockedItems}
-          onDelete={(id) => setPendingDelete(id)}
+          onDelete={handleDelete}
           notice={undoNotice}
         />
       }

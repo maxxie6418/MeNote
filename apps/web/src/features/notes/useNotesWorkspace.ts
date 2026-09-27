@@ -4,13 +4,10 @@
  * 界面上只是"列表 + 正文"，数据流向全部经过本地库（架构 §3.1：界面层不直接访问网络）：
  * 新建 → 写本地 + 入队；编辑 → 草稿 + 入队；标题 → 元数据补丁入队；同步由引擎负责。
  */
-import { newUlid } from "@menote/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildDocument, deriveTags, deriveTaskFields } from "@menote/mdcore";
 import {
   clearConflict,
   countItemsByFolder,
-  createLocalItem,
   db,
   enqueueBodySave,
   enqueueMetaPatch,
@@ -44,6 +41,7 @@ import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
 import { useNoteCreation } from "./useNoteCreation";
 import { useVaultScope } from "./useVaultScope";
 import { useItemPatchActions } from "./useItemPatchActions";
+import { useMemoWrite } from "../memos/useMemoWrite";
 import type { BatchProgress, BatchResult } from "./batch";
 import type { PrivacyGate } from "@menote/shared";
 
@@ -221,8 +219,45 @@ export function useNotesWorkspace(
   );
 
   const editorRef = useRef<NoteEditorController | null>(null);
-  const onLocalWrite = options.onLocalWrite;
   const gate = options.gate;
+
+  /**
+   * **身份稳定化（2026-09-27 性能修复）**：下面这些值此前直接来自 `options` / state，
+   * 于是 `refresh` / `open` / `changeTitle` / `createNote` / `patchItem` 的身份**每次渲染、每次选中都变**，
+   * 进而让笔记列表的 `NoteRow.memo` 全部失效 —— 2000 篇的库里每次交互都是一条 130–230ms 的主线程长任务
+   * （用户反馈的"切换笔记很卡"）。
+   *
+   * 做法：读写频繁变化的值走 ref（渲染仍用 state），对外的回调只依赖 ref 与其它已稳定的回调：
+   * - `options.onLocalWrite` 常是内联箭头（`App` 就是这样）：经 ref 转发成恒定的 `notifyLocalWrite`；
+   * - `selectedId` / `initialBody`：写 state 的同一步也写 ref（见 `open` 与 `notifyUploaded`）。
+   *
+   * **纪律**：这两个 ref 只允许在"打开条目"与"自己保存成功"两处更新，别处一律读 ref。
+   * 漏一处会出现"读到上一篇"的错，`test/notes-hook.test.tsx` 的连续性用例盯这一点。
+   */
+  const onLocalWriteRef = useRef(options.onLocalWrite);
+  const selectedIdRef = useRef<string | null>(null);
+  const initialBodyRef = useRef("");
+
+  useEffect(() => {
+    onLocalWriteRef.current = options.onLocalWrite;
+  }, [options.onLocalWrite]);
+
+  /** 稳定的"本地写入"通知：转发给最新的 `options.onLocalWrite`（写成功后叫醒同步引擎） */
+  const notifyLocalWrite = useCallback(() => {
+    onLocalWriteRef.current?.();
+  }, []);
+
+  /** 选中项：state 与 ref 同步写（state 供渲染，ref 供回调，避免回调身份随之变化） */
+  const applySelectedId = useCallback((id: string | null) => {
+    selectedIdRef.current = id;
+    setSelectedId(id);
+  }, []);
+
+  /** 打开这一篇时的正文本基（跨标签页提示比对用） */
+  const applyInitialBody = useCallback((body: string) => {
+    initialBodyRef.current = body;
+    setInitialBody(body);
+  }, []);
 
   /**
    * 冲突提示的取值（M2-9 对比 UI）：按本地 `conflicts` 关联算出"当前条目有没有副本"。
@@ -262,17 +297,20 @@ export function useNotesWorkspace(
     setMemoContents(memoBodies);
 
     /**
-     * 跨标签页改动的事前提示（M2-9）：基准是**打开这条时的正文** `initialBody`。
+     * 跨标签页改动的事前提示（M2-9）：基准是**打开这条时的正文**。
      * 两个标签页共用同一个 IndexedDB，所以别处保存后本地缓存正文就变了——一比就知道。
      * 自己保存成功后会把基准跟着更新（见 `notifyUploaded`），因此不会误报成"别处改的"。
+     *
+     * 读的是 ref（不是 state）：这样 `refresh` 的身份不随选中项变化，列表行的 `memo` 才守得住。
      */
-    if (selectedId !== null) {
-      const cached = await getCachedBody(selectedId);
-      if (cached && cached.body !== initialBody) setRemoteChanged(true);
+    const current = selectedIdRef.current;
+    if (current !== null) {
+      const cached = await getCachedBody(current);
+      if (cached && cached.body !== initialBodyRef.current) setRemoteChanged(true);
     }
-    // 冲突提示：\`refresh\` 与 \`open\` 都要算（打开一条有副本的笔记时就该看见）
-    await syncConflictState(selectedId);
-  }, [initialBody, selectedId, syncConflictState]);
+    // 冲突提示：`refresh` 与 `open` 都要算（打开一条有副本的笔记时就该看见）
+    await syncConflictState(current);
+  }, [syncConflictState]);
 
   // 首次加载：setState 放在 then 回调里，不在 effect 体内同步触发（react-hooks/set-state-in-effect）
   useEffect(() => {
@@ -325,7 +363,7 @@ export function useNotesWorkspace(
       editorRef.current?.stop();
       const editor = createNoteEditor({
         itemId: id,
-        notifySync: onLocalWrite,
+        notifySync: notifyLocalWrite,
         onSnapshot: setSnapshot,
         // 正文按需取（M1 既定行为）：本地缓存缺失时去服务端取一次
         fetchBody: fetchBodyFromServer,
@@ -333,13 +371,19 @@ export function useNotesWorkspace(
       editorRef.current = editor;
       const body = await editor.load();
       // initialBody 就是"打开时的基准"（跨标签页提示用它比对），所以这里必须先设
-      setInitialBody(body);
-      setSelectedId(id);
+      applyInitialBody(body);
+      applySelectedId(id);
       setRemoteChanged(false);
       await syncConflictState(id);
       editor.start();
     },
-    [onLocalWrite, syncConflictState, fetchBodyFromServer],
+    [
+      applyInitialBody,
+      applySelectedId,
+      notifyLocalWrite,
+      syncConflictState,
+      fetchBodyFromServer,
+    ],
   );
 
   /** 新建动作：新建笔记与新建文件夹（M3-6 起在 `useNoteCreation` 里） */
@@ -349,15 +393,16 @@ export function useNotesWorkspace(
     refresh,
     open,
     setView,
-    onLocalWrite,
+    onLocalWrite: notifyLocalWrite,
   });
 
   /** 放弃本地改动、按最新内容重新打开（跨标签页提示里的"重新载入"） */
   const reloadSelected = useCallback(async () => {
-    if (!selectedId) return;
+    const current = selectedIdRef.current;
+    if (!current) return;
     await refresh();
-    await open(selectedId);
-  }, [open, refresh, selectedId]);
+    await open(current);
+  }, [open, refresh]);
 
   /** 打开冲突副本（对照看用） */
   const openConflictCopy = useCallback(async () => {
@@ -369,6 +414,7 @@ export function useNotesWorkspace(
   const resolveConflict = useCallback(
     async (keep: "mine" | "server") => {
       const conflict = conflictCopy;
+      const selectedId = selectedIdRef.current;
       if (!selectedId || !conflict) return;
 
       if (keep === "mine") {
@@ -385,12 +431,14 @@ export function useNotesWorkspace(
 
       await clearConflict(conflict.copyId);
       await refresh();
-      onLocalWrite?.();
+      notifyLocalWrite();
     },
-    [conflictCopy, onLocalWrite, refresh, selectedId],
+    [conflictCopy, notifyLocalWrite, refresh],
   );
 
-  const changeTitle = useCallback(async (title: string) => {
+  const changeTitle = useCallback(
+    async (title: string) => {
+      const selectedId = selectedIdRef.current;
       if (!selectedId) return;
       const item = await getLocalItem(selectedId);
       if (!item) return;
@@ -398,9 +446,9 @@ export function useNotesWorkspace(
       await db.items.update(selectedId, { title });
       await enqueueMetaPatch(selectedId, item.meta_rev, Date.now());
       await refresh();
-      onLocalWrite?.();
+      notifyLocalWrite();
     },
-    [onLocalWrite, refresh, selectedId],
+    [notifyLocalWrite, refresh],
   );
 
   const items = useMemo(() => filterByView(allItems, view, gate), [allItems, view, gate]);
@@ -417,94 +465,19 @@ export function useNotesWorkspace(
   }, [folders, view]);
 
   /**
-   * 发布 Memo。
-   *
-   * `type: memo` **不写进正文**（type 是条目的元数据列，md 只承载内容与结构化字段），
-   * 只有存在标签或清单标记时才写 front matter——这样纯文本 Memo 的正文就是用户写的那几行，
-   * 原位编辑时不会看到 YAML。
+   * Memo 的发布与编辑（M2-5 / Q19）：**拆到 `features/memos/useMemoWrite.ts`**——
+   * 本程的身份稳定化改动把 500 行预算顶到了线，按仓库既有做法（`useNoteCreation` /
+   * `useVaultScope` / `useItemPatchActions` 都是这么拆的）按子资源拆出去，行为一字未改。
    */
-  const publishMemo = useCallback(
-    async (
-      text: string,
-      options?: { asTask?: boolean; due?: string | null; priority?: string | null },
-    ) => {
-      const tags = deriveTags(text);
-      const asTask = options?.asTask ?? false;
-      const task = asTask
-        ? {
-            // M2-5：新建清单默认"待办"；优先级默认"中"，截止可空（M07-03）
-            status: "todo",
-            due: options?.due ?? null,
-            priority: options?.priority ?? "medium",
-          }
-        : null;
-      const body =
-        tags.length > 0 || asTask
-          ? buildDocument({ type: "memo", tags, task, preservedLines: [] }, text)
-          : text;
+  const { publishMemo, updateMemo } = useMemoWrite({ refresh, onLocalWrite: notifyLocalWrite });
 
-      const id = newUlid();
-      const now = Date.now();
-      await createLocalItem(
-        {
-          id,
-          type: "memo",
-          title: null,
-          folder_id: null,
-          tags,
-          memo_at: now,
-          body,
-          task: deriveTaskFields(body),
-        },
-        now,
-      );
-      await refresh();
-      onLocalWrite?.();
-    },
-    [onLocalWrite, refresh],
-  );
-
-  /**
-   * 原位编辑 Memo 正文（Q19）。
-   *
-   * 用户编辑的是**内容**：front matter 由这里按"是否清单 + 新标签"重新生成，
-   * 因此正文里的 YAML 永远不会被用户改坏；`memo_at` 不动（编辑不改变时间轴位置）。
-   */
-  const updateMemo = useCallback(
-    async (itemId: string, text: string) => {
-      const item = await getLocalItem(itemId);
-      if (!item) return;
-
-      const tags = deriveTags(text);
-      // 清单标记与三个字段由条目元数据承载：编辑正文不改它们（Q19 只改内容）
-      const taskFields =
-        item.is_task === 1
-          ? { status: item.task_status, due: item.task_due, priority: item.task_priority }
-          : null;
-      const body =
-        tags.length > 0 || taskFields !== null
-          ? buildDocument({ type: "memo", tags, task: taskFields, preservedLines: [] }, text)
-          : text;
-
-      const now = Date.now();
-      await saveDraft(itemId, body, now);
-      await enqueueBodySave(itemId, item.rev, now);
-      await db.items.update(itemId, { tags, updated_at: now });
-      if (item.tags.join("\u0000") !== tags.join("\u0000")) {
-        await enqueueMetaPatch(itemId, item.meta_rev, now);
-      }
-      await refresh();
-      onLocalWrite?.();
-    },
-    [onLocalWrite, refresh],
-  );
-
-  const renameFolder = useCallback(    async (folderId: string, name: string) => {
+  const renameFolder = useCallback(
+    async (folderId: string, name: string) => {
       await renameLocalFolder(folderId, name, Date.now());
       await refresh();
-      onLocalWrite?.();
+      notifyLocalWrite();
     },
-    [onLocalWrite, refresh],
+    [notifyLocalWrite, refresh],
   );
 
   const moveFolder = useCallback(
@@ -516,9 +489,9 @@ export function useNotesWorkspace(
       }
       await moveLocalFolder(folderId, parentId, depth, Date.now());
       await refresh();
-      onLocalWrite?.();
+      notifyLocalWrite();
     },
-    [folders, onLocalWrite, refresh],
+    [folders, notifyLocalWrite, refresh],
   );
 
   /** 条目的元数据补丁动作（M3-8 起在 `useItemPatchActions` 里） */
@@ -530,7 +503,7 @@ export function useNotesWorkspace(
     toggleStarred,
     degradeToNote,
   } =
-    useItemPatchActions({ refresh, onLocalWrite });
+    useItemPatchActions({ refresh, onLocalWrite: notifyLocalWrite });
 
   /** 加密空间的作用域（M3-6）：派生值与空间内新建都在 `useVaultScope` 里 */
   const vaultScope = useVaultScope({
@@ -541,7 +514,7 @@ export function useNotesWorkspace(
     open,
     setView,
     patchItem,
-    onLocalWrite,
+    onLocalWrite: notifyLocalWrite,
   });
 
   /**
@@ -597,10 +570,11 @@ export function useNotesWorkspace(
       input: (text: string) => editorRef.current?.onInput(text),
       notifyUploaded: () => {
         editorRef.current?.notifyUploaded();
-        // 自己保存成功不是"别处改的"：把基准（initialBody）跟到自己刚写下的内容，并清掉提示
-        if (selectedId !== null) {
-          void getDraft(selectedId).then((draft) => {
-            if (draft) setInitialBody(draft.body);
+        // 自己保存成功不是"别处改的"：把基准跟到自己刚写下的内容，并清掉提示（state 与 ref 同步）
+        const current = selectedIdRef.current;
+        if (current !== null) {
+          void getDraft(current).then((draft) => {
+            if (draft) applyInitialBody(draft.body);
           });
         }
         setRemoteChanged(false);
@@ -611,6 +585,7 @@ export function useNotesWorkspace(
     }),
     [
       allItems,
+      applyInitialBody,
       changeTitle,
       createFolder,
       createNote,

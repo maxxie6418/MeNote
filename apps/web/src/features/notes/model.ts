@@ -20,6 +20,7 @@ import {
   getEditableBody,
   getLocalItem,
   listItemOutbox,
+  putCachedBody,
   saveDraft,
 } from "../../data/db";
 import { isParkedOutboxRow } from "../../data/sync/backoff";
@@ -41,6 +42,18 @@ export interface NoteEditorOptions {
   now?: () => number;
   /** tick 间隔，默认 2 秒（本地草稿节奏） */
   tickMs?: number;
+  /**
+   * **正文按需取**（M1 的既定行为，2026-09-27 补上）。
+   *
+   * 本地库只是缓存：新设备、清过本地库、或"很久没打开过"的那一篇，正文并不在本机。
+   * 此前 `load()` 只读本地库，读不到就返回空串——于是打开笔记看到**空白编辑器**，
+   * 用户一编辑就与服务端的正文撞成冲突副本。现在本地没有且**不是未上传草稿**时，
+   * 由这个注入的函数去服务端取一次（成功后写进正文缓存）。
+   *
+   * 返回 `null` 表示取不到（离线 / 404 / 网络错），此时**保持空正文**并照常可编辑——
+   * 取不到就报错会让"离线打开一篇没缓存的笔记"直接不可用，那更糟。
+   */
+  fetchBody?: (itemId: string) => Promise<{ body: string; rev: number; contentHash: string } | null>;
 }
 
 export interface NoteEditorController {
@@ -109,8 +122,22 @@ export function createNoteEditor(options: NoteEditorOptions): NoteEditorControll
 
   async function load(): Promise<string> {
     const loaded = await getEditableBody(options.itemId);
+    let body = loaded.body;
+
+    /*
+      正文按需取（M1 既定行为）：本地缓存缺失、且没有未上传草稿时，去服务端取一次。
+      **只在没有草稿时才取**——草稿是"用户还没上传的改动"，拿服务端版本覆盖它会丢数据。
+    */
+    if (body === "" && !loaded.fromDraft && options.fetchBody) {
+      const remote = await options.fetchBody(options.itemId).catch(() => null);
+      if (remote) {
+        await putCachedBody(options.itemId, remote.body, remote.rev, remote.contentHash, now());
+        body = remote.body;
+      }
+    }
+
     const item = await getLocalItem(options.itemId);
-    text = loaded.body;
+    text = body;
     bytes = utf8ByteLength(text);
     dirty = item?.pending != null;
     lastChangeAt = now();

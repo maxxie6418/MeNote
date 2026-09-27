@@ -32,6 +32,7 @@ import {
   type MemoContent,
 } from "../../data/db";
 import { createNoteEditor, type NoteEditorController, type NoteEditorSnapshot } from "./model";
+import { itemsApi } from "../../data/api/endpoints";
 import {
   collectTags,
   DEFAULT_VIEW,
@@ -279,6 +280,39 @@ export function useNotesWorkspace(
     };
   }, []);
 
+  /**
+   * 正文按需取（M1 既定行为，2026-09-27 补）。
+   *
+   * 本地库只是缓存：新设备 / 清过本地库 / 很久没打开的那一篇，正文不在本机。
+   * 此前打开这类笔记会看到**空白编辑器**，一编辑就和服务端的正文撞成冲突副本。
+   *
+   * 三条纪律：
+   * 1. **离线不试**（`navigator.onLine === false`）：省一次必然失败的请求，
+   *    也让"离线打开没缓存的笔记"表现为"暂时看不到正文"而不是转圈；
+   * 2. **任何失败都返回 null**（404 / 403 / 网络错）：取不到就保持空正文、照常可编辑——
+   *    把错误抛进 `load()` 会让这一篇直接打不开，那更糟；
+   * 3. 取到就写进正文缓存（`putCachedBody` 由模型层负责），下次打开不再发请求。
+   */
+  const fetchBodyFromServer = useCallback(
+    async (itemId: string): Promise<{ body: string; rev: number; contentHash: string } | null> => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
+      try {
+        /*
+          **不带 `knownHash`**：这是一次"本地没有"的补拉，要的就是字节本身。
+          带了的话服务端可能回 304（它以为我们有），结果还是空正文。
+          `rev` 用本地元数据里的值——正文端点只回正文与 ETag，版本号在条目元数据里。
+        */
+        const remote = await itemsApi.getBody(itemId);
+        if (!remote) return null;
+        const item = await getLocalItem(itemId);
+        return { body: remote.body, rev: item?.rev ?? 0, contentHash: remote.contentHash };
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
   const open = useCallback(
     async (id: string) => {
       editorRef.current?.stop();
@@ -286,6 +320,8 @@ export function useNotesWorkspace(
         itemId: id,
         notifySync: onLocalWrite,
         onSnapshot: setSnapshot,
+        // 正文按需取（M1 既定行为）：本地缓存缺失时去服务端取一次
+        fetchBody: fetchBodyFromServer,
       });
       editorRef.current = editor;
       const body = await editor.load();
@@ -296,7 +332,7 @@ export function useNotesWorkspace(
       await syncConflictState(id);
       editor.start();
     },
-    [onLocalWrite, syncConflictState],
+    [onLocalWrite, syncConflictState, fetchBodyFromServer],
   );
 
   /** 新建动作：新建笔记与新建文件夹（M3-6 起在 `useNoteCreation` 里） */

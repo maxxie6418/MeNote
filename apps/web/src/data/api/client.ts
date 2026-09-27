@@ -39,6 +39,14 @@ export interface ApiRequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** 对象 → JSON；字符串 → 原样发送（正文用 `text/markdown`） */
   body?: unknown;
+  /**
+   * **二进制/流式请求体**（M4-10 的附件上传用）。
+   *
+   * 为什么单独一个字段而不是让 `body` 也接受 `BodyInit`：`body` 现在的语义是"会被序列化"，
+   * 混进 `Blob` 之后每个调用点都要想"这个会不会被 JSON.stringify"。分开写，一眼就分清。
+   * 传了 `rawBody` 就不再序列化 `body`（两者同时给属于调用错误，这里以 `rawBody` 为准）。
+   */
+  rawBody?: BodyInit;
   headers?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -54,7 +62,10 @@ export async function apiFetch(path: string, options: ApiRequestOptions = {}): P
 
   const headers: Record<string, string> = { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE, ...options.headers };
   let body: BodyInit | undefined;
-  if (options.body !== undefined) {
+  if (options.rawBody !== undefined) {
+    // 二进制/流：**原样**放进请求体（上传大文件时不做任何缓冲与转换）
+    body = options.rawBody;
+  } else if (options.body !== undefined) {
     if (typeof options.body === "string") {
       body = options.body;
       headers["Content-Type"] ??= "text/markdown; charset=utf-8";

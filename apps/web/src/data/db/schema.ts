@@ -8,6 +8,7 @@
  */
 import Dexie, { type EntityTable } from "dexie";
 import type { CryptoMaterials, FolderMeta, ItemMeta, UserSettings } from "@menote/shared";
+import type { LocalAttachment } from "./attachments";
 
 /** 本地待上传标记：null 表示已同步 */
 export type PendingKind =
@@ -162,6 +163,8 @@ export class MenoteDatabase extends Dexie {
   settings!: EntityTable<SettingsRow, "key">;
   conflicts!: EntityTable<ConflictRow, "copy_id">;
   privacyState!: EntityTable<PrivacyStateRow, "key">;
+  /** 附件元数据（M4-10；正文在 R2，本地只留元数据与上传状态） */
+  attachmentsMeta!: EntityTable<LocalAttachment, "attachment_id">;
 
   constructor(name = "menote") {
     super(name);
@@ -242,5 +245,25 @@ export class MenoteDatabase extends Dexie {
         // 结构变了，最省事也最安全的做法是清空索引（它是纯派生数据，随即可重建）
         await tx.table("searchIndex").clear();
       });
+    /**
+     * 7：新增附件元数据（M4-10；《M4 设计》§3）。
+     *
+     * **为什么本地也要留一份**：附件正文在 R2（本地不缓存大文件），但"这条笔记引用了哪些附件、
+     * 各自多大、传没传完"必须离线可读——否则离线打开笔记会看到一堆破图。
+     * 纯新增表，不动既有表，所以升级不需要迁移数据。
+     */
+    this.version(7).stores({
+      items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+      bodies: "item_id",
+      drafts: "item_id",
+      folders: "id, parent_id, sync_seq",
+      outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+      syncState: "key",
+      searchIndex: "item_id, sync_seq, updated_at",
+      settings: "key",
+      conflicts: "copy_id, original_id",
+      privacyState: "key",
+      attachmentsMeta: "attachment_id, item_id, sha256, [item_id+sha256], status",
+    });
   }
 }

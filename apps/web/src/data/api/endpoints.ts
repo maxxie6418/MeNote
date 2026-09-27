@@ -190,6 +190,50 @@ export const trashApi = {
 };
 
 /**
+ * 附件（M4-10 的前端接线；服务端在 M4-4）。
+ *
+ * 上传是**两段**（设计 §3.2）：`putBlob` 把请求体直写对象存储，`finalize` 才落元数据与引用。
+ * 中间隔着 `check`：命中已有文件就只跑 `finalize`（秒传，不发上传请求）。
+ */
+export const attachmentsApi = {
+  check: (input: { sha256: string; size: number }) =>
+    apiRequest<{ exists: boolean; pending: boolean }>("/api/attachments/check", {
+      method: "POST",
+      body: input,
+    }),
+
+  putBlob: (sha256: string, kind: "original" | "thumb", body: Blob, contentType: string) =>
+    apiRequest<{ key: string; size: number }>(
+      `/api/attachments/blob?sha256=${sha256}&kind=${kind}`,
+      {
+        method: "PUT",
+        rawBody: body,
+        headers: { "Content-Type": contentType },
+      },
+    ),
+
+  finalize: (input: {
+    sha256: string;
+    size: number;
+    mime: string | null;
+    width: number | null;
+    height: number | null;
+    filename: string | null;
+    thumb: { size: number; mime: string | null; width: number | null; height: number | null } | null;
+    itemId: string | null;
+  }) =>
+    apiRequest<{ attachmentId: string; thumbId: string | null }>("/api/attachments/finalize", {
+      method: "POST",
+      body: input,
+    }),
+
+  refs: (itemId: string) =>
+    apiRequest<{ refs: Array<{ attachmentId: string; versionId: string | null }> }>(
+      `/api/attachments/refs/${encodeURIComponent(itemId)}`,
+    ),
+};
+
+/**
  * 版本历史（M4-11 的前端接线；服务端在 M4-5）。
  *
  * 都需要联网：封存要写 R2、恢复要在一个 batch 里改正文与派生列、列表与正文都在服务端。

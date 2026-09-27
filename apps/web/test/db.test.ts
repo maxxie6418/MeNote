@@ -4,21 +4,31 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   applySyncFolders,
   applySyncItems,
+  countUnfinishedAttachments,
   createLocalNote,
   db,
   enqueueBodySave,
+  findAttachment,
   getCachedBody,
   getEditableBody,
   getSyncState,
   headOutbox,
+  listItemAttachments,
   listLocalFolders,
   listLocalItems,
   listOutbox,
+  listUnfinishedAttachments,
+  markAttachmentFailed,
+  markAttachmentUploaded,
   markItemSynced,
   markOutboxFailure,
+  putAttachmentMeta,
   putCachedBody,
+  removeAttachmentMeta,
+  removeItemAttachments,
   saveDraft,
   setSyncCursor,
+  type LocalAttachment,
 } from "../src/data/db";
 
 function serverItem(partial: Partial<ItemMeta> & { id: string }): ItemMeta {
@@ -223,5 +233,77 @@ describe("同步状态与结清", () => {
     expect(row?.pending).toBeNull();
     expect(row?.rev).toBe(1);
     expect(row?.sync_seq).toBe(7);
+  });
+});
+
+describe("附件元数据（M4-10 / Dexie v7）", () => {
+  const meta = (overrides: Partial<LocalAttachment> = {}): LocalAttachment => ({
+    attachment_id: "att-1",
+    item_id: "item-1",
+    sha256: "a".repeat(64),
+    filename: "照片.png",
+    mime: "image/png",
+    size_bytes: 2048,
+    width: 1200,
+    height: 800,
+    has_thumb: true,
+    status: "pending",
+    error: null,
+    created_at: 1000,
+    updated_at: 1000,
+    ...overrides,
+  });
+
+  it("升级到 v7 后新增 attachmentsMeta 表，既有表仍在", async () => {
+    // `beforeEach` 已经 open 过：库版本就是 schema 里声明的最高版本
+    expect(db.verno).toBe(7);
+    expect(db.tables.map((table) => table.name)).toEqual(
+      expect.arrayContaining(["items", "bodies", "folders", "outbox", "privacyState", "attachmentsMeta"]),
+    );
+  });
+
+  it("落一行、按条目查得回来；同条目同哈希能反查到", async () => {
+    await putAttachmentMeta(meta());
+    await putAttachmentMeta(meta({ attachment_id: "att-2", sha256: "b".repeat(64), status: "uploaded" }));
+
+    const forItem = await listItemAttachments("item-1");
+    expect(forItem).toHaveLength(2);
+
+    const found = await findAttachment("item-1", "a".repeat(64));
+    expect(found?.attachment_id).toBe("att-1");
+    expect(await findAttachment("item-2", "a".repeat(64))).toBeUndefined();
+  });
+
+  it("上传成功后状态转 uploaded；失败带原因（都进未完成清单）", async () => {
+    await putAttachmentMeta(meta({ attachment_id: "att-1" }));
+    await putAttachmentMeta(meta({ attachment_id: "att-2" }));
+    await putAttachmentMeta(meta({ attachment_id: "att-3", status: "uploaded" }));
+
+    // 初始：两条待上传
+    expect(await countUnfinishedAttachments()).toBe(2);
+
+    await markAttachmentUploaded("att-1", 2000);
+    expect(await countUnfinishedAttachments()).toBe(1);
+
+    await markAttachmentFailed("att-2", "网络断了", 3000);
+    const unfinished = await listUnfinishedAttachments();
+    expect(unfinished.map((row) => row.attachment_id)).toEqual(["att-2"]);
+    expect(unfinished[0]?.error).toBe("网络断了");
+
+    // 失败后再传成功 → 不再是未完成项
+    await markAttachmentUploaded("att-2", 4000);
+    expect(await countUnfinishedAttachments()).toBe(0);
+  });
+
+  it("移除引用清本地行；条目被删时连带清掉它的附件行", async () => {
+    await putAttachmentMeta(meta({ attachment_id: "att-1" }));
+    await putAttachmentMeta(meta({ attachment_id: "att-2" }));
+
+    await removeAttachmentMeta("att-1");
+    expect(await listItemAttachments("item-1")).toHaveLength(1);
+
+    const removed = await removeItemAttachments("item-1");
+    expect(removed).toBe(1);
+    expect(await listItemAttachments("item-1")).toEqual([]);
   });
 });

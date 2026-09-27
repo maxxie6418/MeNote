@@ -22,7 +22,7 @@ import {
 import { cryptoApi } from "../../data/api/endpoints";
 import { cacheCryptoState, clearCachedCrypto, cachedMaterials } from "../../data/db/privacy";
 import { createSyncChannel, type SyncChannel } from "../../data/sync/broadcast";
-import { deriveKek, makeVerifier, randomContentKey, randomSalt, verifyPassword, wrapContentKey } from "./crypto";
+import { deriveKek, makeVerifier, randomContentKey, randomSalt, unwrapContentKey, verifyPassword, wrapContentKey } from "./crypto";
 import {
   DEVICE_UNLOCK_KEY,
   changeTier as changeTierIn,
@@ -53,6 +53,16 @@ export interface PrivacyLockState {
   busy: boolean;
   unlock: (password: string, tier: PrivacyTier) => Promise<boolean>;
   enable: (password: string) => Promise<void>;
+  /**
+   * 改密（M3-9）：先用旧密码解出内容密钥 K，再用新密码重新包裹——
+   * **K 不变**，所以已加密的内容不会被这次改密"锁死"。
+   */
+  changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
+  /**
+   * 重置隐私密码（忘记密码，M3-9）：服务端用 `BACKUP_CRED_KEY` 解出 K → 浏览器用新密码重新包裹。
+   * 同样**K 不变**；`k_wrapped_backup` 由服务端重新包一份。
+   */
+  resetPassword: (newPassword: string) => Promise<void>;
   disable: () => Promise<void>;
   lockAll: () => void;
   lockScope: () => void;
@@ -309,6 +319,86 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
     [config.tier, config.minutes, publishUnlocked],
   );
 
+  /**
+   * 改密（M3-9）：旧密码解出 K → 新盐 → 新 KEK/verifier → 用新 KEK 重新包裹 K。
+   * `k_wrapped_backup` 原样带回（服务端用它兜底重置），所以这一步**只需要联网**、不需要备份机密。
+   */
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string): Promise<boolean> => {
+      const materials = await cachedMaterials();
+      if (!materials) throw new Error("本地没有校验材料，请联网后重试");
+
+      const oldSalt = cryptoBlobFromBase64Url(materials.kdf_salt);
+      const oldKek = await deriveKek(oldPassword, oldSalt, materials.kdf_iterations);
+      if (!(await verifyPassword(oldKek, materials.verifier))) return false;
+
+      setBusy(true);
+      try {
+        const contentKey = await unwrapContentKey(materials.k_wrapped_pw, oldKek);
+        const salt = randomSalt();
+        const kek = await deriveKek(newPassword, salt);
+        const state = await cryptoApi.put({
+          materials: {
+            kdf: CRYPTO_KDF,
+            kdf_iterations: CRYPTO_KDF_ITERATIONS,
+            kdf_salt: base64UrlEncode(salt),
+            verifier: await makeVerifier(kek),
+            k_wrapped_pw: await wrapContentKey(contentKey, kek),
+            // 备份包裹不重做：它包的是同一把 K，服务端手里那份仍然有效
+            k_wrapped_backup: materials.k_wrapped_backup,
+          },
+        });
+        await cacheCryptoState(state);
+        kekRef.current = kek;
+        setEnabled(true);
+        setRuntime(() => {
+          const base = initialRuntime(true, config.tier);
+          return unlockIn(base, config.tier, Date.now(), config.minutes);
+        });
+        return true;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [config.tier, config.minutes],
+  );
+
+  /**
+   * 重置（忘记密码，M3-9）：服务端解出 K → 新密码重新包裹。
+   *
+   * 重置**不需要**旧的隐私密码（那正是"忘记"的意思），但需要联网 + 实例配好 `BACKUP_CRED_KEY`。
+   * 重置后 `k_wrapped_backup` 由服务端用新的一份随机 IV 重新包（K 不变）。
+   */
+  const resetPassword = useCallback(
+    async (newPassword: string): Promise<void> => {
+      setBusy(true);
+      try {
+        const { k } = await cryptoApi.reset();
+        const contentKey = cryptoBlobFromBase64Url(k);
+        const salt = randomSalt();
+        const kek = await deriveKek(newPassword, salt);
+        const state = await cryptoApi.put({
+          materials: {
+            kdf: CRYPTO_KDF,
+            kdf_iterations: CRYPTO_KDF_ITERATIONS,
+            kdf_salt: base64UrlEncode(salt),
+            verifier: await makeVerifier(kek),
+            k_wrapped_pw: await wrapContentKey(contentKey, kek),
+          },
+          // 明文 K 交给服务端，由它用 BACKUP_CRED_KEY 重新包第二份
+          k,
+        });
+        await cacheCryptoState(state);
+        kekRef.current = kek;
+        setEnabled(true);
+        setRuntime(unlockIn(initialRuntime(true, config.tier), config.tier, Date.now(), config.minutes));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [config.tier, config.minutes],
+  );
+
   const disable = useCallback(async (): Promise<void> => {
     setBusy(true);
     try {
@@ -376,6 +466,8 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
     busy,
     unlock,
     enable,
+    changePassword,
+    resetPassword,
     disable,
     lockAll,
     lockScope,

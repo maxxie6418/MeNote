@@ -4,7 +4,7 @@
  * M1 只放 3 个分类（通用 / 账户与安全 / 实例管理），其余分类在 M2/M6 补内容后再进导航——避免空入口。
  * 「实例管理」仅 owner 可见。
  */
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type { EditorMode, StartView, UserSettings } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
 import type { ThemeMode } from "../../../app/theme/useTheme";
@@ -80,6 +80,12 @@ export interface SettingsPanelProps {
   onToggleRegistration: (open: boolean) => Promise<void>;
   onChangePassword: (current: string, next: string) => Promise<void>;
   onLogout: () => void;
+  /**
+   * 「隐私锁」分类的内容（M3-9）。**由 `App` 组装后按插槽传入**：
+   * 设置页负责分类与版式，隐私锁的状态机与动作在 feature 层（`features/privacy`），
+   * 设置 feature 不认识它——这样两边都不越界。M2 时这里是一个置灰占位。
+   */
+  privacyPage?: ReactNode;
 }
 
 export function SettingsPanel({
@@ -94,6 +100,7 @@ export function SettingsPanel({
   onToggleRegistration,
   onChangePassword,
   onLogout,
+  privacyPage,
 }: SettingsPanelProps) {
   const pages = NAV_ORDER.filter((candidate) => candidate !== "instance" || role === "owner");
   const meta = PAGE_META[page];
@@ -232,25 +239,17 @@ export function SettingsPanel({
         ) : null}
 
         {page === "privacy" ? (
-          <section className="setcard" aria-label="隐私锁">
-            <h3 className="setcard__title">隐私锁</h3>
-            <div className="setrow">
-              <div className="setrow__label">
-                <span className="setrow__name">加密空间</span>
-                <span className="setrow__desc">
-                  启用隐私锁、修改隐私密码、解锁档位与时长都在 M3 提供；M2 只做界面占位。
-                </span>
+          privacyPage ?? (
+            <section className="setcard" aria-label="隐私锁">
+              <h3 className="setcard__title">隐私锁</h3>
+              <div className="setrow">
+                <div className="setrow__label">
+                  <span className="setrow__name">加密空间</span>
+                  <span className="setrow__desc">隐私锁的状态与设置暂不可用。</span>
+                </div>
               </div>
-              <button
-                type="button"
-                className="btn btn--sm"
-                disabled
-                title="隐私锁将在 M3 提供"
-              >
-                启用
-              </button>
-            </div>
-          </section>
+            </section>
+          )
         ) : null}
 
         {page === "versions" ? (

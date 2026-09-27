@@ -4,9 +4,7 @@
  * 分工：认证状态 → `features/auth`；本地数据与自动保存 → `features/notes`；
  * 网络与冲突 → `data/sync`；界面骨架 → `app/`。业务判断不写在 JSX 里。
  */
-import type { RegistrationState } from "@menote/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { adminApi } from "../data/api/endpoints";
 import { outboxCount } from "../data/db";
 import { createSyncEngine, type SyncEngine } from "../data/sync";
 import { useAuth } from "../features/auth/model";
@@ -16,7 +14,8 @@ import { NoteWorkspace } from "../features/notes/ui/NoteWorkspace";
 import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
 import { useNotesWorkspace, type NotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { changeLoginPassword } from "../features/settings/model";
-import { SettingsPanel } from "../features/settings/ui/SettingsPanel";
+import { PrivacySettingsPage } from "../features/settings/ui/PrivacySettingsPage";
+import { SettingsView } from "./SettingsView";
 import { useUserSettings } from "../features/settings/useUserSettings";
 import type { UserSettings } from "@menote/shared";
 import { AppShell } from "./AppShell";
@@ -52,7 +51,6 @@ export default function App() {
 
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>("idle");
   const [pendingCount, setPendingCount] = useState(0);
-  const [registration, setRegistration] = useState<RegistrationState | null>(null);
   /**
    * 浏览三段（首页 / Memo / 待办）的当前项；`null` = 停留在笔记视图。
    * 笔记侧的任何导航（最近编辑 / 收藏 / 笔记本 / 标签）都会把它重置回 `null`。
@@ -265,15 +263,6 @@ export default function App() {
     }
   }, [auth.snapshot, navigate, route.name]);
 
-  // 进入设置页时读实例级注册开关（仅 owner 有权限）
-  useEffect(() => {
-    if (route.name !== "settings" || auth.snapshot.user?.role !== "owner") return;
-    void adminApi
-      .getRegistration()
-      .then(setRegistration)
-      .catch(() => setRegistration(null));
-  }, [route, auth.snapshot.user?.role]);
-
   if (auth.snapshot.status === "loading") {
     return <AuthLoading />;
   }
@@ -386,7 +375,7 @@ export default function App() {
         }
       >
         {route.name === "settings" ? (
-          <SettingsPanel
+          <SettingsView
             page={route.page}
             onNavigate={(page) => navigate({ name: "settings", page })}
             role={user.role}
@@ -394,24 +383,22 @@ export default function App() {
             onThemeMode={theme.setMode}
             userSettings={userSettings.settings}
             onPatchSettings={patchSettings}
-            registrationOpen={registration?.open ?? false}
-            onToggleRegistration={async (open) => {
-              const next = await adminApi.setRegistration(open);
-              setRegistration(next);
-              pushToast(open ? "已开放注册" : "已关闭注册", "success");
-            }}
-            onChangePassword={async (current, next) => {
+            onChangeLoginPassword={async (current, next) => {
               const result = await changeLoginPassword(user.username, current, next);
-              pushToast(
-                result.invalidatedSessions > 0
-                  ? `登录密码已修改；已使 ${result.invalidatedSessions} 个其他设备会话失效`
-                  : "登录密码已修改",
-                "success",
-              );
+              return result.invalidatedSessions > 0
+                ? `登录密码已修改；已使 ${result.invalidatedSessions} 个其他设备会话失效`
+                : "登录密码已修改";
             }}
             onLogout={() => {
               void auth.logout().then(() => navigate({ name: "login" }));
             }}
+            privacyPage={
+              <PrivacySettingsPage
+                lock={{ ...privacy, lockState: privacy.runtime.lockState }}
+                settings={userSettings.settings.privacy}
+                onPatchSettings={patchSettings}
+              />
+            }
           />
         ) : search.query.trim() !== "" ? (
           <SearchView

@@ -50,6 +50,9 @@ export type PrivacyTier = v.InferOutput<typeof PrivacyTierSchema>;
 export const PrivacyMinutesSchema = v.picklist([1, 5, 15, 30, 60]);
 export type PrivacyMinutes = v.InferOutput<typeof PrivacyMinutesSchema>;
 
+/** N 分钟档的候选值清单（界面按钮与契约**同一份数据**，避免两处漂移） */
+export const PRIVACY_MINUTES_OPTIONS: ReadonlyArray<PrivacyMinutes> = [1, 5, 15, 30, 60];
+
 /**
  * 隐私锁设置（M3；《隐私锁设计》§7.1）。
  *

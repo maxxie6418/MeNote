@@ -15,10 +15,11 @@ import { describe, expect, it } from "vitest";
 /**
  * 允许"暂时还没样式"的类名上限。
  *
- * 现状：**50**（全部集中在 M4 的回收站页、版本面板/对比，以及首页/隐私胶囊/设置的三处零散类名）。
- * 每补完一屏就调小；到 0 时把下面的断言改成 `toEqual([])`。
+ * 现状：**49**（表格 64 个已在 v0.4.43 清零；memo 与待办在 v0.4.44 按原型对齐后只剩
+ * `memo__cancel` 一个新增规则）。剩下的集中在**回收站页（24）与版本面板/对比（25）**，
+ * 外加首页 / 隐私胶囊 / 设置的几处零散类名。每补完一屏就调小；到 0 时改成 `toEqual([])`。
  */
-const UNSTYLED_BUDGET = 50;
+const UNSTYLED_BUDGET = 49;
 
 const app = readFileSync(new URL("../src/app/theme/app.css", import.meta.url), "utf8").replace(
   /\/\*[\s\S]*?\*\//g,

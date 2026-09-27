@@ -65,7 +65,7 @@ export function TaskPanel({
           <h2 className="memopanel__title">待办</h2>
           <span className="listpane__count">共 {total} 条</span>
         </header>
-        <div className="taskpanel__body">
+        <div className="taskpanel__body scroll-thin">
           <LockedPlaceholder
             title="待办已锁定"
             hint="待办来自 Memo 正文；隐私锁已锁定时不显示内容与状态。解锁后即可查看。"
@@ -94,7 +94,7 @@ export function TaskPanel({
 
       <TaskFilterBar filter={filter} onChange={setFilter} />
 
-      <div className="taskpanel__body">
+      <div className="taskpanel__body scroll-thin">
         {mode === "list" ? (
           <TaskListView
             tasks={visible}

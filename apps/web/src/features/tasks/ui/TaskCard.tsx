@@ -32,7 +32,13 @@ export function TaskCard({ task, title, today, onStatusChange, onClearMarker }: 
   const overdue = task.task_due !== null && task.task_due < today && status !== "done";
 
   return (
-    <article className="taskcard" data-task-id={task.id} data-status={status}>
+    <article
+      className="taskcard"
+      data-task-id={task.id}
+      data-status={status}
+      /* 逾期标记：样式按原型给左侧一条红边（`data-overdue` 只作展示标记，不改数据） */
+      data-overdue={overdue ? "true" : "false"}
+    >
       <div className="taskcard__main">
         <span className="taskcard__title">{title}</span>
         <div className="taskcard__meta">

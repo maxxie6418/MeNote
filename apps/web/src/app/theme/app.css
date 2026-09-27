@@ -1168,6 +1168,329 @@ button {
   }
 }
 
+/*
+  memo 与待办：按用户指定原型（`deliverables/pages-redesign-2026-09-27/index.html`）对齐
+  ——————————————————————————————————————————————————————————————
+  原型与我们的应用**同一套令牌**，只是类名不同（原型 `.memo` / `.tl__*` / `.tkcard*` /
+  `.tkkan*` / `.tkgrp*`，我们 `.memo*` / `.timeline*` / `.taskcard*` / `.kanban*` / `.tasklist*`）。
+  这里以**覆盖式追加**的方式把取值改成原型的值（后出现者胜，便于按原型逐处微调）。
+*/
+
+/* —— memo —— */
+.memopanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.memopanel__head {
+  /* 原型 `.memo-head` */
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.memopanel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline__day {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline__date {
+  /* 原型 `.tl__date` */
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.memo {
+  /* 原型 `.memo`：悬停整块变色，圆角不带边框 */
+  position: relative;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-radius: var(--radius);
+  transition: background 0.16s;
+}
+
+.memo:hover {
+  background: var(--panel-2);
+}
+
+.memo__body {
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.72;
+}
+
+.memo__body p + p {
+  margin-top: var(--sp-2);
+}
+
+.memo__body code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+}
+
+.memo__body strong {
+  font-weight: 650;
+}
+
+.memo__menu {
+  /* 原型 `.memo__more`：默认淡出，悬停或键盘聚焦时出现 */
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  opacity: 0.55;
+  transition: 0.16s;
+}
+
+.memo:hover .memo__menu,
+.memo__menu:focus-visible {
+  opacity: 1;
+}
+
+.memo__menu:hover {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+/* 取消编辑（此前没有规则）：低调的文字按钮，和 `memo__link` 同一重量 */
+.memo__cancel {
+  padding: 0 var(--sp-1);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  cursor: pointer;
+}
+
+.memo__cancel:hover {
+  color: var(--text);
+}
+
+.memo-empty {
+  /* 原型 `.empty` */
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.memo-empty__title {
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.memo-empty__hint {
+  max-width: 340px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+/* —— 待办：面板与筛选条（原型 `.tkhead` / `.tkhead__bar`）—— */
+.taskpanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.taskpanel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-3) var(--sp-5) var(--sp-5);
+}
+
+.taskfilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+/* —— 待办：看板（原型 `.tkkan*`）—— */
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+
+.kanban__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-2);
+}
+
+.kanban__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.kanban__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.kanban__empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: var(--sp-4) 0;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  text-align: center;
+}
+
+/* —— 待办：清单（原型 `.tkgrp` / `.tkrows` / `.tkrow`）—— */
+.tasklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.tasklist__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.tasklist__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.tasklist__count {
+  margin-left: auto;
+  padding: 1px var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— 待办：卡片（原型 `.tkcard*`）—— */
+.taskcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  transition: border-color 0.16s, box-shadow 0.16s;
+}
+
+.taskcard:hover {
+  border-color: var(--line-2);
+  box-shadow: var(--shadow-1);
+}
+
+/* 逾期：左侧一条红边 + 边框转红（原型 `.tkcard--late`；`data-status` 由组件给出） */
+.taskcard[data-status="todo"][data-overdue="true"]::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--red);
+}
+
+.taskcard[data-status="done"] {
+  background: var(--bg-soft);
+}
+
+.taskcard[data-status="done"] .taskcard__title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-2);
+}
+
+.taskcard__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.taskcard__title {
+  color: var(--text);
+  font-size: var(--fs-body-lg);
+  line-height: 1.4;
+}
+
+.taskcard__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.taskcard__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+/* 窄屏（原型 `@media (max-width:1080px)`）：看板转单列 */
+@media (max-width: 1080px) {
+  .kanban {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* 标签格的 chip 编辑（M4-9 补）：输入框跟在 chip 后面，整体像一格里的多个值 */
 .tagchips {
   display: inline-flex;

@@ -87,7 +87,7 @@ export function MemoPanel({
           <h2 className="memopanel__title">Memo</h2>
           <span className="listpane__count">{memos.length} 条</span>
         </header>
-        <div className="memopanel__body">
+        <div className="memopanel__body scroll-thin">
           <LockedPlaceholder
             title="Memo 已锁定"
             hint="隐私锁已锁定，内容、标签与图片都不显示。解锁后即可查看。"
@@ -141,7 +141,7 @@ export function MemoPanel({
         />
       </div>
 
-      <div className="memopanel__body">
+      <div className="memopanel__body scroll-thin">
         <MemoTimeline
           memos={visible}
           contents={contents}

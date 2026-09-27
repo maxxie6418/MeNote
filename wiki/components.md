@@ -387,6 +387,12 @@ AppShell                                    app/
 
 **需求**：M18-01、M18-02、M18-03、M02-04（§7.5）
 
+**【v0.5.2 追加·用户确认 2026-09-27】通用页新增一行「待办筛选条」**：两档单选组
+（`胶囊横排`＝基线 / `悬浮小组件`），对应契约 `UserSettings.task_view.filter_form`。
+取值清单**只有一份**——`packages/shared/src/settings.ts` 的 `TASK_FILTER_FORMS`
+（`v.picklist` 与设置页按钮都引用它），标签与说明留在 `SettingsPanel`（`Record<TaskFilterForm, …>` 收口，
+漏一种形态 TypeScript 直接报错）。来源：线框定稿 07 待办"两种都保留，将来在设置里让用户自选"。
+
 ### 7.6 `Drawer` · 侧滑详情
 | 项 | 内容 |
 |---|---|
@@ -396,6 +402,14 @@ AppShell                                    app/
 | props | `open`、`item`、`onClose`、`onOpenInNotebook` |
 | 落点 | `app/ui/Drawer.tsx`（跨 feature 复用） |
 | 接入时机 | **等用户明确提出再接**，不要顺手打开 |
+
+**【2026-09-27 用户拍板·已接一处】** 待办视图的详情浮层**已实现**，落点是
+`features/tasks/ui/TaskDetail.tsx`（**没有**先做这里预留的跨 feature `Drawer`）：清单行标题与看板卡片标题
+都可打开它，绝对定位盖在原界面上、**不铺遮罩、不推挤内容**，宽 390（≤1080px 330），`Esc` / × 关闭。
+`Drawer`（`app/ui/Drawer.tsx`）**仍是预留**——按 §八 的"通用判定"（原型中被 3 处以上复用），
+现在只有一个消费方，等表格图册的行详情（M05-08）也接上时再抽成通用的那个。
+界定写进了 `DESIGN.md` §6.7：待办是单栏占满（§2.6），没有"右列直接打开"那条路，
+所以禁止项 #15 针对的**双栏条目列表**与它不冲突。
 
 ---
 
@@ -424,7 +438,7 @@ AppShell                                    app/
 | `Placeholder` | `.placeholder`（+ `.boxed`） | 盒子态 / 纯居中态 | `icon`、`title`、`desc`、`action?` |
 | `WarnBox` | `.warn-box` | 危险态（默认）/ `.info` | `tone`、`icon?`、`children` |
 | `HintLine` | `.hint-line` | — | `children`（可含 `<code>`） |
-| `InfoHint`（ⓘ + 悬停） | 【预留】原型未实现 | — | `text`。**规范见 `DESIGN.md` 与 AGENTS.md：界面辅助文案一律收进 `InfoHint`，不得平铺；但警告、破坏性后果、错误/校验、实时计数必须保持可见** |
+| `InfoHint`（ⓘ + 悬停） | `.infohint` / `.infohint__btn` / `.infohint__pop` | — | `label`（按钮的可访问名字，**必填**）、`children`（要收起来的那段说明）。**2026-09-27 用户拍板新建并落地**于 `app/ui/InfoHint.tsx`；三种打开方式（悬停 / 键盘聚焦 / 点击切换，`aria-expanded`），触屏命中区 44px。规范见 `DESIGN.md` 与 AGENTS.md：界面辅助文案一律收进它、不得平铺；但警告、破坏性后果、错误/校验、实时计数必须保持可见 |
 | `KeyCap` | `.keycap` | — | `text`（如 `Asia/Shanghai`、`30 天`） |
 | `SizeTag` | `.size-tag` | `.soft` `.hard` | `bytes`、`limit` |
 | `SyncTag` | `.sync-tag` | `.ok` `.busy` `.err` `.enc` | `state`、`text` |

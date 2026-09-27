@@ -32,6 +32,7 @@ function renderFnBar(overrides: Partial<Parameters<typeof FnBar>[0]> = {}) {
         count: 0,
         onOpen: vi.fn(),
         onUnlock: vi.fn(),
+        onEnable: vi.fn(),
         tree: {
           folders: [],
           counts: {},
@@ -130,12 +131,12 @@ describe("功能栏结构", () => {
     expect(onViewChange).toHaveBeenCalledWith({ kind: "tag", tag: "工作" });
   });
 
-  it("未启用隐私锁时，加密空间是禁用占位并说明去哪里启用（M3-6）", () => {
+  it("未启用隐私锁时，节点说明去哪里启用且不带锁定标记（M3-10 起改为「引导启用」）", () => {
     renderFnBar();
     const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;
-    expect(vault.disabled).toBe(true);
     expect(vault.title).toContain("设置 › 隐私锁");
-    expect(vault.dataset.locked).toBe("true");
+    // 未启用不是"锁定态"：不带 data-locked（那是"已锁定"的标记）
+    expect(vault.dataset.locked).toBeUndefined();
     expect(vault.textContent).toContain("未启用");
   });
 
@@ -148,6 +149,7 @@ describe("功能栏结构", () => {
         count: 3,
         onOpen: vi.fn(),
         onUnlock,
+        onEnable: vi.fn(),
         tree: {
           folders: [],
           counts: {},
@@ -166,6 +168,59 @@ describe("功能栏结构", () => {
     expect(onUnlock).toHaveBeenCalledTimes(1);
   });
 
+  it("未启用：**可点并引导启用**（不是 disabled 占位，设计 §9.2-②）", () => {
+    const onEnable = vi.fn();
+    renderFnBar({
+      vault: {
+        enabled: false,
+        locked: false,
+        count: 0,
+        onOpen: vi.fn(),
+        onUnlock: vi.fn(),
+        onEnable,
+        tree: {
+          folders: [],
+          counts: {},
+          selectedId: null,
+          onSelect: vi.fn(),
+          onCreateFolder: vi.fn(),
+          onRenameFolder: vi.fn(),
+        },
+      },
+    });
+
+    const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;
+    expect(vault.disabled).toBe(false);
+    expect(vault.textContent).toContain("未启用");
+    fireEvent.click(vault);
+    expect(onEnable).toHaveBeenCalledTimes(1);
+  });
+
+  it("已锁定：**条目数照常显示**（计数属统计口径）", () => {
+    renderFnBar({
+      vault: {
+        enabled: true,
+        locked: true,
+        count: 5,
+        onOpen: vi.fn(),
+        onUnlock: vi.fn(),
+        onEnable: vi.fn(),
+        tree: {
+          folders: [],
+          counts: {},
+          selectedId: null,
+          onSelect: vi.fn(),
+          onCreateFolder: vi.fn(),
+          onRenameFolder: vi.fn(),
+        },
+      },
+    });
+
+    const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;
+    expect(vault.textContent).toContain("已锁定");
+    expect(vault.textContent).toContain("5");
+  });
+
   it("已解锁：显示空间内条目数，点击打开空间", () => {
     const onOpen = vi.fn();
     renderFnBar({
@@ -175,6 +230,7 @@ describe("功能栏结构", () => {
         count: 7,
         onOpen,
         onUnlock: vi.fn(),
+        onEnable: vi.fn(),
         tree: {
           folders: [],
           counts: {},

@@ -59,6 +59,13 @@ export interface NoteListProps {
     onMoveIn: (itemId: string, folderId: string | null) => void;
     onMoveOut: (itemId: string) => void;
   };
+  /**
+   * 本次浏览器会话里**已逐篇解密**的条目 id（M3-10）。
+   *
+   * 它决定列表行显示"已加密"还是"已解密"——两套标识里的**单篇态**：
+   * 单篇门禁与隐私锁态互不影响，所以这里单独传，不从 gate 里猜。
+   */
+  unlockedItemIds?: ReadonlySet<string>;
 }
 
 /** 空状态的文案随视图不同——收藏空与笔记空的原因不一样，出口也不一样 */
@@ -91,8 +98,11 @@ export function NoteList({
   onTogglePinned,
   onToggleStarred,
   vault,
+  unlockedItemIds,
 }: NoteListProps) {
   const empty = emptyCopy(title);
+  /** 这一篇在本次浏览器会话里是否已解密（单篇门禁与隐私锁态无关，故单独问） */
+  const itemUnlocked = (itemId: string): boolean => unlockedItemIds?.has(itemId) ?? false;
 
   return (
     <section className="listpane" aria-label="笔记列表">
@@ -139,13 +149,44 @@ export function NoteList({
                         收藏
                       </span>
                     ) : null}
+                    {/*
+                      M3-10 的两套标识（设计 §9.2-③）必须能分辨、也可同时出现：
+                      - **单篇加密态**：未解密 → 锁 + "已加密"；本次已解密 → "已解密"；
+                      - **空间归属**：解锁期间出现在三视图里 → 锁 + "加密空间"。
+                      标题本身是明文，所以标识与标题并存不冲突。
+                    */}
+                    {item.enc_self === 1 ? (
+                      <span
+                        className="itemrow__mark"
+                        title={
+                          itemUnlocked(item.id)
+                            ? "单篇加密：本次会话已解密"
+                            : "单篇加密：正文需逐篇解锁"
+                        }
+                      >
+                        <Icon name="lock" size={13} />
+                        {itemUnlocked(item.id) ? "已解密" : "已加密"}
+                      </span>
+                    ) : null}
+                    {item.in_enc_space === 1 ? (
+                      <span className="itemrow__mark" title="这一条在加密空间里">
+                        <Icon name="lock" size={13} />
+                        加密空间
+                      </span>
+                    ) : null}
                     {summaryOf(item)}
                   </span>
                   <span className="itemrow__meta">
                     <span>{formatTime(item.updated_at)}</span>
                     {item.pending ? <span>{PENDING_LABEL[item.pending] ?? "待上传"}</span> : null}
                   </span>
-                  {summaries[item.id] ? (
+                  {/*
+                    摘要在锁定时换成"已加密"：正文没解密就不该露内容面的任何线索
+                    （连摘要也不给——摘要就是从正文里取的）
+                  */}
+                  {item.enc_self === 1 && !itemUnlocked(item.id) ? (
+                    <span className="itemrow__excerpt">已加密</span>
+                  ) : summaries[item.id] ? (
                     <span className="itemrow__excerpt">{summaries[item.id]}</span>
                   ) : null}
                 </button>

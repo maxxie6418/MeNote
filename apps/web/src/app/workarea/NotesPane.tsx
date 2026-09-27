@@ -37,12 +37,20 @@ export interface NotesPaneProps {
     onMoveIn: (itemId: string, folderId: string | null) => void;
     onMoveOut: (itemId: string) => void;
   };
+  /** 状态栏里的隐私锁那一句（M3-10，设计 §9.2-④） */
+  privacyLine?: {
+    text: string;
+    expiresAt: number | null;
+    onLock?: () => void;
+    lockLabel?: string;
+  } | null;
 }
 
 export function NotesPane({
   workspace,
   editorMode,
   encryption,
+  privacyLine,
   onToggleEncryption,
   onToast,
   vault,
@@ -75,6 +83,7 @@ export function NotesPane({
             void workspace.toggleStarred(id);
           }}
           vault={vault}
+          unlockedItemIds={encryption.gate.unlockedItems}
         />
       }
       doc={
@@ -118,6 +127,7 @@ export function NotesPane({
             },
             onLockAll: encryption.onLockAllItems,
           }}
+          privacyLine={privacyLine}
         />
       }
     />

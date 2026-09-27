@@ -7,23 +7,19 @@
  *   这不是前端"偷偷限制"，而是锁定态下那些文件夹本来就不可见（设计 §6.3、走查第 15 行）。
  */
 import type { NotesWorkspace } from "../features/notes/useNotesWorkspace";
-import type { PrivacyGate, PrivacyLockState } from "@menote/shared";
 import { isScopeGateOpen } from "@menote/shared";
 import type { DocMode } from "../features/notes/ui/NoteWorkspace";
+import { formatCountdown } from "../features/privacy/model";
+import type { PrivacyLockState } from "../features/privacy/usePrivacyLock";
+import { useTicker } from "./ui/useTicker";
 import { NotesPane } from "./workarea/NotesPane";
 
 export interface NotesSlotProps {
   workspace: NotesWorkspace;
   editorMode: DocMode;
-  privacy: {
-    enabled: boolean;
-    gate: PrivacyGate;
-    lockState: PrivacyLockState;
-    unlockedCount: number;
-    onRequestUnlock: () => void;
-    onLockItem: (itemId: string) => void;
-    onLockAllItems: () => void;
-  };
+  /** 隐私锁组装层的返回值（整份传进来，少一层手工转写） */
+  privacy: PrivacyLockState;
+  onRequestUnlock: () => void;
   onToast: (message: string, tone: "success" | "error") => void;
 }
 
@@ -34,20 +30,69 @@ function toastError(onToast: NotesSlotProps["onToast"], fallback: string) {
   };
 }
 
-export function NotesSlot({ workspace, editorMode, privacy, onToast }: NotesSlotProps) {
-  const unlocked = isScopeGateOpen(privacy.gate);
+export function NotesSlot({
+  workspace,
+  editorMode,
+  privacy,
+  onRequestUnlock,
+  onToast,
+}: NotesSlotProps) {
+  const gate = privacy.gate;
+  const unlocked = isScopeGateOpen(gate);
+  const selected = workspace.selected;
+  const tier = privacy.runtime.tier;
+  const expiresAt = privacy.runtime.expiresAt;
+
+  /**
+   * 状态栏里的隐私锁那一句（设计 §9.2-④）。前缀随打开的内容变：
+   * 空间内条目说"加密空间"、单篇加密说"加密笔记"、其余说"隐私锁"。
+   * 倒计时在这里算（每秒 tick），DocStatusBar 只负责显示。
+   */
+  const nowMs = useTicker(unlocked && tier === "minutes" && expiresAt !== null);
+  const privacyLine = (() => {
+    if (privacy.runtime.lockState === "disabled") return null;
+    const prefix =
+      selected?.in_enc_space === 1 ? "加密空间" : selected?.enc_self === 1 ? "加密笔记" : "隐私锁";
+    if (privacy.runtime.lockState === "locked") {
+      return { text: `${prefix} · 已锁定`, expiresAt: null };
+    }
+    if (tier === "device") {
+      return {
+        text: "本设备始终解锁",
+        expiresAt: null,
+        onLock: privacy.lockAllItems,
+        lockLabel: "锁定此设备",
+      };
+    }
+    if (tier === "minutes" && expiresAt !== null) {
+      const remaining = Math.max(0, expiresAt - nowMs);
+      return {
+        text: `${prefix} · 已解锁 · ${formatCountdown(remaining)} 后自动锁定`,
+        expiresAt,
+        onLock: privacy.lockAllItems,
+        lockLabel: "立即锁定",
+      };
+    }
+    return {
+      text: `${prefix} · 已解锁 · 本次会话`,
+      expiresAt: null,
+      onLock: privacy.lockAllItems,
+      lockLabel: "立即锁定",
+    };
+  })();
 
   return (
     <NotesPane
       workspace={workspace}
       editorMode={editorMode}
+      privacyLine={privacyLine}
       encryption={{
         enabled: privacy.enabled,
-        gate: privacy.gate,
-        unlockedCount: privacy.unlockedCount,
-        onRequestUnlock: privacy.onRequestUnlock,
-        onLockItem: privacy.onLockItem,
-        onLockAllItems: privacy.onLockAllItems,
+        gate,
+        unlockedCount: privacy.runtime.unlockedItems.size,
+        onRequestUnlock,
+        onLockItem: privacy.lockItem,
+        onLockAllItems: privacy.lockAllItems,
       }}
       onToggleEncryption={(itemId, next) => {
         void workspace

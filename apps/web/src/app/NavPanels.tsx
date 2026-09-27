@@ -19,12 +19,14 @@ import type { NotesView } from "../features/notes/views";
 export interface NavPanelsInput {
   workspace: NotesWorkspace;
   gate: PrivacyGate;
-  /** 隐私锁是否已启用（未启用时空间节点置灰） */
+  /** 隐私锁是否已启用（未启用时空间节点显示"未启用 · 去启用"） */
   enabled: boolean;
   /** 切笔记视图（会顺带退出浏览三段） */
   onSelectView: (view: NotesView) => void;
   /** 打开解锁框 */
   onUnlock: () => void;
+  /** 未启用时点空间节点：去「设置 › 隐私锁」启用（设计 §9.2-② 的"引导启用"） */
+  onEnableVault: () => void;
   /** 空间还没同步下来时的提示 */
   onVaultMissing: () => void;
   /** 切到某个空间内文件夹（`null` = 空间根） */
@@ -76,6 +78,7 @@ export function navPanels(input: NavPanelsInput): {
     locked: !isScopeGateOpen(gate),
     count: workspace.vault.count,
     onUnlock,
+    onEnable: input.onEnableVault,
     onOpen: () => {
       if (workspace.vault.id) input.onOpenVaultFolder(workspace.vault.id);
       else input.onVaultMissing();

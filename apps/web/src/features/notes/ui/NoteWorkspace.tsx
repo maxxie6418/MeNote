@@ -62,6 +62,16 @@ export interface NoteWorkspaceProps {
     onToggle: (encrypted: boolean) => void;
     onLockAll: () => void;
   };
+  /**
+   * 状态栏里的隐私锁档位行（M3-10，设计 §9.2-④）：如"加密空间 · 已解锁 · 本次会话"。
+   * `expiresAt` 供"即将自动锁定"提示用（`minutes` 档才有）。
+   */
+  privacyLine?: {
+    text: string;
+    expiresAt: number | null;
+    onLock?: () => void;
+    lockLabel?: string;
+  } | null;
 }
 
 export function NoteWorkspace({
@@ -77,6 +87,7 @@ export function NoteWorkspace({
   onInput,
   onTitleChange,
   encryption,
+  privacyLine,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
@@ -274,6 +285,7 @@ export function NoteWorkspace({
               ? { encrypted: encryption.encrypted, unlocked: encryption.unlocked }
               : undefined
           }
+          privacyLine={privacyLine}
         />
       ) : null}
       {bodyLocked ? (

@@ -12,8 +12,8 @@
  * **图标**：sprite 目前只有 `lock`（没有开锁字形），所以两态共用它，靠**颜色 + 文字**区分——
  * 符合"图标不作唯一表意手段"。补齐开锁字形需要动 `Icon.tsx` 与 `DESIGN.md §5.5`，另行确认。
  */
-import { useEffect, useState } from "react";
 import { Icon } from "../../../app/ui/Icon";
+import { useTicker } from "../../../app/ui/useTicker";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import type { PrivacyLockState } from "@menote/shared";
 import { formatCountdown, TIER_LABELS, type PrivacyTier } from "../model";
@@ -28,17 +28,6 @@ export interface PrivacyCapsuleProps {
   onChangeTier: (tier: PrivacyTier) => void;
   /** 设备长期档专用：把这台设备锁上（清设备标记） */
   onLockDevice: () => void;
-}
-
-/** 每秒刷新一次（只在有到期时刻时挂）；返回"现在"，供倒计时文案用 */
-function useTicker(active: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return undefined;
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, [active]);
-  return now;
 }
 
 /** 胶囊里可点的部分：与 `Pill` 同一套类名，但整体是一个按钮 / 菜单触发器 */

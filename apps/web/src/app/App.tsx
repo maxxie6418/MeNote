@@ -163,6 +163,7 @@ export default function App() {
     enabled: privacy.enabled,
     onSelectView: showNotesView,
     onUnlock: requestUnlock,
+    onEnableVault: () => navigate({ name: "settings", page: "privacy" }),
     onVaultMissing: () => pushToast("加密空间还没同步下来，请稍后重试", "error"),
     onOpenVaultFolder: (folderId) => {
       setBrowse(null);
@@ -531,15 +532,8 @@ export default function App() {
           <NotesSlot
             workspace={workspace}
             editorMode={userSettings.settings.editor_mode}
-            privacy={{
-              enabled: privacy.enabled,
-              gate: privacy.gate,
-              lockState: privacy.runtime.lockState,
-              unlockedCount: privacy.runtime.unlockedItems.size,
-              onRequestUnlock: requestUnlock,
-              onLockItem: privacy.lockItem,
-              onLockAllItems: privacy.lockAllItems,
-            }}
+            privacy={privacy}
+            onRequestUnlock={requestUnlock}
             onToast={(message, tone) => pushToast(message, tone)}
           />
         )}

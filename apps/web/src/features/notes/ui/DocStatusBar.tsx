@@ -4,7 +4,13 @@
  * 文案规则（DESIGN.md §5.4）：警告、破坏性后果、实时计数**必须保持可见**，不得收进 `InfoHint`；
  * 状态用**文字**表达，颜色只是辅助（禁止项 #4）。
  * 样式类名留给主题层（M1-10 按 DESIGN.md 令牌落 CSS），这里不写任何颜色。
+ *
+ * M3-10 起这里还承载两件事（《隐私锁设计》§9.2-④）：
+ * 1. **加密状态常驻一条**：单篇的"已加密 / 已解密" + 隐私锁的档位行（如"加密空间 · 已解锁 · 本次会话"）；
+ * 2. **即将自动锁定的提示**：`minutes` 档剩 30 秒时提示"未保存的内容会先保存"——
+ *    只说**先保存**，不提任何"加密"字样（与明文存储模型一致；文案红线见设计 §9.3）。
  */
+import { useTicker } from "../../../app/ui/useTicker";
 import type { NoteEditorSnapshot, SaveState } from "../model";
 
 const SAVE_LABEL: Record<SaveState, string> = {
@@ -15,6 +21,9 @@ const SAVE_LABEL: Record<SaveState, string> = {
   blocked: "已达硬上限",
 };
 
+/** 剩多少毫秒时提示"即将自动锁定"（设计 §9.2：30 秒） */
+export const AUTO_LOCK_NOTICE_MS = 30_000;
+
 export interface DocStatusBarProps {
   snapshot: NoteEditorSnapshot;
   /**
@@ -22,11 +31,31 @@ export interface DocStatusBarProps {
    * **不显示实时大小**——那是内容面的信息（设计 §9.2）。
    */
   encryption?: { encrypted: boolean; unlocked: boolean };
+  /**
+   * 隐私锁档位行（M3-10，设计 §9.2-④）：例如"加密空间 · 已解锁 · 本次会话"。
+   * `onLock` 给「立即锁定」出口（设备长期档时文案是「锁定此设备」）。
+   */
+  privacyLine?: {
+    text: string;
+    /** N 分钟档的到期时刻（用于自动锁定提示）；其它档为 null */
+    expiresAt: number | null;
+    onLock?: () => void;
+    lockLabel?: string;
+  } | null;
+  /** 便于测试固定"现在"；给了就不挂每秒定时器 */
+  now?: number;
 }
 
-export function DocStatusBar({ snapshot, encryption }: DocStatusBarProps) {
+export function DocStatusBar({ snapshot, encryption, privacyLine, now }: DocStatusBarProps) {
   const { sizeLabel, sizeLevel, saveState } = snapshot;
   const locked = encryption?.encrypted === true && !encryption.unlocked;
+
+  // 只有"有到期时刻、且没被固定住时间"时才需要每秒刷新（别的档位没有倒计时）
+  const ticking = useTicker(privacyLine?.expiresAt != null && now === undefined);
+  const currentMs = now ?? ticking;
+  const remainingMs =
+    privacyLine?.expiresAt != null ? Math.max(0, privacyLine.expiresAt - currentMs) : null;
+  const aboutToLock = remainingMs !== null && remainingMs <= AUTO_LOCK_NOTICE_MS;
 
   return (
     <div className="doc-status" role="status" aria-live="polite">
@@ -36,10 +65,28 @@ export function DocStatusBar({ snapshot, encryption }: DocStatusBarProps) {
         </span>
       ) : null}
 
+      {privacyLine ? (
+        <>
+          <span className="doc-status__hint">{privacyLine.text}</span>
+          {privacyLine.onLock ? (
+            <button type="button" className="btn btn--sm" onClick={privacyLine.onLock}>
+              {privacyLine.lockLabel ?? "立即锁定"}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
+      {aboutToLock ? (
+        <span className="doc-status__hint doc-status__hint--warn">
+          即将自动锁定，未保存的内容会先保存
+        </span>
+      ) : null}
+
       {/* 锁定时不显示大小（内容面信息），只保留加密状态 */}
       {locked ? null : (
         <span className={`doc-status__size doc-status__size--${sizeLevel}`}>{sizeLabel}</span>
       )}
+
       {sizeLevel === "soft" && (
         <span className="doc-status__hint doc-status__hint--warn">
           文档内容过大，建议拆分为多篇

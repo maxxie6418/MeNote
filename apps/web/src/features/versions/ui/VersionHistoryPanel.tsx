@@ -111,7 +111,7 @@ export function VersionHistoryPanel({
                   <DropdownMenu
                     label={`${row.timeLabel} 的版本操作`}
                     showChevron={false}
-                    trigger={<span className="versionrow__menu"><IconButton label="更多" icon="chevron-down" size={13} /></span>}
+                    trigger={<span className="versionrow__menu"><IconButton label="更多" icon="more" size={13} /></span>}
                     items={[
                       {
                         id: "view",

@@ -8,6 +8,7 @@ import type { LocalItem } from "../../../data/db";
 import type { TaskStatus } from "@menote/mdcore";
 import { groupTasks } from "../model";
 import { TaskCard } from "./TaskCard";
+import { Icon } from "../../../app/ui/Icon";
 
 export interface TaskListViewProps {
   tasks: readonly LocalItem[];
@@ -29,6 +30,9 @@ export function TaskListView({
   if (groups.length === 0) {
     return (
       <div className="memo-empty">
+        <span className="empty-ico">
+          <Icon name="check-square" size={20} />
+        </span>
         <p className="memo-empty__title">没有符合条件的待办</p>
         <p className="memo-empty__hint">
           在录入框切到「待办」记一条，或者放宽上面的筛选条件。
@@ -42,6 +46,11 @@ export function TaskListView({
       {groups.map((group) => (
         <section key={group.status} className="tasklist__group" aria-label={group.label}>
           <h3 className="tasklist__head">
+            {/* 分组圆点（原型 `.tkgrp__dot`：进行中琥珀、已完成绿、待办中性）——色不单独表意，旁边就是分组名 */}
+            <span
+              className={`tasklist__dot tasklist__dot--${group.status}`}
+              aria-hidden="true"
+            />
             {group.label}
             <span className="tasklist__count">{group.tasks.length}</span>
           </h3>

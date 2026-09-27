@@ -1314,6 +1314,18 @@ button {
   font-size: var(--fs-small);
 }
 
+/* 空状态的图标块（原型 `.empty__ico`：50px 圆形底 + 图标，图标不单独表意——旁边就是标题） */
+.empty-ico {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  margin-bottom: var(--sp-1);
+  border-radius: var(--radius-circle);
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
 /* —— 待办：面板与筛选条（原型 `.tkhead` / `.tkhead__bar`）—— */
 .taskpanel {
   display: flex;
@@ -1413,6 +1425,28 @@ button {
   color: var(--text-2);
   font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
+}
+
+/* 分组圆点（原型 `.tkgrp__dot`；状态由模板拼 `--todo / --doing / --done`）
+   颜色**不单独表意**：旁边就是分组名，圆点只是让分组头更好扫。 */
+.tasklist__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-circle);
+  background: var(--line-2);
+}
+
+.tasklist__dot--todo {
+  background: var(--line-2);
+}
+
+.tasklist__dot--doing {
+  background: var(--amber);
+}
+
+.tasklist__dot--done {
+  background: var(--green);
 }
 
 /* —— 待办：卡片（原型 `.tkcard*`）—— */

@@ -28,7 +28,8 @@ export type IconName =
   | "folder"
   | "tag"
   | "lock"
-  | "table";
+  | "table"
+  | "more";
 
 export function IconSprite() {
   return (
@@ -42,6 +43,15 @@ export function IconSprite() {
       </symbol>
       <symbol id="i-chevron-down" viewBox="0 0 16 16">
         <path d="M4 6.5 8 10.5l4-4" />
+      </symbol>
+      {/*
+        「更多」（三点）：照用户原型 `#i-more`（三个实心圆点）。
+        实心元素要显式 `fill="currentColor" stroke="none"`——`.ic` 的基础规则是"无填充 + 描边"。
+      */}
+      <symbol id="i-more" viewBox="0 0 16 16">
+        <circle cx="4" cy="8" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="8" r="1.4" fill="currentColor" stroke="none" />
       </symbol>
       <symbol id="i-settings" viewBox="0 0 16 16">
         <circle cx="8" cy="8" r="2.2" />

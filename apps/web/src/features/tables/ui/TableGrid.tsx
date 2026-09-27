@@ -120,6 +120,9 @@ export function TableGrid({
   if (doc.rows.length === 0) {
     return (
       <div className="tablegrid__empty">
+        <span className="empty-ico">
+          <Icon name="table" size={20} />
+        </span>
         <p className="tablegrid__empty-title">这张表还没有内容</p>
         <p className="tablegrid__empty-hint">列结构已经建好，加第一行就能开始记。</p>
         {emptyAction}
@@ -307,7 +310,7 @@ function ColumnHeaderMenu({
       <DropdownMenu
         label={`${column.name} 的列操作`}
         showChevron={false}
-        trigger={<Icon name="chevron-down" size={13} />}
+        trigger={<Icon name="more" size={13} />}
         items={items}
       />
     </span>
@@ -329,7 +332,7 @@ function RowMenu({
     <DropdownMenu
       label="行操作"
       showChevron={false}
-      trigger={<Icon name="chevron-down" size={13} />}
+      trigger={<Icon name="more" size={13} />}
       items={[
         { id: "above", label: "在上方插入", onSelect: () => onInsertRow(rowId, "above") },
         { id: "below", label: "在下方插入", onSelect: () => onInsertRow(rowId, "below") },

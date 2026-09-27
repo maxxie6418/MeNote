@@ -222,7 +222,7 @@ export function NoteList({
                   <DropdownMenu
                     label={`${summaryOf(item)} 的更多操作`}
                     showChevron={false}
-                    trigger={<Icon name="chevron-down" size={13} />}
+                    trigger={<Icon name="more" size={13} />}
                     items={[
                       {
                         id: "move-root",

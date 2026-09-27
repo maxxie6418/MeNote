@@ -7,6 +7,7 @@
 import type { LocalItem, MemoContent } from "../../../data/db";
 import { groupMemosByDay } from "../model";
 import { MemoItem } from "./MemoItem";
+import { Icon } from "../../../app/ui/Icon";
 
 export interface MemoTimelineProps {
   memos: readonly LocalItem[];
@@ -38,6 +39,10 @@ export function MemoTimeline({
   if (days.length === 0) {
     return (
       <div className="memo-empty">
+        {/* 空状态图标块（原型 `.empty__ico`）：图标不单独表意，旁边就是标题 */}
+        <span className="empty-ico">
+          <Icon name="note" size={20} />
+        </span>
         <p className="memo-empty__title">还没有 Memo</p>
         <p className="memo-empty__hint">
           用功能栏的录入框随手记一条：记完按 Ctrl+Enter 就会出现在这里。

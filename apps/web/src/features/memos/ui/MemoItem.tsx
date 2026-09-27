@@ -80,7 +80,7 @@ export function MemoItem({
           <DropdownMenu
             label="Memo 的更多操作"
             showChevron={false}
-            trigger={<Icon name="chevron-down" size={13} />}
+            trigger={<Icon name="more" size={13} />}
             items={[
               { id: "edit", label: "编辑", icon: "note", onSelect: beginEdit },
               {

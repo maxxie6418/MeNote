@@ -13,6 +13,7 @@ import { type TableColumn, type TableDoc } from "@menote/mdcore";
 import { Modal } from "../../../app/ui/Modal";
 import { Button, Field } from "../../../app/ui/Controls";
 import { Chip } from "../../../app/ui/Chip";
+import { Icon } from "../../../app/ui/Icon";
 import { cellValue, galleryCards } from "../model";
 
 export interface GalleryViewProps {
@@ -32,6 +33,9 @@ export function GalleryView({ doc, columns, onCellChange, onBackToTable }: Galle
   if (withImage.length === 0) {
     return (
       <div className="gallery__empty">
+        <span className="empty-ico">
+          <Icon name="table" size={20} />
+        </span>
         <p className="gallery__empty-title">这张表还没有图片</p>
         <p className="gallery__empty-hint">在图片列里写上图册要展示的文件名，卡片就会带上封面。</p>
         <Button variant="secondary" size="sm" onClick={onBackToTable}>

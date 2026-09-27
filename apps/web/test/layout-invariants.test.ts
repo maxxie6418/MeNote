@@ -148,6 +148,20 @@ describe("组件硬性规范（DESIGN.md §3.2 / §5.5）", () => {
     expect(app).toMatch(/\.ic\s*\{[^}]*stroke:\s*currentColor/);
   });
 
+  it("`IconName` 的每个名字都有对应字形，反之亦然（一一对应，2026-09-27 补守卫）", () => {
+    /*
+      为什么值得守：`Icon` 用 `<use href="#i-名字">` 取字形——**名字在而字形不在，屏幕上就是一片空白**，
+      而且不会有任何报错。此前只是人工核对过（当时 20 ↔ 20），加了 `more` 之后正好钉住它。
+    */
+    const icon = read("../src/app/ui/Icon.tsx");
+    const unionBlock = /export type IconName =([\s\S]*?);/.exec(icon)?.[1] ?? "";
+    const names = [...unionBlock.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]).sort();
+    const symbols = [...icon.matchAll(/id="i-([a-z-]+)"/g)].map((m) => m[1]).sort();
+
+    expect(names.length).toBeGreaterThanOrEqual(20);
+    expect(names, "有名字没有字形（会渲染成空白）").toEqual(symbols);
+  });
+
   it("渐变也必须由令牌拼装（DESIGN.md §3.2-2：渐变里的裸色值扫不到）", () => {
     expect(app).toContain("var(--primary-grad)");
     expect(tokens).toMatch(/--primary-grad:\s*linear-gradient\([^)]*var\(--primary\)/);

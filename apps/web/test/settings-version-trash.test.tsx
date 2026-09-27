@@ -13,13 +13,14 @@ import {
   VersionsTrashPage,
   type VersionsTrashPageProps,
 } from "../src/features/settings/ui/VersionsTrashPage";
+import { assertLabelledControls } from "./helpers/a11y";
 
 afterEach(cleanup);
 
 function renderPage(overrides: Partial<VersionsTrashPageProps> = {}) {
   const onPatchSettings = vi.fn();
   const onOpenTrash = vi.fn();
-  render(
+  const { container } = render(
     <VersionsTrashPage
       settings={DEFAULT_VERSION_TRASH_SETTINGS}
       onPatchSettings={onPatchSettings}
@@ -28,6 +29,8 @@ function renderPage(overrides: Partial<VersionsTrashPageProps> = {}) {
       {...overrides}
     />,
   );
+  // 读屏底线（渲染层断言，见 helpers/a11y.ts）：这一屏有数字输入与开关，最容易漏名字
+  assertLabelledControls(container, { buttons: 1, fields: 1 });
   return { onPatchSettings, onOpenTrash };
 }
 

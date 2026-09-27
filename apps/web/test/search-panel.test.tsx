@@ -16,6 +16,7 @@ import {
   SearchPanel,
   type SearchResult,
 } from "../src/features/search/ui/SearchPanel";
+import { assertLabelledControls } from "./helpers/a11y";
 
 afterEach(cleanup);
 
@@ -82,6 +83,9 @@ function renderPanel(overrides: Partial<Parameters<typeof SearchPanel>[0]> = {})
       {...overrides}
     />,
   );
+  // 读屏底线（渲染层断言，见 helpers/a11y.ts）。这里**只有按钮**：搜索框在功能栏，
+  // 结果面板本身没有输入控件（`fields` 不给下限，给了会假失败——这条是下限机制抓出来的）
+  assertLabelledControls(container, { buttons: 1 });
   return { container, onOpen, onClose, onFiltersChange };
 }
 

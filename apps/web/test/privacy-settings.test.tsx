@@ -13,6 +13,7 @@ import {
   PrivacySettingsPage,
   type PrivacyLockActions,
 } from "../src/features/settings/ui/PrivacySettingsPage";
+import { assertLabelledControls } from "./helpers/a11y";
 
 afterEach(cleanup);
 
@@ -42,6 +43,8 @@ function renderPage(options: {
       onPatchSettings={onPatchSettings}
     />,
   );
+  // 读屏底线（渲染层断言，见 helpers/a11y.ts）：设置页控件最多，也最容易漏名字
+  assertLabelledControls(container, { buttons: 1 });
   return { container, lock, onPatchSettings };
 }
 

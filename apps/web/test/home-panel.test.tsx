@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { noPrivacyGate, privacyGateFrom } from "@menote/shared";
 import type { LocalItem } from "../src/data/db";
 import { HomePanel } from "../src/features/home/ui/HomePanel";
+import { assertLabelledControls } from "./helpers/a11y";
 
 afterEach(cleanup);
 
@@ -83,6 +84,8 @@ function renderPanel(overrides: Partial<Parameters<typeof HomePanel>[0]> = {}) {
       {...overrides}
     />,
   );
+  // 读屏底线：首页每个按钮/输入都要有可访问名字（渲染层断言，见 helpers/a11y.ts）
+  assertLabelledControls(container, { buttons: 1 });
   return {
     container,
     onNewNote,

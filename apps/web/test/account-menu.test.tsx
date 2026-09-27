@@ -11,6 +11,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountQuickMenu } from "../src/app/topbar/AccountQuickMenu";
+import { assertLabelledControls } from "./helpers/a11y";
 
 afterEach(cleanup);
 
@@ -19,7 +20,7 @@ function renderMenu(overrides: Partial<Parameters<typeof AccountQuickMenu>[0]> =
   const onLogout = vi.fn();
   const onThemeMode = vi.fn();
   const onFocusSearch = vi.fn();
-  render(
+  const { container } = render(
     <AccountQuickMenu
       user={{ username: "maxxie", role: "owner" }}
       settings={DEFAULT_USER_SETTINGS}
@@ -31,6 +32,8 @@ function renderMenu(overrides: Partial<Parameters<typeof AccountQuickMenu>[0]> =
       {...overrides}
     />,
   );
+  // 读屏底线（渲染层断言，见 helpers/a11y.ts）：账号菜单是"图标 + 文字"混排，值得钉住
+  assertLabelledControls(container, { buttons: 1 });
   return { onOpenSettings, onLogout, onThemeMode, onFocusSearch };
 }
 

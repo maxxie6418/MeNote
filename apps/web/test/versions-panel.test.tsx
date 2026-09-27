@@ -15,6 +15,7 @@ import {
 } from "../src/features/versions/ui/VersionHistoryPanel";
 import { lineDiff, versionRows } from "../src/features/versions/model";
 import type { VersionMeta } from "@menote/shared";
+import { assertLabelledControls } from "./helpers/a11y";
 
 afterEach(cleanup);
 
@@ -54,6 +55,8 @@ function renderPanel(overrides: Partial<VersionHistoryPanelProps> = {}) {
       {...overrides}
     />,
   );
+  // 读屏底线（渲染层断言，见 helpers/a11y.ts）
+  assertLabelledControls(container, { buttons: 1 });
   return { container, ...actions };
 }
 

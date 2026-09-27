@@ -1554,6 +1554,85 @@ button {
   background: var(--line-2);
 }
 
+/*
+  清单行（原型 `.tkrows` / `.tkrow` / `.tkcheck`）——v0.4.50 把清单从"卡片"改成"横向一行"。
+  看板仍然用卡片（原型也是 `.tkcard`），两种形态各有其位。
+*/
+.tasklist__rows {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+}
+
+.taskrow {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  transition: background 0.16s;
+}
+
+.taskrow + .taskrow {
+  border-top: 1px solid var(--line);
+}
+
+.taskrow:hover {
+  background: var(--panel-2);
+}
+
+/* 逾期：左侧一条红边（原型 `.tkrow.is-open` 用的是主色，这里按"逾期"语义用红） */
+.taskrow[data-overdue="true"] {
+  box-shadow: inset 2.5px 0 0 var(--red);
+}
+
+.taskrow__check {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.taskrow__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskrow[data-status="done"] .taskrow__title {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-2);
+}
+
+.taskrow__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.taskrow__status {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+
+.taskrow__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
 .tasklist__dot--todo {
   background: var(--line-2);
 }

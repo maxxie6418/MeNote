@@ -169,7 +169,7 @@ describe("筛选（纯本地）", () => {
     const { container } = renderPanel();
 
     await user.click(screen.getByRole("button", { name: "已完成" }));
-    expect(container.querySelectorAll(".taskcard")).toHaveLength(1);
+    expect(container.querySelectorAll(".taskrow")).toHaveLength(1);
     expect(container.textContent).toContain("买牛奶");
   });
 
@@ -178,7 +178,7 @@ describe("筛选（纯本地）", () => {
     const { container } = renderPanel();
 
     await user.click(screen.getByRole("button", { name: "高" }));
-    expect(container.querySelectorAll(".taskcard")).toHaveLength(1);
+    expect(container.querySelectorAll(".taskrow")).toHaveLength(1);
     expect(container.textContent).toContain("交物业费");
   });
 
@@ -187,12 +187,12 @@ describe("筛选（纯本地）", () => {
     const { container } = renderPanel();
 
     await user.click(screen.getByRole("button", { name: "已逾期" }));
-    expect(container.querySelectorAll(".taskcard")).toHaveLength(1);
+    expect(container.querySelectorAll(".taskrow")).toHaveLength(1);
     expect(container.textContent).toContain("交物业费");
 
     await user.click(screen.getByRole("button", { name: "全部" }));
     await user.click(screen.getByRole("button", { name: "未设日期" }));
-    expect(container.querySelectorAll(".taskcard")).toHaveLength(1);
+    expect(container.querySelectorAll(".taskrow")).toHaveLength(1);
     expect(container.textContent).toContain("买牛奶");
   });
 
@@ -212,12 +212,51 @@ describe("筛选（纯本地）", () => {
     });
 
     expect(screen.getByText("待办已锁定")).toBeTruthy();
-    expect(container.querySelectorAll(".taskcard")).toHaveLength(0);
+    expect(container.querySelectorAll(".taskrow")).toHaveLength(0);
     expect(screen.queryByText("交物业费")).toBeNull();
     // 计数仍显示（统计口径不变）
     expect(screen.getByText(/共 3 条/)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /解锁/ }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("清单行的结构（原型 `.tkrow`；v0.4.50 从卡片改成横向一行）", () => {
+  it("一行 = 复选框 + 标题 + 元信息 + 操作（横向一行，不是卡片）", () => {
+    const { container } = renderPanel();
+    const row = container.querySelector(".taskrow");
+    expect(row).not.toBeNull();
+    const parts = [...(row?.children ?? [])].map((child) => child.className);
+    expect(parts).toEqual([
+      "taskrow__check",
+      "taskrow__title",
+      "taskrow__meta",
+      "taskrow__actions",
+    ]);
+    // 清单用行、看板用卡片：默认（清单）视图里不该出现 `.taskcard`
+    expect(container.querySelector(".taskcard")).toBeNull();
+    // 行装在圆角容器里（原型 `.tkrows`）
+    expect(container.querySelector(".tasklist__rows .taskrow")).not.toBeNull();
+  });
+
+  it("复选框：勾上即完成（原生 input，带可访问名字）", async () => {
+    const user = userEvent.setup();
+    const { onStatusChange } = renderPanel();
+
+    await user.click(screen.getByRole("checkbox", { name: "交物业费：未完成" }));
+    expect(onStatusChange).toHaveBeenCalledWith("t1", "done");
+  });
+
+  it("行内仍**有文字状态**（禁止项 #4：状态不能只靠复选框的勾）", () => {
+    const { container } = renderPanel();
+    const status = container.querySelector(".taskrow__status");
+    expect(status?.textContent?.trim()).not.toBe("");
+  });
+
+  it("逾期行带 `data-overdue`（左侧红边靠它挂上）", () => {
+    const { container } = renderPanel();
+    // 夹具里 t1（交物业费）是已逾期那条
+    expect(card(container, "t1").getAttribute("data-overdue")).toBe("true");
   });
 });

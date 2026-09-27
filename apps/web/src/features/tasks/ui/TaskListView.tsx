@@ -7,7 +7,7 @@
 import type { LocalItem } from "../../../data/db";
 import type { TaskStatus } from "@menote/mdcore";
 import { groupTasks } from "../model";
-import { TaskCard } from "./TaskCard";
+import { TaskRow } from "./TaskRow";
 import { Icon } from "../../../app/ui/Icon";
 
 export interface TaskListViewProps {
@@ -54,16 +54,19 @@ export function TaskListView({
             {group.label}
             <span className="tasklist__count">{group.tasks.length}</span>
           </h3>
-          {group.tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              title={titles[task.id] ?? "未命名"}
-              today={today}
-              onStatusChange={onStatusChange}
-              onClearMarker={onClearMarker}
-            />
-          ))}
+          {/* 行装在一个圆角容器里（原型 `.tkrows`），行之间由 CSS 画一条细线 */}
+          <div className="tasklist__rows">
+            {group.tasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                title={titles[task.id] ?? "未命名"}
+                today={today}
+                onStatusChange={onStatusChange}
+                onClearMarker={onClearMarker}
+              />
+            ))}
+          </div>
         </section>
       ))}
     </div>

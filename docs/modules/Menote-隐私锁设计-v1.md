@@ -375,7 +375,7 @@ CREATE TABLE IF NOT EXISTS user_crypto (
 | 端点 | 用途 | 备注 |
 |---|---|---|
 | `GET /api/crypto` | 取门禁材料：`enabled` / `materials`（`kdf` / `kdf_iterations` / `kdf_salt` / `verifier` / `k_wrapped_pw` / `k_wrapped_backup`）/ `rev` / `updated_at` | 需会话鉴权；`Cache-Control: no-store`；**二进制一律 base64url**（复用 shared 的 `base64url.ts`，与登录密钥、会话令牌同一套编码——比设计初稿写的 standard base64 更省一次转换） |
-| `PUT /api/crypto` | 启用 / 改密 / 重置后写入全部字段（**服务端校验 BLOB 长度与格式版本**，不合格 422） | 后写为准，`rev + 1`；响应不回显材料之外的任何东西 |
+| `PUT /api/crypto` | 请求体 `{ materials, k? }`：**首次启用**时随请求带上明文 K（base64url，32 字节），由**服务端**用 `BACKUP_CRED_KEY` 包出 `k_wrapped_backup`；改密 / 重置时把 `GET` 拿到的旧备份包裹原样带回即可 | 后写为准，`rev + 1`；**服务端逐项校验 BLOB 长度与格式版本**（不合格 422）；首次启用不带 `k` → 422；缺机密 → 503（只影响启用与重置）。**为什么服务端参与包裹**：`BACKUP_CRED_KEY` 是 Worker 机密，浏览器拿不到也不该拿到，而"重置隐私密码"要求服务端能解出 K——内容本来就是明文存储，服务端知道 K 不改变保护边界（P1/P3） |
 | `POST /api/crypto/reset` | 忘记隐私密码：服务端用 `BACKUP_CRED_KEY` 解包 K 并返回明文 K（base64url） | `no-store`；**不得写入日志或审计正文**；浏览器用完即弃；缺机密时只让这一条路 503 |
 | `DELETE /api/crypto` | 关闭隐私锁 | **服务端校验"无隐私内容"**：`items` 中 `enc_self = 1 OR in_enc_space = 1` 的条数 > 0（**含回收站中的条目**）→ **422 `invalid`** 并返回 `detail: { reason: "privacy_content_exists", count }`（设计初稿写 409；现有错误码表里没有"状态冲突"这一类，新增错误码属 API 契约变更，留到需要时统一加，故先用 422） |
 

@@ -23,6 +23,7 @@
 | v1.8 | v0.3.9 | 2026-09-27 | **M3-5 完成 + 界面批次（一）**：`LockedPlaceholder`、`UnlockModal`（含逐次加等待）、`PrivacyCapsule`（三态与菜单）、Memo/待办占位；按授权再拆 `App.tsx`（`PrivacySlot`/`MemoView`/`TaskView`）；全套 570 通过；M3-10 标部分完成（缺 VaultNode / ItemRow / 编辑器状态栏 / 文案红线），胶囊开锁字形待确认 | deepseek-v4.1-flash |
 | v1.9 | v0.3.10 | 2026-09-27 | **M3-9 完成**：`PrivacySettingsPage`（启用/关闭/改密/重置 + 档位 + 范围）、组装层 `changePassword`/`resetPassword`（都不改 K）、`PRIVACY_MINUTES_OPTIONS` 同源常量、`SettingsPanel` 插槽、按授权拆 `app/SettingsView.tsx`；全套 584 通过；线上四条流程走查归 M3-12（需端上配好 BACKUP_CRED_KEY） | deepseek-v4.1-flash |
 | v1.10 | v0.3.11 | 2026-09-27 | **M3-6 完成**：空间节点三态、空间内文件夹树与空间内新建、笔记本树排除空间子树（修真问题）、`FolderRenameModal` 去重、按授权拆 `useVaultScope`/`useNoteCreation`/`NavPanels`；全套 593 通过 | deepseek-v4.1-flash |
+| v1.11 | v0.3.12 | 2026-09-27 | **M3-7 完成**：`enc_self` 补丁（补上白名单漏掉的一列）+ 两条服务端硬约束、`LockedDocPanel`、编辑器「更多」四动作（锁定态可加密 / 取消须先解锁）、按授权拆 `NotesPane`；全套 603 通过。**过程事故**：批量改名时误用 PowerShell 写坏一个源文件（BOM + 乱码），已重写并全仓扫描确认无其它受损 | deepseek-v4.1-flash |
 
 ---
 
@@ -97,7 +98,11 @@
 - **涉及文件**：`apps/web/src/features/privacy/ui/VaultPanel.tsx` + `VaultDocEmpty.tsx`（新增）、`apps/web/src/features/notes/*`（空间内的列表与正文复用既有双栏组件）、空间重命名（复用文件夹改名路径）、空间内新建条目（创建时置 `in_enc_space = 1`）。
 - **验收**：锁定时只显示"已锁定 + 解锁"占位且**不展开**；解锁后两层文件夹限制与服务端一致（非法目标置灰并说明）；空间内新建天然带标记；空间行竞态下不可删、不可重建第二个。
 
-### M3-7 单篇加密（含锁定态开启）
+### M3-7 单篇加密（含锁定态开启）—— ✅ **完成（2026-09-27，v0.3.12）**
+
+> 已完成：服务端 `enc_self` 补丁（白名单 + SQL 字段 + 两条硬约束：**Memo 拒绝**、**未启用隐私锁拒绝**）；客户端 `setItemEncryption`；`LockedDocPanel`（只替换正文区、**编辑器不挂载**、状态栏不显示实时大小）；`NoteWorkspace`「更多」菜单四个动作（禁用都带原因、**锁定态可加密**（Q25）、**取消加密必须先解锁**）；按授权拆出 `app/workarea/NotesPane.tsx`。
+> **未做**：分享 / 撤销接口只留位（M5 接）；「锁上此篇」后的 30 秒闪烁提示归 M3-10 的状态标识收尾。
+> **实现要点**：`enc_self` 是**设计已定**（§5.1 单篇标记走 `meta_rev` 补丁）但 M2 的白名单里漏掉的一列，本轮补上——属于补齐既定设计，不是新增 API 契约。
 
 - **涉及文件**：`apps/web/src/features/privacy/ui/LockedDocPanel`（新增，或复用 `app/workarea` 的占位件）、编辑器「更多」菜单（`apps/web/src/app/editor/*` 或 `features/notes/ui/DocStatusBar.tsx` 一带）、`features/privacy/model.ts`（逐篇已解密集合）。
 - **验收**：**锁定态**开启成功且该篇立即按锁定显示（Q25）；逐篇独立（解开 A 后 B 仍锁）；取消必须解锁；「锁上此篇」与「锁上全部单篇」行为正确；分享撤销接口留位（M5 接）。

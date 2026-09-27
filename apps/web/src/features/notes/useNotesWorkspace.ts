@@ -133,6 +133,11 @@ export interface NotesWorkspace {
   moveFolder: (folderId: string, parentId: string | null) => Promise<void>;
   /** 把条目移入文件夹（`null` = 根目录） */
   moveItemToFolder: (itemId: string, folderId: string | null) => Promise<void>;
+  /**
+   * 单篇加密开关（M3-7）：`true` = 给这一篇加锁（**锁定态也能开**，Q25），
+   * `false` = 取消加密（调用方必须先确认该篇已解锁）。
+   */
+  setItemEncryption: (itemId: string, encrypted: boolean) => Promise<void>;
   /** 置顶 / 收藏：都走元数据补丁（服务端白名单已含这两列） */
   togglePinned: (itemId: string) => Promise<void>;
   toggleStarred: (itemId: string) => Promise<void>;
@@ -457,7 +462,11 @@ export function useNotesWorkspace(
     [folders, onLocalWrite, refresh],
   );
 
-  const patchItem = useCallback(    async (itemId: string, patch: Partial<Pick<LocalItem, "folder_id" | "pinned" | "starred">>) => {
+  const patchItem = useCallback(
+    async (
+      itemId: string,
+      patch: Partial<Pick<LocalItem, "folder_id" | "pinned" | "starred" | "enc_self">>,
+    ) => {
       const item = await getLocalItem(itemId);
       if (!item) return;
       await db.items.update(itemId, { ...patch, updated_at: Date.now() });
@@ -466,6 +475,24 @@ export function useNotesWorkspace(
       onLocalWrite?.();
     },
     [onLocalWrite, refresh],
+  );
+
+  /**
+   * 单篇加密开关（M3-7）。三条约束在这里挡（服务端同样挡，客户端只是提前给反馈）：
+   * - **Memo 不做单篇**；
+   * - **开启前必须已启用隐私锁**（否则没有门禁材料，锁上就再也解不开）；
+   * - **取消必须先解锁**——取消加密意味着要处理明文，不能让"锁定态下悄悄解密"发生。
+   */
+  const setItemEncryption = useCallback(
+    async (itemId: string, encrypted: boolean) => {
+      const item = await getLocalItem(itemId);
+      if (!item) return;
+      if (item.type === "memo") {
+        throw new Error("Memo 不支持单篇加密");
+      }
+      await patchItem(itemId, { enc_self: encrypted ? 1 : 0 });
+    },
+    [patchItem],
   );
 
   const moveItemToFolder = useCallback(
@@ -541,6 +568,7 @@ export function useNotesWorkspace(
       moveItemToFolder,
       togglePinned,
       toggleStarred,
+      setItemEncryption,
       remoteChanged,
       conflictCopy,
       openConflictCopy,
@@ -586,6 +614,7 @@ export function useNotesWorkspace(
       moveFolder,
       selected,
       selectedId,
+      setItemEncryption,
       snapshot,
       summaries,
       tags,

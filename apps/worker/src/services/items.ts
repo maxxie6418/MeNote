@@ -22,6 +22,7 @@ import {
   SQL_SELECT_FOLDER_BY_ID,
   SQL_SELECT_ITEM_BODY,
   SQL_SELECT_ITEM_META_BASE,
+  SQL_SELECT_USER_CRYPTO,
   SQL_SELECT_ITEM_REV,
   SQL_UPDATE_ITEM_BODY,
   SQL_UPSERT_ITEM_BODY,
@@ -272,6 +273,30 @@ export async function patchItemMeta(
   if (patch.starred !== undefined) {
     fields.push("starred");
     values.push(patch.starred);
+  }
+  if (patch.enc_self !== undefined) {
+    /**
+     * 单篇加密（M3-7）。两条硬约束都在这里挡：
+     * - **Memo 不做单篇**（Memo 在隐私范围内时的门禁由隐私锁负责；表上也有 CHECK 兜底）；
+     * - **必须先启用隐私锁**：没有门禁材料时设 `enc_self = 1`，等于把内容"锁在一个没有门的房间里"，
+     *   客户端事后无法解锁。所以宁可 422 也不接受。
+     */
+    if (patch.enc_self === 1) {
+      if (base.type === "memo") {
+        throw new DomainError("invalid", "Memo 不支持单篇加密");
+      }
+      const crypto = await db
+        .prepare(SQL_SELECT_USER_CRYPTO)
+        .bind(userId)
+        .first<{ user_id: string }>();
+      if (!crypto) {
+        throw new DomainError("invalid", "还没有启用隐私锁，无法给单篇加密", {
+          reason: "privacy_not_enabled",
+        });
+      }
+    }
+    fields.push("enc_self");
+    values.push(patch.enc_self);
   }
 
   if (fields.length === 0) {

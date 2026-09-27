@@ -9,8 +9,6 @@ import { outboxCount } from "../data/db";
 import { createSyncEngine, type SyncEngine } from "../data/sync";
 import { useAuth } from "../features/auth/model";
 import { AuthLoading, AuthScreens } from "./AuthScreens";
-import { NoteList } from "../features/notes/ui/NoteList";
-import { NoteWorkspace } from "../features/notes/ui/NoteWorkspace";
 import { useNotesWorkspace, type NotesWorkspace } from "../features/notes/useNotesWorkspace";
 import { changeLoginPassword } from "../features/settings/model";
 import { PrivacySettingsPage } from "../features/settings/ui/PrivacySettingsPage";
@@ -29,8 +27,8 @@ import { InsecureContextBanner } from "./ui/InsecureContextBanner";
 import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnvironment";
 import { ToastHost, pushToast } from "./ui/Toast";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
-import { TwoPane } from "./workarea/TwoPane";
 import { HomeView } from "./workarea/HomeView";
+import { NotesPane } from "./workarea/NotesPane";
 import { MemoView } from "./workarea/MemoView";
 import { TaskView } from "./workarea/TaskView";
 import { SearchView } from "./workarea/SearchView";
@@ -530,59 +528,29 @@ export default function App() {
             onAdd={focusComposer}
           />
         ) : (
-          <TwoPane
-            list={
-              <NoteList
-                items={workspace.items}
-                title={workspace.viewTitle}
-                selectedId={workspace.selectedId}
-                loading={workspace.loading}
-                summaries={workspace.summaries}
-                folders={workspace.folders}
-                onSelect={(id) => {
-                  void workspace.open(id);
-                }}
-                onNewNote={() => {
-                  void workspace.createNote();
-                }}
-                onMove={(id, folderId) => {
-                  void workspace.moveItemToFolder(id, folderId);
-                }}
-                onTogglePinned={(id) => {
-                  void workspace.togglePinned(id);
-                }}
-                onToggleStarred={(id) => {
-                  void workspace.toggleStarred(id);
-                }}
-              />
-            }
-            doc={
-              /* key 用条目 id：切换条目必须重挂载正文区，否则新条目会沿用上一篇的文本 */
-              <NoteWorkspace
-                key={workspace.selectedId ?? "none"}
-                item={workspace.selected}
-                initialBody={workspace.initialBody}
-                snapshot={workspace.snapshot}
-                initialMode={userSettings.settings.editor_mode}
-                remoteChanged={workspace.remoteChanged}
-                conflict={workspace.conflictCopy}
-                onOpenConflictCopy={() => {
-                  void workspace.openConflictCopy();
-                }}
-                onResolveConflict={(keep) => {
-                  void workspace.resolveConflict(keep).then(() => {
-                    pushToast(keep === "mine" ? "已保留你的版本" : "已保留服务端版本", "success");
-                  });
-                }}
-                onReload={() => {
-                  void workspace.reloadSelected();
-                }}
-                onInput={workspace.input}
-                onTitleChange={(title) => {
-                  void workspace.changeTitle(title);
-                }}
-              />
-            }
+          <NotesPane
+            workspace={workspace}
+            editorMode={userSettings.settings.editor_mode}
+            encryption={{
+              enabled: privacy.enabled,
+              gate: privacy.gate,
+              unlockedCount: privacy.runtime.unlockedItems.size,
+              onRequestUnlock: requestUnlock,
+              onLockItem: privacy.lockItem,
+              onLockAllItems: privacy.lockAllItems,
+            }}
+            onToggleEncryption={(itemId, next) => {
+              void workspace
+                .setItemEncryption(itemId, next)
+                .then(() => pushToast(next ? "已加密此篇" : "已取消加密", "success"))
+                .catch((error: unknown) => {
+                  pushToast(
+                    error instanceof Error ? error.message : "操作失败，请稍后重试",
+                    "error",
+                  );
+                });
+            }}
+            onToast={(message, tone) => pushToast(message, tone)}
           />
         )}
       </AppShell>

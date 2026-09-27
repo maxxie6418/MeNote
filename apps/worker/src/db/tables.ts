@@ -128,7 +128,7 @@ export const SQL_SELECT_ITEM_META_BASE =
   "SELECT type, meta_rev FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL";
 
 /** 元数据补丁允许更新的列（白名单；列名一律来自常量，绝不来自请求） */
-export type ItemMetaField = "title" | "folder_id" | "tags" | "pinned" | "starred";
+export type ItemMetaField = "title" | "folder_id" | "tags" | "pinned" | "starred" | "enc_self";
 
 /** 组装元数据补丁语句：`SET` 子句由白名单列拼出（服务层不写 SQL 字面量） */
 export function buildUpdateItemMeta(fields: readonly ItemMetaField[]): string {

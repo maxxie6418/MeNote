@@ -6,6 +6,8 @@
  */
 import { Suspense, lazy, useState } from "react";
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
+import { DropdownMenu } from "../../../app/ui/Menu";
+import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
@@ -44,6 +46,22 @@ export interface NoteWorkspaceProps {
   onReload?: () => void;
   onInput: (text: string) => void;
   onTitleChange: (title: string) => void;
+  /**
+   * 单篇加密（M3-7）。`enabled` = 隐私锁已启用（没启用就不提供加密入口，并说明原因）；
+   * `encrypted` = 这一篇已加密；`unlocked` = 本次浏览器会话里已解密。
+   * 锁定时正文区换成 `LockedDocPanel`，编辑器**根本不挂载**。
+   */
+  encryption?: {
+    enabled: boolean;
+    encrypted: boolean;
+    unlocked: boolean;
+    /** 本次已解密的单篇数量（用于「锁上全部单篇」是否可用） */
+    unlockedCount: number;
+    onUnlock: () => void;
+    onLock: () => void;
+    onToggle: (encrypted: boolean) => void;
+    onLockAll: () => void;
+  };
 }
 
 export function NoteWorkspace({
@@ -58,6 +76,7 @@ export function NoteWorkspace({
   onReload,
   onInput,
   onTitleChange,
+  encryption,
 }: NoteWorkspaceProps) {
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
@@ -70,6 +89,9 @@ export function NoteWorkspace({
       </div>
     );
   }
+
+  /** 加密且本次未解密：正文区换占位，编辑器不挂载 */
+  const bodyLocked = encryption?.encrypted === true && !encryption.unlocked;
 
   function handleInput(text: string): void {
     setPreviewSource(text);
@@ -138,17 +160,76 @@ export function NoteWorkspace({
               type="button"
               className="segmented__item"
               aria-pressed={mode === candidate}
+              disabled={bodyLocked}
+              title={bodyLocked ? "解锁后才能查看或编辑正文" : undefined}
               onClick={() => setMode(candidate)}
             >
               {MODE_LABEL[candidate]}
             </button>
           ))}
         </div>
+
+        {encryption ? (
+          <DropdownMenu
+            label="更多"
+            align="right"
+            trigger={
+              <span className="pill" title="加密与锁定">
+                更多
+              </span>
+            }
+            items={[
+              {
+                id: "encrypt",
+                label: "加密此篇",
+                icon: "lock",
+                disabled: !encryption.enabled || encryption.encrypted,
+                title: !encryption.enabled
+                  ? "先在「设置 › 隐私锁」启用隐私锁"
+                  : encryption.encrypted
+                    ? "这一篇已经加密"
+                    : undefined,
+                onSelect: () => encryption.onToggle(true),
+              },
+              {
+                id: "decrypt",
+                label: "取消加密",
+                icon: "lock",
+                disabled: !encryption.encrypted || !encryption.unlocked,
+                title: !encryption.encrypted
+                  ? "这一篇没有加密"
+                  : !encryption.unlocked
+                    ? "先解锁这一篇，才能取消加密"
+                    : undefined,
+                onSelect: () => encryption.onToggle(false),
+              },
+              {
+                id: "lock-item",
+                label: "锁上此篇",
+                icon: "lock",
+                disabled: !encryption.encrypted || !encryption.unlocked,
+                title: encryption.unlocked ? undefined : "这一篇当前是锁着的",
+                onSelect: () => encryption.onLock(),
+              },
+              {
+                id: "lock-all",
+                label: "锁上全部单篇",
+                icon: "lock",
+                disabled: encryption.unlockedCount === 0,
+                title: encryption.unlockedCount === 0 ? "当前没有已解密的单篇" : undefined,
+                onSelect: () => encryption.onLockAll(),
+              },
+            ]}
+          />
+        ) : null}
       </div>
 
       <div className="docpane__body">
-        <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
-          {mode === "split" ? (
+        {bodyLocked && encryption ? (
+          <LockedDocPanel onUnlock={encryption.onUnlock} />
+        ) : (
+          <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
+            {mode === "split" ? (
             <div className="doc-split">
               <div className="doc-split__pane">
                 {/*
@@ -181,10 +262,25 @@ export function NoteWorkspace({
               <MarkdownPreview source={previewSource} />
             </div>
           )}
-        </Suspense>
+          </Suspense>
+        )}
       </div>
 
-      {snapshot ? <DocStatusBar snapshot={snapshot} /> : null}
+      {snapshot && !bodyLocked ? (
+        <DocStatusBar
+          snapshot={snapshot}
+          encryption={
+            encryption
+              ? { encrypted: encryption.encrypted, unlocked: encryption.unlocked }
+              : undefined
+          }
+        />
+      ) : null}
+      {bodyLocked ? (
+        <div className="doc-status" role="status">
+          <span className="pill pill--err">已加密</span>
+        </div>
+      ) : null}
     </div>
   );
 }

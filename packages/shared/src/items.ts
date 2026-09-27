@@ -121,6 +121,12 @@ export const ItemMetaPatchSchema = v.object({
   tags: v.optional(v.array(v.string())),
   pinned: v.optional(FlagSchema),
   starred: v.optional(FlagSchema),
+  /**
+   * 单篇加密标记（M3-7；《隐私锁设计》§5.1）：`1` = 这一篇需要逐篇解锁。
+   * 服务端只放行两件事：**不能是 Memo**（Memo 在范围内的处理走隐私锁，不做单篇），
+   * 以及**必须先启用隐私锁**（否则就是"给一个没有门的房间上锁"）。
+   */
+  enc_self: v.optional(FlagSchema),
 });
 export type ItemMetaPatch = v.InferOutput<typeof ItemMetaPatchSchema>;
 

@@ -2,7 +2,7 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.4 |
+| 文档版本 | v1.5 |
 | 文档状态 | 生效（用户确认 2026-09-26：设计稿生效、登出不清除本机缓存、Valibot 引入、wiki 同步项 a–f 获批准） |
 | 目的和适用范围 | 解掉 M1 的硬前置：`docs/modules/` 原先没有同步专项设计。本文定 M1 起可实现的同步协议、游标语义、outbox 与冲突规则，并明确 M1 / M2 / M4 的边界 |
 | 权威级别 | 模块规则（同步与离线）。需求与接口形态以 `wiki/Menote-设计文档-v7.4.md` §15 与 `wiki/Menote-项目架构-v1.md` §6 为准；本文只在两处**已废弃内容**上给出净化后的口径（§2） |
@@ -17,6 +17,7 @@
 | v1.2 | v0.1.6 | 2026-09-26 | M1-5 落地回写：新增 §3.5（文件夹接口、应答形状、新建状态码、服务端不重算哈希的取舍、413 超限、正文行缺失的 upsert 分支） | deepseek-v4.1-flash |
 | v1.3 | v0.1.7 | 2026-09-26 | M1-6 落地回写：`full_resync` 条件收紧为 `cursor > 0` 且 `< tombstone_floor`（否则游标 0 会死循环）；§3.3 补"某类没有新行时不参与 `next_cursor` 的 min"（实测出现过的原地打转问题） | deepseek-v4.1-flash |
 | v1.4 | v0.1.9 | 2026-09-26 | M1-8 落地回写：新增 §4.8（草稿清理顺序、`full_resync` 只清已同步内容、失败列表哨兵、元数据冲突胜者、冲突副本、退避上限、无 Web Locks 的退化） | deepseek-v4.1-flash |
+| v1.5 | v0.5.0 | 2026-09-27 | **M4 落地回写**（M4 设计 §九 第 5 行）：①**§3.2** 载荷新增第三类 `tombstones`（**可选**，缺省 `[]`——部署窗口兼容，实现时踩过一次 `undefined.length`），写明客户端要按 `entity`/`entity_id` 硬删六处并清 outbox 的待上传 op；`full_resync` 在 M4 起是**真条件**（墓碑 180 天后清理推进 `tombstone_floor`）；②**§3.3** 的 `next_cursor` 从"两类末端取 min"改为**三类**（items / folders / **tombstones**）并写明漏掉墓碑会导致"已永久删除的条目在某台设备上永远残留"；补墓碑写入幂等与 M4 批量删除的 200 行上限依据（`PERMANENT_DELETE_BATCH = 10`，共享一个 `sync_seq`）；③**§五** 的 M4 边界表逐行核对：墓碑与永久删除 ✅、附件元数据同步与版本元数据**只做到一半**（同步载荷不含 `attachments`；`item_versions` 无 `sync_seq`、按需拉取；`pre_conflict` 封存路径未接）——如实标注，避免后人以为漏做 | deepseek-v4.1-flash |
 
 ---
 
@@ -65,6 +66,10 @@
     // items 表除 user_id 外的全部列 + 计算字段 deleted(= deleted_at != null)
   ],
   "folders": [ /* folders 表除 user_id 外的全部列 */ ],
+  "user_settings": { /* 可选：用户级设置，不参与游标 */ },
+  "tombstones": [
+    // 【M4 新增】永久删除的墓碑：entity / entity_id / sync_seq / deleted_at
+  ],
   "next_cursor": 412,
   "has_more": false,
   "full_resync": false
@@ -74,19 +79,24 @@
 - **只回元数据**，保证首屏只需"元数据增量 + 当前条目"（架构 §6.1 设计要点）。
 - 每类**合计最多 200 行**（M1 具体为 items ≤200、folders ≤200），超出置 `has_more: true`。
 - 删除信号：软删行的 `deleted_at` 随增量下发，客户端据此标记本地删除。**M1 不需要墓碑表**——墓碑只为"行被物理删除"服务，而 M1 没有永久删除（见《数据模型与迁移设计》§3.4）。
-- `full_resync: true` 的条件：**`cursor > 0` 且 `cursor < users.tombstone_floor`**。M1 该列恒为 0，所以 M1 永不触发；客户端**必须**实现该分支（收到后清空本地条目/文件夹与正文缓存，从 cursor=0 重建，outbox 中未上传的改动先导出为本地备份文件）。
+- **【M4 已落地】`tombstones` 是第三类载荷**：永久删除（M4-6）会**物理删掉** `items` / `folders` 行，增量同步因此收不到任何"已删除"信号，本地会残留条目——墓碑就是为这件事存在的。
+  - `tombstones` **可选**（缺省按 `[]` 处理）：部署窗口内旧服务端不返回该字段时，客户端不能因此崩（实现时正是这里踩过一次——`applyTombstones` 一开始直接读 `.length`，旧响应下是 `undefined`）。
+  - 客户端处理：按 `entity` 与 `entity_id` 本地硬删（items/folders 连同正文、草稿、索引、冲突与附件元数据），**且要清掉该行尚在 outbox 里的待上传 op**——条目已经没了，那条 op 再发只会 404。
+  - 墓碑**也参与游标推进**（见 §3.3）。
+- `full_resync: true` 的条件：**`cursor > 0` 且 `cursor < users.tombstone_floor`**。M1 该列恒为 0，所以 M1 永不触发；**M4 起是真条件**（墓碑保留 180 天后清理，清理点推进 `tombstone_floor`）。客户端**必须**实现该分支（收到后清空本地条目/文件夹与正文缓存，从 cursor=0 重建，outbox 中未上传的改动先导出为本地备份文件）。
   - 为什么必须排除 `cursor = 0`：0 本身就是"从头拉"，若 `0 < floor` 也算 `full_resync`，客户端会被永久钉在"重建"状态（拉 0 → 又是 full_resync）——**死循环**。服务端此时返回 `next_cursor: 0`，明确让客户端从零开始重建。
 
 ### 3.3 游标与分页（易错点，必须按此实现）
 
 - 游标 = `sync_seq` 整数值，**items 与 folders 共用同一序列**，客户端只推进一个游标（架构 §6.1 设计要点）。
 - **约束：一个逻辑写操作影响的所有行共享同一个 `sync_seq`。**
-- **分页不得把同一 `sync_seq` 的组切开**：每类各取 ≤200 行后若被截断，把末尾与最后一条同 `sync_seq` 的行整组回退，得到本类的末端序号；**`next_cursor` 取两类末端序号的较小值（`min(items 末端, folders 末端)`）**。
+- **分页不得把同一 `sync_seq` 的组切开**：每类各取 ≤200 行后若被截断，把末尾与最后一条同 `sync_seq` 的行整组回退，得到本类的末端序号；**`next_cursor` 取各类末端序号的较小值**。
+  - **【M4 已落地】"各类"从两类变成三类**：`min(items 末端, folders 末端, tombstones 末端)`。墓碑是第三类独立查询，理由与 folders 完全相同——**漏掉它就会出现"墓碑落在 items 与 folders 之间的区间、本次没被取回、下次查询条件 `sync_seq > 游标` 直接跳过"**的永久丢失；而墓碑丢了就意味着一台设备永远留着一条已永久删除的条目。
   - 为什么必须取 min：items 与 folders 是两次独立查询，截断点不同。若取 items 的末端作为游标，folders 落在两者之间区间、而本次没被取回的行会被**永久跳过**（下次查询条件变成 `sync_seq > 该游标`）。
   - **某类本次没有新行时，它不参与 min**（实现上取 `+∞`）。否则"空的那一类"末端会被算成当前游标，`min` 直接把游标拖回原地，客户端永远推进不了（M1 实测踩到过）。
-  - 只推进到 min 的代价是下一轮会重复返回一部分行——upsert 按 `id` 幂等，重复无害。
-  - 若某一组本身就超过 200 行（M1/M2 不可能：单次逻辑写只影响 1 行；M4 的批量标记届时把上限写进该接口的约束），返回 **413 `too_large`**（架构 §4.3 的错误码表里 413 才是 `too_large`，422 是 `invalid`）而非死循环。
-- 查询形状：`SELECT ... FROM items WHERE user_id = ? AND sync_seq > ? ORDER BY sync_seq LIMIT 201`（多取 1 条判 `has_more`）。
+  - 只推进到 min 的代价是下一轮会重复返回一部分行——upsert 按 `id` 幂等，重复无害；**墓碑的写入也是幂等的**（`INSERT ... ON CONFLICT DO UPDATE`），重复下发不会出错。
+  - 若某一组本身就超过 200 行（M1/M2 不可能：单次逻辑写只影响 1 行；**M4 的批量永久删除把上限写进了接口约束**：`PERMANENT_DELETE_BATCH = 10`，一次逻辑写最多 10 条条目 + 各自版本，共用**一个** `sync_seq`，所以仍远小于 200），返回 **413 `too_large`**（架构 §4.3 的错误码表里 413 才是 `too_large`，422 是 `invalid`）而非死循环。
+- 查询形状：`SELECT ... FROM items WHERE user_id = ? AND sync_seq > ? ORDER BY sync_seq LIMIT 201`（多取 1 条判 `has_more`）；墓碑同理（`FROM tombstones`）。
 
 ### 3.4 服务端写入：条件 batch 模式
 
@@ -250,7 +260,6 @@ syncState.cursor ← cursor
 ---
 
 ## 五、M1 / M2 / M4 边界（避免范围蔓延）
-
 | 能力 | M1 | M2 | M4 |
 |---|---|---|---|
 | 拉取 items + folders 元数据 | ✅ | | |
@@ -263,6 +272,11 @@ syncState.cursor ← cursor
 | 墓碑、`full_resync` 真实触发、永久删除 | ❌ | ❌ | ✅ |
 | 附件元数据、版本元数据同步、封存 conflict 版本 | ❌ | ❌ | ✅ |
 | "全部离线缓存"开关 | ❌ | ✅（设置 › 通用） | |
+
+**【M4 已实现 · 逐行核对】** 上表 M4 列两行的落地情况（实现回写，2026-09-27）：
+
+- **墓碑、`full_resync` 真实触发、永久删除**：✅ 已实现——删除走"软删 → 回收站 → 永久删除"三段；永久删除在**一个 D1 batch** 内完成（删条目 + 正文 + 引用 + 版本 + 写墓碑，**共享一个 `sync_seq`**）；客户端 `applyTombstones` 按 `entity`/`entity_id` 硬删六处（条目、正文、草稿、搜索索引、冲突、附件元数据）并清掉 outbox 里对应的待上传 op。**注意与本文 §3.2 的一处差异**：实现时 `tombstones` 是**可选字段**（缺省 `[]`），这是为部署窗口内"旧服务端无该字段"留的兼容；文档原文没写这一点，实现踩过一次（客户端直接读 `.length` 拿到 `undefined`）。
+- **附件元数据、版本元数据同步、封存 conflict 版本**：**部分实现**——①**附件元数据**：服务端有 `attachments` 表与 `sync_seq`，但 **M4 的同步载荷里没有下发 `attachments` 这一类**（客户端靠本地 `attachmentsMeta` + 正文里的引用工作）；②**版本元数据同步**：`item_versions` 表**没有 `sync_seq`**、也**不进同步载荷**——版本列表是按需 `GET /api/items/:id/versions` 拉的（版本是"看历史"的读路径，不是"设备间必须一致"的状态）；③**封存 conflict 版本**：`pre_conflict` 这个 `reason` 已在类型与中文映射里就位，但**M4 没有生成它的代码路径**（冲突副本的生成在 M2 的 `data/sync/` 里，未接封存）。三处都属"计划里写了、实现时按范围收紧"，在此如实标注，避免后人对账时以为漏做。
 
 ---
 

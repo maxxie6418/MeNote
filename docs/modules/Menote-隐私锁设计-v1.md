@@ -233,7 +233,7 @@
 
 - **I1**：MCP 可见集合 ＝ 令牌范围 ∩ 非隐私内容 ∩（Memo 需勾选"包含 Memo"）∩ 非回收站，且**与隐私锁是否解锁无关**。
 - **I2**：界面矩阵与 MCP 矩阵**不联动**：改范围配置不动令牌，改令牌不动范围。
-- **I3**：隐私内容对 MCP 永久不可见是**硬约束**——服务端所有面向 MCP 的查询必须带 `enc_self = 0 AND in_enc_space = 0`，该判定**集中一处**，并有集成测试覆盖（现有两处重复实现见待写的第三章）。
+- **I3**：隐私内容对 MCP 永久不可见是**硬约束**——服务端所有面向 MCP 的查询必须带 `enc_self = 0 AND in_enc_space = 0`，该判定**集中一处**（`apps/worker/src/db/privacy.ts` 的 `PRIVACY_EXCLUDE_SQL` / `privacyExcludeSql(alias)`，2026-09-27 起服务端搜索已改用它），并有集成测试覆盖。
 - **I4**：MCP 返回的条目数不含隐私内容；空间节点不出现在 MCP 的文件夹树里。
 - **I5**：服务端兜底搜索 `GET /api/search` **暂时也恒排除**隐私内容——不新增"是否解锁"参数，门禁判定只留前端一处。代价是"本地索引未建完"的兜底场景里隐私内容召回略低（界面已有索引提示）。**M3 实测本地索引召回后再定是否加参数**【待确认·实测后定】。
 
@@ -322,8 +322,8 @@ export function isMemoVisible(gate: PrivacyGate): boolean;
 
 ### 3.4 服务端一处（收敛，不加参数）
 
-- 新增 `apps/worker/src/db/privacy.ts`，导出**唯一**的 SQL 片段常量：`PRIVACY_EXCLUDE_SQL = "enc_self = 0 AND in_enc_space = 0"`。现有的 `apps/worker/src/services/search.ts` 里的字面量改为引用它；M6 的 MCP 查询、M5 的分享与导出校验同样引用它。
-- 配一条断言测试：服务端搜索语句里必须出现该常量（防止有人手写字面量后漂移）。
+- 新增 `apps/worker/src/db/privacy.ts`，导出**唯一**的 SQL 片段：`privacyExcludeSql(alias = "i")` 与默认别名下的常量 `PRIVACY_EXCLUDE_SQL`（`i.enc_self = 0 AND i.in_enc_space = 0`；带别名是为了能直接拼进 `items` 查询，别名可由调用方指定）。现有的 `apps/worker/src/services/search.ts` 里的字面量改为引用它；M6 的 MCP 查询、M5 的分享与导出校验同样引用它。
+- 配一条断言测试：服务端搜索语句里必须出现该常量（防止有人手写字面量后漂移）。**已落地**（2026-09-27，`apps/worker/test/search.test.ts`）。
 - **I5 之下 M3 的服务端搜索行为不变**（仍恒排除隐私内容）——本次只是把两份实现收敛成一处。
 
 ### 3.5 搜索索引的改造（本次唯一要动地基的地方）
@@ -374,10 +374,10 @@ CREATE TABLE IF NOT EXISTS user_crypto (
 
 | 端点 | 用途 | 备注 |
 |---|---|---|
-| `GET /api/crypto` | 取门禁材料：`enabled` / `kdf` / `iterations` / `salt` / `verifier` / 两个包裹 / `rev`（二进制一律 base64） | 需会话鉴权；`Cache-Control: no-store` |
-| `PUT /api/crypto` | 启用 / 改密 / 重置后写入全部字段 | 后写为准，`rev + 1`；响应不回显材料 |
-| `POST /api/crypto/reset` | 忘记隐私密码：服务端用 `BACKUP_CRED_KEY` 解包 K 并返回明文 K（base64） | `no-store`；**不得写入日志或审计正文**；浏览器用完即弃 |
-| `DELETE /api/crypto` | 关闭隐私锁 | **服务端校验"无隐私内容"**：`items` 中 `enc_self = 1 OR in_enc_space = 1` 的条数 > 0（**含回收站中的条目**）→ 409 并返回原因 |
+| `GET /api/crypto` | 取门禁材料：`enabled` / `materials`（`kdf` / `kdf_iterations` / `kdf_salt` / `verifier` / `k_wrapped_pw` / `k_wrapped_backup`）/ `rev` / `updated_at` | 需会话鉴权；`Cache-Control: no-store`；**二进制一律 base64url**（复用 shared 的 `base64url.ts`，与登录密钥、会话令牌同一套编码——比设计初稿写的 standard base64 更省一次转换） |
+| `PUT /api/crypto` | 启用 / 改密 / 重置后写入全部字段（**服务端校验 BLOB 长度与格式版本**，不合格 422） | 后写为准，`rev + 1`；响应不回显材料之外的任何东西 |
+| `POST /api/crypto/reset` | 忘记隐私密码：服务端用 `BACKUP_CRED_KEY` 解包 K 并返回明文 K（base64url） | `no-store`；**不得写入日志或审计正文**；浏览器用完即弃；缺机密时只让这一条路 503 |
+| `DELETE /api/crypto` | 关闭隐私锁 | **服务端校验"无隐私内容"**：`items` 中 `enc_self = 1 OR in_enc_space = 1` 的条数 > 0（**含回收站中的条目**）→ **422 `invalid`** 并返回 `detail: { reason: "privacy_content_exists", count }`（设计初稿写 409；现有错误码表里没有"状态冲突"这一类，新增错误码属 API 契约变更，留到需要时统一加，故先用 422） |
 
 ### 4.3 新增 Worker 机密（**属"先确认再动"区，需你点头**）
 

@@ -15,6 +15,7 @@
 | v1 | v0.3.1 | 2026-09-27 | 初稿：范围边界、前置条件、12 步子计划（含先稿后码的界面稿）、风险与交付物 | deepseek-v4.1-flash |
 | v1.1 | v0.3.2 | 2026-09-27 | **M3-1 完成**（《M3 界面稿》v1.1 经用户确认）；状态由「草案」改「执行中」；开工前置两项打勾 | deepseek-v4.1-flash |
 | v1.2 | v0.3.3 | 2026-09-27 | **M3-2 完成**：`packages/shared/src/privacy.ts` 判定契约 + `privacy` 设置契约 + 22 个用例（全套 487 通过）；用户已授权 M3/M4 一并执行、允许 wiki 回写与前端接线层拆分 | deepseek-v4.1-flash |
+| v1.3 | v0.3.4 | 2026-09-27 | **M3-3 完成**：迁移 0003 `user_crypto`、crypto 四端点、`ensureEncSpace`（注册/登录补建）、`db/privacy.ts` 过滤常量、`BACKUP_CRED_KEY` 可选绑定；新增 16 个用例并把 7 个既有用例按"每个账号自带空间行"修正（全套 511 通过） | deepseek-v4.1-flash |
 
 ---
 
@@ -61,7 +62,7 @@
 - **涉及文件**：`packages/shared/src/privacy.ts`（新增）、`packages/shared/src/settings.ts`（增 `privacy` 四字段 + 默认值；`QUICK_MENU_FEATURES` 的 `lock.pendingStep` → `null`）、`packages/shared/src/index.ts`（导出）、`packages/shared/test/privacy.test.ts`（新增）。
 - **验收**：设计 §3.2 的判定规则表**逐行有用例**（六类内容 × 列表/正文/标题搜索/正文搜索）；设置 schema 对缺字段填默认值（部署窗口兼容）；`pnpm --filter @menote/shared test` 通过。
 
-### M3-3 服务端：迁移 0003 + crypto 端点 + 空间行补建 + 机密接线
+### M3-3 服务端：迁移 0003 + crypto 端点 + 空间行补建 + 机密接线 —— ✅ **完成（2026-09-27，v0.3.4）**
 
 - **涉及文件**：`apps/worker/src/db/migrations/0003_user_crypto.ts`（新增）、`apps/worker/src/db/selfheal.ts`（注册迁移 + `REQUIRED_TABLES`）、`apps/worker/src/db/tables.ts`（crypto 语句常量）、`apps/worker/src/db/privacy.ts`（`PRIVACY_EXCLUDE_SQL` 常量）、`apps/worker/src/services/crypto.ts` + `routes/crypto.ts`（新增，四点端点）、`apps/worker/src/services/folders.ts`（`ensureEncSpace`）、`apps/worker/src/routes/auth.ts`（注册与登录两处调用）、`apps/worker/src/services/search.ts`（改用常量）、`apps/worker/src/types.ts`（`BACKUP_CRED_KEY`）、`apps/worker/src/index.ts`（挂子路由）、`.dev.vars.example`、`apps/worker/vitest.config.ts`。
 - **验收**：空库首个请求后 `user_crypto` 出现在 `sqlite_master`；迁移幂等（连调两次版本不变）；`GET/PUT/DELETE /api/crypto` 与 `POST /api/crypto/reset` 各自有用例（含 `DELETE` 在"有隐私内容"时 409、`reset` 用 `BACKUP_CRED_KEY` 解包成功）；`ensureEncSpace` 并发两次只留一行、M1/M2 存量账号登录后补建；搜索语句断言包含 `PRIVACY_EXCLUDE_SQL`。

@@ -9,7 +9,6 @@
  * 永久删除按条件删、稀疏化按条件删、墓碑按 floor 推进，重复执行都不会更糟。
  */
 import {
-  ATTACHMENT_ORPHAN_RETENTION_DAYS,
   DAY_MS,
   DEFAULT_VERSION_TRASH_SETTINGS,
   PERMANENT_DELETE_BATCH,
@@ -19,6 +18,7 @@ import {
 } from "@menote/shared";
 import { SQL_DELETE_OLD_TOMBSTONES, SQL_SELECT_MIN_TOMBSTONE_SEQ, SQL_UPSERT_APP_META } from "../db/tables";
 import { permanentDeleteItems } from "../services/trash";
+import { sweepOrphanedAttachments } from "../services/attachments";
 import { sweepVersions } from "../services/version-retention";
 import type { StorageEnv } from "../types";
 
@@ -237,6 +237,12 @@ function retentionDaysOf(json: string | null): number {
  * - **标孤儿**：没有任何引用的附件置 `orphaned_at`（注意"回收站里的条目"仍算引用，
  *   所以只按 `attachment_refs` 判定）；
  * - **到期删除**：`orphaned_at` 超过 30 天的附件，`r2_key` 登记 GC（reason=`orphan`）后删行。
+ *
+ * **【2026-09-27 修】这一段原本是内联 SQL，与服务层的 `sweepOrphanedAttachments` 是两份实现，
+ * 而且两边的 GC 登记时间不一致**：这里曾把 `due_at` 写成 `now + 30 天`（像是把"标孤儿"的
+ * 等待期又抄了一遍），结果**对象在行删掉之后还要在 R2 里多躺 30 天**；服务层与手动 GC
+ * （`POST /api/attachments/gc`）用的都是 `due_at = now`。现在统一走服务层那一份——
+ * 一处实现、一处口径，也顺手消掉 30 天的存储泄漏。
  */
 async function handleAttachmentOrphans(db: D1Database, now: number): Promise<Record<string, number | string>> {
   const marked = await db
@@ -248,25 +254,9 @@ async function handleAttachmentOrphans(db: D1Database, now: number): Promise<Rec
     .bind(now, now)
     .run();
 
-  const dueAt = now + ATTACHMENT_ORPHAN_RETENTION_DAYS * DAY_MS;
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO r2_gc_queue (r2_key, user_id, reason, due_at, created_at)
-       SELECT r2_key, user_id, 'orphan', ?, ? FROM attachments
-       WHERE orphaned_at IS NOT NULL AND orphaned_at + (? * ?) <= ?`,
-    )
-    .bind(dueAt, now, ATTACHMENT_ORPHAN_RETENTION_DAYS, DAY_MS, now)
-    .run();
+  const removed = await sweepOrphanedAttachments(db, now);
 
-  const removed = await db
-    .prepare(
-      `DELETE FROM attachments
-       WHERE orphaned_at IS NOT NULL AND orphaned_at + (? * ?) <= ?`,
-    )
-    .bind(ATTACHMENT_ORPHAN_RETENTION_DAYS, DAY_MS, now)
-    .run();
-
-  return { marked: marked.meta.changes ?? 0, removed: removed.meta.changes ?? 0 };
+  return { marked: marked.meta.changes ?? 0, removed };
 }
 
 /** ④ 引用一致性：删掉指向"已不存在的附件或条目"的引用行 */

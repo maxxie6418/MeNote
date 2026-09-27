@@ -7,7 +7,6 @@
  * 一条底线：**删版本必须连 R2 对象一起登记 GC**——D1 行没了而对象还在就是永久泄漏。
  */
 import { DAY_MS, VERSIONS_DEFAULT, type VersionTrashSettings } from "@menote/shared";
-import { deleteBlob } from "../adapters/r2";
 import {
   SQL_COUNT_VERSIONS,
   SQL_DELETE_VERSION,
@@ -168,11 +167,6 @@ export async function sweepVersions(
     removed,
     next: last ? { createdAt: last.created_at, id: last.item_id } : cursor,
   };
-}
-
-/** 删对象（版本被永久删除时；与附件共用 GC 队列的处理路径） */
-export async function deleteVersionObject(env: StorageEnv, key: string): Promise<void> {
-  await deleteBlob(env, key);
 }
 
 /** 默认保留条数（设置缺失时的兜底，与 `DEFAULT_VERSION_TRASH_SETTINGS` 同源） */

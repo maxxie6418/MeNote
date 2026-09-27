@@ -15,7 +15,6 @@
 import { DAY_MS, MAX_ATTACHMENT_BYTES, PENDING_UPLOAD_TTL_HOURS, newUlid } from "@menote/shared";
 import {
   attachmentKey,
-  deleteBlob,
   getBlob,
   putBlob,
   type AttachmentKind,
@@ -238,18 +237,12 @@ export async function serveAttachment(
   return object;
 }
 
-/** 客户端上报引用（服务端不解析正文，只记账） */
-export async function addAttachmentRef(
-  db: D1Database,
-  itemId: string,
-  attachmentId: string,
-  versionId: string | null,
-  now: number,
-): Promise<void> {
-  await db.prepare(SQL_INSERT_ATTACHMENT_REF).bind(itemId, versionId, attachmentId, now).run();
-}
-
-/** 某条目引用了哪些附件（客户端据此显示图片列与 `## 附件`） */
+/**
+ * 某条目引用了哪些附件（客户端据此显示图片列与 `## 附件`）。
+ *
+ * 引用**由客户端显式上报**（服务端不解析正文）：上传时 `finalize` 带 `itemId` 即落一条，
+ * 所以这里只需要"读"。
+ */
 export async function listAttachmentRefs(
   db: D1Database,
   itemId: string,
@@ -261,6 +254,12 @@ export async function listAttachmentRefs(
   return rows.results.map((row) => ({ attachmentId: row.attachment_id, versionId: row.version_id }));
 }
 
+/**
+ * `POST /api/attachments/gc`：手动清理**本用户**的孤儿附件（附件管理页的接口位在 M6）。
+ *
+ * 两步：标孤儿（没有任何引用的）+ 清到期的（标满 30 天）——与每日维护同一套判定，
+ * 只是不等到那一轮。**只清本用户**：跨用户串数据是红线，用例里专门有一条。
+ */
 /**
  * `POST /api/attachments/gc`：手动清理**本用户**的孤儿附件（附件管理页的接口位在 M6）。
  *
@@ -312,12 +311,3 @@ export async function sweepOrphanedAttachments(
   return rows.results.length;
 }
 
-/** 删对象（GC 队列处理时用；失败交给调用方决定是否保留队列行） */
-export async function deleteAttachmentObject(env: StorageEnv, key: string): Promise<void> {
-  await deleteBlob(env, key);
-}
-
-/** 该附件的缩略图键（原图与缩略图要一起处理，设计 §3.5） */
-export function thumbKeyOf(userId: string, sha256: string): string {
-  return attachmentKey(userId, sha256, "thumb");
-}

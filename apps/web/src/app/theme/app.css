@@ -627,6 +627,54 @@ button {
   background: var(--primary-soft, transparent);
 }
 
+/* 行拖动（M4-9 补）：柄常驻可见（不靠悬停），拖动中给落点行一条上边线——
+   "会插到哪"必须看得见，不然拖了也不知道结果 */
+.tablegrid__draghandle {
+  color: var(--muted);
+  cursor: grab;
+  letter-spacing: -2px;
+  user-select: none;
+}
+
+.tablegrid__tr--dragging {
+  opacity: 0.6;
+}
+
+.tablegrid__tr--drop > td {
+  box-shadow: inset 0 2px 0 0 var(--primary-line);
+}
+
+/* 标签格的 chip 编辑（M4-9 补）：输入框跟在 chip 后面，整体像一格里的多个值 */
+.tagchips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.tagchips__item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tagchips__remove {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: var(--fs-small);
+}
+
+.tagchips__input {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  min-width: 96px;
+  outline: none;
+}
+
 /* 正文里的非图片附件：走链接样式（界面稿 §7.4：不用按钮冒充链接、不沿用正文色） */
 .attachment-link {
   display: inline-flex;

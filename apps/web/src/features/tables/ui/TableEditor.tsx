@@ -24,6 +24,7 @@ import {
   insertRow,
   moveRow,
   removeRow,
+  reorderRow,
   setCell,
   tableHints,
   tableSize,
@@ -159,6 +160,7 @@ export function TableEditor({
           onInsertRow={(anchorRowId, position) => commit(insertRow(doc, anchorRowId, position).doc)}
           onDeleteRow={(rowId) => commit(removeRow(doc, rowId))}
           onMoveRow={(rowId, offset) => commit(moveRow(doc, rowId, offset))}
+          onReorderRow={(rowId, beforeRowId) => commit(reorderRow(doc, rowId, beforeRowId))}
           emptyAction={
             <Button variant="secondary" size="sm" onClick={() => commit(addRow(doc).doc)}>
               <Icon name="plus" size={13} />

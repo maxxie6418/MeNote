@@ -19,6 +19,7 @@ import {
 import { Icon, type IconName } from "../../../app/ui/Icon";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { Chip } from "../../../app/ui/Chip";
+import { TagChipsEditor } from "./TagChipsEditor";
 import {
   DEFAULT_STATUS_OPTIONS,
   cellValue,
@@ -84,6 +85,12 @@ export interface TableGridProps {
   onInsertRow: (anchorRowId: string | null, position: "above" | "below") => void;
   onDeleteRow: (rowId: string) => void;
   onMoveRow: (rowId: string, offset: -1 | 1) => void;
+  /**
+   * 把一行拖到另一行之前（M4-9 补：**拖动的落点语义**与行菜单的"上移/下移"是同一个模型函数）。
+   *
+   * `beforeRowId = null` 表示拖到末尾。
+   */
+  onReorderRow?: (rowId: string, beforeRowId: string | null) => void;
   /** 表格一行都没有时的空状态出口（界面稿 §2.8：同屏只有一个实心主按钮） */
   emptyAction?: React.ReactNode;
 }
@@ -100,9 +107,13 @@ export function TableGrid({
   onInsertRow,
   onDeleteRow,
   onMoveRow,
+  onReorderRow,
   emptyAction,
 }: TableGridProps) {
   const doc = state.doc;
+  /** 正在被拖动的行（拖动期间给落点行加高亮，让"会插到哪"看得见） */
+  const [draggingRowId, setDraggingRowId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   // 大表只渲染可见的那一段（小表/量不出视口时自动退化成全渲染）
   const { containerRef, range } = useVirtualWindow(rows.length);
 
@@ -157,8 +168,57 @@ export function TableGrid({
           ) : null}
           {rows.slice(range.start, range.end).map((row) => {
             const rowId = cellValue(row, ROW_ID_COLUMN);
+            const canDrag = onReorderRow !== undefined;
             return (
-              <tr key={rowId} className="tablegrid__tr">
+              <tr
+                key={rowId}
+                className={[
+                  "tablegrid__tr",
+                  draggingRowId === rowId ? "tablegrid__tr--dragging" : null,
+                  dropTargetId === rowId && draggingRowId !== rowId ? "tablegrid__tr--drop" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                /*
+                  行拖动（界面稿 §2.4 要求"拖动排序"，且**必须有键盘等价入口**——行菜单的上移/下移就是）。
+                  排序生效时先清掉排序指示再拖：否则"拖了但看到的顺序没变"（界面稿 §2.5 的冲突规则）。
+                */
+                draggable={canDrag}
+                onDragStart={(event) => {
+                  if (!canDrag) return;
+                  if (state.sort) onSortChange(null);
+                  setDraggingRowId(rowId);
+                  event.dataTransfer.effectAllowed = "move";
+                  // 某些浏览器不设数据就不触发 drop，随便放一个占位
+                  event.dataTransfer.setData("text/plain", rowId);
+                }}
+                onDragOver={(event) => {
+                  if (draggingRowId === null || draggingRowId === rowId) return;
+                  event.preventDefault();
+                  setDropTargetId(rowId);
+                }}
+                onDragLeave={() => {
+                  if (dropTargetId === rowId) setDropTargetId(null);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (draggingRowId === null || draggingRowId === rowId) return;
+                  const from = rows.findIndex((candidate) => cellValue(candidate, ROW_ID_COLUMN) === draggingRowId);
+                  const to = rows.findIndex((candidate) => cellValue(candidate, ROW_ID_COLUMN) === rowId);
+                  // 往下拖 → 插到目标行的**下一行之前**（= 目标行之后）；往上拖 → 插到目标行之前
+                  const anchor =
+                    from !== -1 && to !== -1 && from < to
+                      ? (cellValue(rows[to + 1] ?? {}, ROW_ID_COLUMN) || null)
+                      : rowId;
+                  onReorderRow?.(draggingRowId, anchor);
+                  setDraggingRowId(null);
+                  setDropTargetId(null);
+                }}
+                onDragEnd={() => {
+                  setDraggingRowId(null);
+                  setDropTargetId(null);
+                }}
+              >
                 {columns.map((column) => (
                   <Cell
                     key={column.id}
@@ -171,6 +231,12 @@ export function TableGrid({
                   />
                 ))}
                 <td className="tablegrid__td tablegrid__td--rowmenu">
+                  {/* 拖动柄：鼠标能拖；键盘与触屏走行菜单的上移/下移、插入、删除 */}
+                  {canDrag ? (
+                    <span className="tablegrid__draghandle" aria-hidden="true" title="拖动排序">
+                      ⋮⋮
+                    </span>
+                  ) : null}
                   <RowMenu
                     rowId={rowId}
                     onInsertRow={onInsertRow}
@@ -380,8 +446,23 @@ function Cell({
     );
   }
 
+  if (isEditing && column.type === "tags") {
+    // 标签是"一格多个值"：用 chip 编辑（能看见已有哪几个、单个删），
+    // 存储格式不变（仍写回逗号分隔的字符串）
+    return (
+      <td className="tablegrid__td">
+        <TagChipsEditor
+          value={value}
+          ariaLabel={`${column.name}（编辑）`}
+          onCommit={(next) => onCellChange(rowId, column.id, next)}
+          onCancel={() => onEditingChange(null)}
+        />
+      </td>
+    );
+  }
+
   if (isEditing && (column.type === "text" || column.type === "number" || column.type === "url" ||
-    column.type === "date" || column.type === "tags")) {
+    column.type === "date")) {
     return (
       <td className="tablegrid__td">
         <input

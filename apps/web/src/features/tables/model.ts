@@ -251,6 +251,32 @@ export function insertRow(
 }
 
 /**
+ * 标签格的读写（M4-9 补；界面稿 §2.3 的「标签」类型）。
+ *
+ * **存储格式就是一个逗号分隔的字符串**（`tags` 类型的单元格值），所以"chip 编辑"只是
+ * 显示与输入方式的变化，**不动数据格式**——这也是为什么它能在 M4 补而不牵扯迁移。
+ *
+ * 三条清洗规则：①去首尾空白；②**去重**（同一个标签写两次没有意义，chip 上会出现两个一样的）；
+ * ③丢掉空串。
+ */
+export function splitTags(value: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value.split(",")) {
+    const tag = raw.trim();
+    if (tag === "" || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  return out;
+}
+
+/** 标签数组 → 单元格值（与 `splitTags` 配对；`join(split(x))` 是幂等的） */
+export function joinTags(tags: readonly string[]): string {
+  return splitTags(tags.join(",")).join(",");
+}
+
+/**
  * 写一格。
  *
  * **值一律按字符串存**（编解码层只搬字符串），类型转换留给各类型的控件；

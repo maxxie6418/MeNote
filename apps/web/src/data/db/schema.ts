@@ -80,21 +80,30 @@ export interface SyncStateRow {
 export const SYNC_STATE_KEY = "state";
 
 /**
- * 本地搜索索引（M2-6）：一个条目一行。
+ * 本地搜索索引（M2-6；M3 起拆成"标题字段 / 正文字段"两段）。
  *
  * - `sync_seq` 取自建索引时的**条目**，是增量更新的依据：同步后只重建 `sync_seq` 变了的条目；
- * - `text` 存原文（标题 + 标签 + 正文），`haystack` 存小写副本——匹配与高亮片段都从这两列来，
- *   这样片段里的偏移与原文一致（不会出现"高亮错位"）；
- * - `tokens` 是分词结果的空格串，只用于加分排序（命中判定用子串，中文更稳）。
+ * - `*_text` 存原文（标题字段 = 标题 + 标签；正文字段 = 正文），`*_haystack` 存小写副本——
+ *   匹配与高亮片段都从这两列来，这样片段里的偏移与原文一致（不会出现"高亮错位"）；
+ * - `*_tokens` 是分词结果的空格串，只用于加分排序（命中判定用子串，中文更稳）。
  *
- * 只在本地，不进同步、不进服务端（服务端兜底走 `GET /api/search`）。
+ * **为什么要分两段**（《隐私锁设计》§3.5）：隐私条目的"标题可搜"与"正文不可搜"是两条不同规则，
+ * 合成一段就做不到；**索引里照常含隐私条目**（解锁后要能立刻搜到），
+ * 过滤放在**查询时**按门禁判定，而不是建索引时就排除。
+ *
+ * 只在本地，不进同步、不进服务端（服务端兜底走 `GET /api/search`，那条路径恒排除隐私内容）。
  */
 export interface SearchIndexRow {
   item_id: string;
   sync_seq: number;
-  text: string;
-  haystack: string;
-  tokens: string;
+  /** 标题 + 标签 */
+  title_text: string;
+  title_haystack: string;
+  title_tokens: string;
+  /** 正文 */
+  body_text: string;
+  body_haystack: string;
+  body_tokens: string;
   updated_at: number;
   indexed_at: number;
 }
@@ -210,5 +219,28 @@ export class MenoteDatabase extends Dexie {
       conflicts: "copy_id, original_id",
       privacyState: "key",
     });
+    /**
+     * 6：搜索索引拆成"标题字段 / 正文字段"两段（M3-5，《隐私锁设计》§3.5）。
+     *
+     * **旧行结构对不上，必须让索引整表重建**：这里把 `searchIndex` 的列换掉，
+     * 重建由下一次 `refreshSearchIndex()` 完成（它按 `sync_seq` 对比，旧行缺新列即视为待重建）。
+     */
+    this.version(6)
+      .stores({
+        items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+        bodies: "item_id",
+        drafts: "item_id",
+        folders: "id, parent_id, sync_seq",
+        outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+        syncState: "key",
+        searchIndex: "item_id, sync_seq, updated_at",
+        settings: "key",
+        conflicts: "copy_id, original_id",
+        privacyState: "key",
+      })
+      .upgrade(async (tx) => {
+        // 结构变了，最省事也最安全的做法是清空索引（它是纯派生数据，随即可重建）
+        await tx.table("searchIndex").clear();
+      });
   }
 }

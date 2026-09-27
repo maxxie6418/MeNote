@@ -60,15 +60,22 @@ export function bigramFallback(text: string): string[] {
   return out;
 }
 
-/** 建索引用的文本：标题 + 标签 + 正文（标签加 `#` 前缀，方便整词命中） */
-export function buildSearchText(input: {
-  title: string | null;
-  tags: readonly string[];
-  body: string;
-}): string {
-  return [input.title ?? "", input.tags.map((tag) => `#${tag}`).join(" "), input.body]
+/**
+ * 建索引用的"标题字段"文本：标题 + 标签（标签加 `#` 前缀，方便整词命中）。
+ *
+ * M3 起**标题与正文分开索引**：隐私条目在锁定时**连标题都不能被命中**
+ * （空间内条目的标题本来就不可见），而单篇加密条目的标题任何状态都可搜——
+ * 两者用同一份索引就必须分列，否则做不到"标题可搜、正文不可搜"。
+ */
+export function buildTitleText(input: { title: string | null; tags: readonly string[] }): string {
+  return [input.title ?? "", input.tags.map((tag) => `#${tag}`).join(" ")]
     .filter((part) => part !== "")
     .join("\n");
+}
+
+/** 建索引用的"正文字段"文本 */
+export function buildBodyText(body: string): string {
+  return body;
 }
 
 /**
@@ -92,8 +99,11 @@ export function mergeBy<T>(
   return out;
 }
 
+/** 索引里的一段可检索文本（标题字段 / 正文字段各一段） */
 export interface SearchableRow {
   item_id: string;
+  /** 这段文本来自哪里：`title` = 标题 + 标签；`body` = 正文 */
+  field: "title" | "body";
   text: string;
   haystack: string;
   tokens: string;
@@ -108,6 +118,8 @@ export interface SnippetParts {
 
 export interface SearchHit {
   itemId: string;
+  /** 命中的是标题字段还是正文字段（界面据此决定"解锁期间可见 / 已加密"标注与片段来源） */
+  field: "title" | "body";
   score: number;
   snippet: SnippetParts;
 }
@@ -161,6 +173,7 @@ export function searchRows(query: string, rows: readonly SearchableRow[]): Searc
     const longest = [...tokens].sort((a, b) => b.length - a.length)[0] as string;
     hits.push({
       itemId: row.item_id,
+      field: row.field,
       score,
       snippet: makeSnippet(row.text, row.haystack.includes(needle) ? query.trim() : longest),
     });

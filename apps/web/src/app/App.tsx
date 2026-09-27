@@ -9,9 +9,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { adminApi } from "../data/api/endpoints";
 import { outboxCount } from "../data/db";
 import { createSyncEngine, type SyncEngine } from "../data/sync";
-import { LoginPage } from "../features/auth/ui/LoginPage";
-import { RegisterPage } from "../features/auth/ui/RegisterPage";
 import { useAuth } from "../features/auth/model";
+import { AuthLoading, AuthScreens } from "./AuthScreens";
 import { NoteList } from "../features/notes/ui/NoteList";
 import { NoteWorkspace } from "../features/notes/ui/NoteWorkspace";
 import { NotebookPanel } from "../features/notes/ui/NotebookPanel";
@@ -42,6 +41,7 @@ import { clearTaskMarker, setTaskStatus } from "../features/tasks/actions";
 import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
+import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
 import type { NotesView } from "../features/notes/views";
 
 export default function App() {
@@ -111,14 +111,8 @@ export default function App() {
   }, []);
 
   /**
-   * 搜索（M2-6）：整段接线在 `useSearch` 里（查询、筛选、本地检索、索引未建完时的服务端回退）。
-   * 它**不改浏览视图状态**——所以清空搜索框就自然回到进入搜索前的视图。
-   */
-  const search = useSearch({ items: workspace.allItems, memos: workspace.memos });
-
-  /**
    * 跟随账号同步的设置（M2-7）：即时生效 + 入队上传；写完后叫醒同步引擎。
-   * 放在"今天"之前：待办视图的日期口径要用它的时区。
+   * 放在"今天"之前：待办视图的日期口径要用它的时区；也放在隐私锁之前——门禁的默认档位与范围来自它。
    *
    * `onLoaded` 里应用**启动视图**（M2-8）：设置是异步从本地库读出来的，所以在读到的这一刻
    * 决定进入哪个视图；只在首次读盘时生效一次，之后用户的导航不再被覆盖。
@@ -148,6 +142,26 @@ export default function App() {
     },
     [userSettings],
   );
+
+  /**
+   * 隐私锁（M3-4）：材料缓存、门禁状态、档位计时与跨标签一致都在这里；
+   * 判定用 `privacy.gate` 交给各视图（搜索、列表、Memo、编辑器）。
+   */
+  const privacy = usePrivacyLock({
+    authenticated: auth.snapshot.user != null,
+    config: userSettings.settings.privacy,
+  });
+
+  /**
+   * 搜索（M2-6）：整段接线在 `useSearch` 里（查询、筛选、本地检索、索引未建完时的服务端回退）。
+   * 它**不改浏览视图状态**——所以清空搜索框就自然回到进入搜索前的视图。
+   * M3-5 起检索要按门禁过滤（锁定时空间内条目连标题都不命中；单篇的标题任何状态可搜）。
+   */
+  const search = useSearch({
+    items: workspace.allItems,
+    memos: workspace.memos,
+    gate: privacy.gate,
+  });
 
   /** 待办视图的"今天"：按**用户设置的时区**算，且只在挂载时取一次（渲染期调 Date.now() 不纯） */
   const [today] = useState(() => dayKeyInZone(Date.now(), userSettings.settings.timezone));
@@ -241,41 +255,26 @@ export default function App() {
   }, [route, auth.snapshot.user?.role]);
 
   if (auth.snapshot.status === "loading") {
-    return (
-      <>
-        <IconSprite />
-        <InsecureContextBanner />
-        <div className="authpage">正在检查登录状态…</div>
-      </>
-    );
+    return <AuthLoading />;
   }
 
   if (auth.snapshot.status === "anonymous") {
     return (
-      <>
-        <IconSprite />
-        <InsecureContextBanner />
-        {route.name === "register" ? (
-          <RegisterPage
-            firstUser={!auth.snapshot.hasUsers}
-            onRegister={async (username, password) => {
-              await auth.register(username, password);
-              navigate({ name: "notes" });
-            }}
-            onGoLogin={() => navigate({ name: "login" })}
-          />
-        ) : (
-          <LoginPage
-            showRegisterEntry={auth.snapshot.registrationOpen || !auth.snapshot.hasUsers}
-            onLogin={async (username, password) => {
-              await auth.login(username, password);
-              navigate({ name: "notes" });
-            }}
-            onGoRegister={() => navigate({ name: "register" })}
-          />
-        )}
-        <ToastHost />
-      </>
+      <AuthScreens
+        route={route}
+        hasUsers={auth.snapshot.hasUsers}
+        registrationOpen={auth.snapshot.registrationOpen}
+        onLogin={async (username, password) => {
+          await auth.login(username, password);
+          navigate({ name: "notes" });
+        }}
+        onRegister={async (username, password) => {
+          await auth.register(username, password);
+          navigate({ name: "notes" });
+        }}
+        onGoLogin={() => navigate({ name: "login" })}
+        onGoRegister={() => navigate({ name: "register" })}
+      />
     );
   }
 

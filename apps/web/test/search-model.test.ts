@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   bigramFallback,
-  buildSearchText,
+  buildBodyText,
+  buildTitleText,
   makeSnippet,
   mergeBy,
   searchRows,
@@ -12,6 +13,7 @@ import {
 function row(itemId: string, text: string, updatedAt = 1): SearchableRow {
   return {
     item_id: itemId,
+    field: "body",
     text,
     haystack: text.toLowerCase(),
     tokens: tokenize(text).join(" "),
@@ -44,17 +46,18 @@ describe("分词", () => {
   });
 });
 
-describe("索引文本", () => {
-  it("包含标题、标签（带 #）与正文", () => {
-    const text = buildSearchText({ title: "会议记录", tags: ["工作", "dev"], body: "讨论了方案" });
-    expect(text).toContain("会议记录");
-    expect(text).toContain("#工作");
-    expect(text).toContain("#dev");
-    expect(text).toContain("讨论了方案");
+describe("索引文本（M3-5 起标题与正文分开）", () => {
+  it("标题字段含标题与标签（带 #），不含正文", () => {
+    const title = buildTitleText({ title: "会议记录", tags: ["工作", "dev"] });
+    expect(title).toContain("会议记录");
+    expect(title).toContain("#工作");
+    expect(title).toContain("#dev");
+    expect(title).not.toContain("讨论了方案");
   });
 
-  it("没有标题或标签时不产生空行", () => {
-    expect(buildSearchText({ title: null, tags: [], body: "正文" })).toBe("正文");
+  it("没有标题或标签时标题字段为空；正文单独成段", () => {
+    expect(buildTitleText({ title: null, tags: [] })).toBe("");
+    expect(buildBodyText("正文")).toBe("正文");
   });
 });
 

@@ -5,6 +5,7 @@
  */
 export * from "./conflicts";
 export * from "./database";
+export * from "./privacy";
 export * from "./repository";
 export * from "./schema";
 export * from "./search";

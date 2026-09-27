@@ -36,6 +36,11 @@ export interface SearchResult {
   item: SearchItemLike;
   snippet: SnippetParts;
   score: number;
+  /**
+   * 命中的是标题字段还是正文字段（M3-5）。
+   * 界面据此给隐私结果加标注：正文命中 → "解锁期间可见"；标题命中（未解密的单篇）→ "已加密"。
+   */
+  field?: "title" | "body";
 }
 
 export interface SearchPanelProps {

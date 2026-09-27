@@ -8,6 +8,7 @@ import "fake-indexeddb/auto";
  */
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { privacyGateFrom, type PrivacyGate } from "@menote/shared";
 
 const queryMock = vi.fn();
 vi.mock("../src/data/api/endpoints", () => ({
@@ -16,6 +17,14 @@ vi.mock("../src/data/api/endpoints", () => ({
 
 const { createLocalItem, db, refreshSearchIndex } = await import("../src/data/db");
 const { useSearch } = await import("../src/features/search/useSearch");
+
+/** 门禁：未启用（无门禁）。门禁自己的行为在 `search-index.test.ts` 里覆盖 */
+const NO_GATE: PrivacyGate = privacyGateFrom(
+  { scope: { memo: true }, search_bodies_when_unlocked: true },
+  "disabled",
+);
+const useSearchOpen = (): ReturnType<typeof useSearch> =>
+  useSearch({ items: [], memos: [], gate: NO_GATE });
 
 let seq = 0;
 async function seed(id: string, title: string, body: string) {
@@ -50,7 +59,7 @@ describe("useSearch", () => {
     await seed("a", "会议记录", "讨论了发布方案");
     await refreshSearchIndex();
 
-    const { result } = renderHook(() => useSearch({ items: [], memos: [] }));
+    const { result } = renderHook(() => useSearchOpen());
 
     await act(async () => {
       result.current.setQuery("发布方案");
@@ -74,7 +83,7 @@ describe("useSearch", () => {
       results: [remoteRow("local", "本地命中"), remoteRow("remote", "服务端补的")],
     });
 
-    const { result } = renderHook(() => useSearch({ items: [], memos: [] }));
+    const { result } = renderHook(() => useSearchOpen());
     await act(async () => {
       result.current.setQuery("发布方案");
     });
@@ -98,7 +107,7 @@ describe("useSearch", () => {
     await seed("new", "尚未入索引", "共同的词 发布方案");
     queryMock.mockRejectedValue(new Error("offline"));
 
-    const { result } = renderHook(() => useSearch({ items: [], memos: [] }));
+    const { result } = renderHook(() => useSearchOpen());
     await act(async () => {
       result.current.setQuery("发布方案");
     });
@@ -114,7 +123,7 @@ describe("useSearch", () => {
     await seed("a", "会议记录", "发布方案");
     await refreshSearchIndex();
 
-    const { result } = renderHook(() => useSearch({ items: [], memos: [] }));
+    const { result } = renderHook(() => useSearchOpen());
     await act(async () => {
       result.current.setQuery("发布方案");
     });

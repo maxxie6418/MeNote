@@ -10,6 +10,7 @@
  * - 回退失败（离线 / 服务端出错）时只用本地结果，不弹错。
  */
 import { useCallback, useEffect, useState } from "react";
+import type { PrivacyGate } from "@menote/shared";
 import { isSearchIndexComplete, searchLocal, type LocalItem } from "../../data/db";
 import { searchApi } from "../../data/api/endpoints";
 import { makeSnippet, mergeBy } from "./model";
@@ -24,6 +25,11 @@ export interface UseSearchOptions {
   items: readonly LocalItem[];
   /** 未删除的 Memo（搜索也覆盖它们） */
   memos: readonly LocalItem[];
+  /**
+   * 隐私门禁（M3-5）：本地检索按它决定"这一条此刻能按标题还是按正文命中"。
+   * 服务端兜底那条路径**恒排除隐私内容**（设计 §5.3 的 I5），所以不需要传给它。
+   */
+  gate: PrivacyGate;
 }
 
 export interface SearchState {
@@ -46,7 +52,7 @@ const RANGE_DAYS: Record<Exclude<SearchFiltersState["range"], "all">, number> = 
   year: 365,
 };
 
-export function useSearch({ items, memos }: UseSearchOptions): SearchState {
+export function useSearch({ items, memos, gate }: UseSearchOptions): SearchState {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<SearchFiltersState>(EMPTY_SEARCH_STATE);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -71,12 +77,16 @@ export function useSearch({ items, memos }: UseSearchOptions): SearchState {
           : Date.now() - RANGE_DAYS[filters.range] * 24 * 60 * 60 * 1000;
 
       const complete = await isSearchIndexComplete();
-      const localResults: SearchResult[] = await searchLocal(text, {
-        type: filters.type,
-        folderId: filters.folderId,
-        tag: filters.tag,
-        from,
-      });
+      const localResults: SearchResult[] = await searchLocal(
+        text,
+        {
+          type: filters.type,
+          folderId: filters.folderId,
+          tag: filters.tag,
+          from,
+        },
+        gate,
+      );
 
       // 索引还没建完 → 回退服务端补齐（离线或失败就只用本地结果）
       let remoteResults: SearchResult[] = [];
@@ -119,7 +129,7 @@ export function useSearch({ items, memos }: UseSearchOptions): SearchState {
     return () => {
       alive = false;
     };
-  }, [filters, query]);
+  }, [filters, query, gate]);
 
   const tags = (() => {
     const counts = new Map<string, number>();

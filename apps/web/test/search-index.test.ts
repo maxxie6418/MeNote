@@ -1,10 +1,11 @@
 import "fake-indexeddb/auto";
 /**
- * 本地搜索索引（M2-6 验收点）：
- * - 只索引**可见**条目（隐私过滤位集中在一处）；
- * - 增量：`sync_seq` 没变就不重建；删除/变为不可见的条目连索引行一起清掉；
+ * 本地搜索索引（M2-6 建、M3-5 改）：
+ * - 索引覆盖**全部未删除条目**（**含隐私条目**）——这样解锁后能立刻搜到，不必重建整张索引；
+ * - 增量：`sync_seq` 没变就不重建；删掉的条目连索引行一起清掉；
+ * - **门禁在查询时生效**：锁定时空间内条目连标题都不命中；单篇的标题任何状态可搜、正文要已解密；
  * - 检索结果能按类型 / 文件夹 / 标签 / 时间过滤；
- * - `isSearchIndexComplete` 能反映"索引是否已覆盖全部可见条目"。
+ * - `isSearchIndexComplete` 反映"索引是否已覆盖全部未删除条目"。
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -12,8 +13,21 @@ import {
   db,
   isSearchIndexComplete,
   refreshSearchIndex,
-  searchLocal,
+  searchLocal as searchLocalRaw,
+  type SearchFilters,
 } from "../src/data/db";
+import { privacyGateFrom, type PrivacyGate } from "@menote/shared";
+
+/** 用例里的默认门禁：**未启用**（无门禁）；隐私相关的用例自己传具体的 gate */
+const NO_GATE: PrivacyGate = privacyGateFrom(
+  { scope: { memo: true }, search_bodies_when_unlocked: true },
+  "disabled",
+);
+
+/** 默认走"无门禁"，让用例专注在索引与过滤上 */
+function searchLocal(query: string, filters: SearchFilters = {}) {
+  return searchLocalRaw(query, filters, NO_GATE);
+}
 
 let seq = 0;
 async function seed(input: {
@@ -59,11 +73,13 @@ describe("索引构建（增量）", () => {
     expect(result).toEqual({ indexed: 1, removed: 0 });
 
     const row = await db.searchIndex.get("a");
-    expect(row?.text).toContain("会议记录");
-    expect(row?.text).toContain("#工作");
-    expect(row?.text).toContain("讨论了发布方案");
-    expect(row?.haystack).toBe(row?.text.toLowerCase());
-    expect(row?.tokens).toContain("会议");
+    // 标题字段（标题 + 标签）与正文字段分开存（M3-5）
+    expect(row?.title_text).toContain("会议记录");
+    expect(row?.title_text).toContain("#工作");
+    expect(row?.body_text).toContain("讨论了发布方案");
+    expect(row?.title_haystack).toBe(row?.title_text.toLowerCase());
+    expect(row?.body_haystack).toBe(row?.body_text.toLowerCase());
+    expect(row?.title_tokens).toContain("会议");
   });
 
   it("sync_seq 没变就不重建（第二次是 0）", async () => {
@@ -76,7 +92,7 @@ describe("索引构建（增量）", () => {
     await seed2Update("a", "第二版");
     const again = await refreshSearchIndex();
     expect(again.indexed).toBe(1);
-    expect((await db.searchIndex.get("a"))?.text).toContain("第二版");
+    expect((await db.searchIndex.get("a"))?.body_text).toContain("第二版");
   });
 
   async function seed2Update(id: string, body: string) {
@@ -101,12 +117,12 @@ describe("索引构建（增量）", () => {
     await db.drafts.put({ item_id: "a", body: "草稿里的新内容", updated_at: Date.now() });
 
     await refreshSearchIndex();
-    expect((await db.searchIndex.get("a"))?.text).toContain("草稿里的新内容");
+    expect((await db.searchIndex.get("a"))?.body_text).toContain("草稿里的新内容");
   });
 });
 
-describe("隐私过滤位（M2 唯一一处）", () => {
-  it("加密条目既不进索引也搜不到", async () => {
+describe("隐私门禁（M3-5：索引照常建、过滤在查询时）", () => {
+  it("隐私条目照常进索引（这样解锁后能立刻搜到，不必重建索引）", async () => {
     await seed({ id: "plain", body: "公开内容 方案" });
     await seed({ id: "enc", body: "加密内容 方案" });
     await seed({ id: "space", body: "空间内容 方案" });
@@ -115,11 +131,90 @@ describe("隐私过滤位（M2 唯一一处）", () => {
     await db.items.update("space", { in_enc_space: 1, sync_seq: 502 });
     await refreshSearchIndex();
 
-    expect(await db.searchIndex.get("enc")).toBeUndefined();
-    expect(await db.searchIndex.get("space")).toBeUndefined();
+    expect(await db.searchIndex.get("enc")).toBeDefined();
+    expect(await db.searchIndex.get("space")).toBeDefined();
+  });
 
-    const hits = await searchLocal("方案");
-    expect(hits.map((hit) => hit.item.id)).toEqual(["plain"]);
+  it("锁定态：空间内条目连标题都不命中；单篇条目的标题可搜、正文搜不到", async () => {
+    await seed({ id: "plain", title: "公开标题 方案", body: "公开内容 方案" });
+    await seed({ id: "space", title: "空间标题 方案", body: "空间正文 方案" });
+    await seed({ id: "enc", title: "单篇标题 方案", body: "单篇正文 方案" });
+    await db.items.update("space", { in_enc_space: 1, sync_seq: 501 });
+    await db.items.update("enc", { enc_self: 1, sync_seq: 502 });
+    await refreshSearchIndex();
+
+    const locked = privacyGateFrom(
+      { scope: { memo: true }, search_bodies_when_unlocked: true },
+      "locked",
+    );
+
+    // "方案"三个条目都有，但锁定时只有普通内容与单篇（标题）命中
+    const hits = await searchLocalRaw("方案", {}, locked);
+    expect(hits.map((hit) => hit.item.id).sort()).toEqual(["enc", "plain"]);
+    expect(hits.find((hit) => hit.item.id === "enc")?.field).toBe("title");
+
+    // 正文里的词：空间内条目与单篇都搜不到
+    expect(await searchLocalRaw("空间正文", {}, locked)).toEqual([]);
+    expect(await searchLocalRaw("单篇正文", {}, locked)).toEqual([]);
+    expect((await searchLocalRaw("公开内容", {}, locked)).map((h) => h.item.id)).toEqual(["plain"]);
+  });
+
+  it("解锁态：空间内条目按标题与正文命中；开关关闭时只剩标题", async () => {
+    await seed({ id: "space", title: "空间标题 方案", body: "空间正文 方案" });
+    await db.items.update("space", { in_enc_space: 1, sync_seq: 501 });
+    await refreshSearchIndex();
+
+    const unlocked = privacyGateFrom(
+      { scope: { memo: true }, search_bodies_when_unlocked: true },
+      "unlocked",
+    );
+    expect((await searchLocalRaw("空间正文", {}, unlocked)).map((h) => h.item.id)).toEqual(["space"]);
+
+    const bodiesOff = privacyGateFrom(
+      { scope: { memo: true }, search_bodies_when_unlocked: false },
+      "unlocked",
+    );
+    expect((await searchLocalRaw("空间正文", {}, bodiesOff)).map((h) => h.item.id)).toEqual([]);
+    expect((await searchLocalRaw("空间标题", {}, bodiesOff)).map((h) => h.item.id)).toEqual(["space"]);
+  });
+
+  it("单篇逐篇解密后才搜得到正文（与隐私锁状态无关）", async () => {
+    await seed({ id: "enc", title: "单篇标题", body: "单篇正文 方案" });
+    await db.items.update("enc", { enc_self: 1, sync_seq: 501 });
+    await refreshSearchIndex();
+
+    const lockedNoDecrypt = privacyGateFrom(
+      { scope: { memo: true }, search_bodies_when_unlocked: true },
+      "locked",
+    );
+    expect(await searchLocalRaw("单篇正文", {}, lockedNoDecrypt)).toEqual([]);
+
+    const lockedDecrypted: PrivacyGate = {
+      ...lockedNoDecrypt,
+      unlockedItems: new Set(["enc"]),
+    };
+    expect(
+      (await searchLocalRaw("单篇正文", {}, lockedDecrypted)).map((h) => h.item.id),
+    ).toEqual(["enc"]);
+  });
+
+  it("范围内且锁定时，Memo 完全搜不到；移出范围后照常", async () => {
+    await seed({ id: "memo", type: "memo", body: "备忘录 方案" });
+    await refreshSearchIndex();
+
+    const locked = privacyGateFrom(
+      { scope: { memo: true }, search_bodies_when_unlocked: true },
+      "locked",
+    );
+    expect(await searchLocalRaw("方案", {}, locked)).toEqual([]);
+
+    const memoOutOfScope = privacyGateFrom(
+      { scope: { memo: false }, search_bodies_when_unlocked: true },
+      "locked",
+    );
+    expect(
+      (await searchLocalRaw("方案", {}, memoOutOfScope)).map((h) => h.item.id),
+    ).toEqual(["memo"]);
   });
 });
 

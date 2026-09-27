@@ -8,6 +8,7 @@
  * 并发口径：设置是"整份覆盖"的，**以后写为准**（不做冲突副本——它不是用户内容）。
  */
 import * as v from "valibot";
+import { VERSIONS_KEEP_MAX, VERSIONS_KEEP_MIN } from "./content";
 
 const IntSchema = v.pipe(v.number(), v.integer());
 
@@ -85,7 +86,12 @@ export const VersionTrashSettingsSchema = v.object({
   /** 停编辑多少分钟后自动封存一个版本（设计 §4.1 默认 10 分钟） */
   seal_idle_minutes: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1440)),
   /** 每条最多保留多少版本（默认 100，可选 20–500） */
-  versions_keep: v.pipe(v.number(), v.integer(), v.minValue(20), v.maxValue(500)),
+  versions_keep: v.pipe(
+    v.number(),
+    v.integer(),
+    v.minValue(VERSIONS_KEEP_MIN),
+    v.maxValue(VERSIONS_KEEP_MAX),
+  ),
   /**
    * 最长保留时长（天）。`0` = **不限**（默认）。
    * 用 0 而不是 `null`：整份覆盖的设置里，少一个可空字段就多一类"没传/传 null/传 0"的分支。
@@ -103,9 +109,13 @@ export const DEFAULT_VERSION_TRASH_SETTINGS: VersionTrashSettings = {
   trash_retention_days: 30,
 };
 
-/** 版本条数的可选范围（界面校验提示"请填 20–500"与契约同源） */
-export const VERSIONS_KEEP_MIN = 20;
-export const VERSIONS_KEEP_MAX = 500;
+/**
+ * 版本条数的可选范围：**定义在 `content.ts`**（上限常量集中一处），这里转出去给界面与用例。
+ *
+ * 2026-09-27 修：此前 `content.ts` 有 `VERSIONS_MIN/MAX`（**零消费方**）、这里又有
+ * `VERSIONS_KEEP_MIN/MAX`，同一件事两套名字——迟早漂移。现在只留一份。
+ */
+export { VERSIONS_KEEP_MAX, VERSIONS_KEEP_MIN };
 
 /** 保留密度（设计 §4.3【已定】：定稿规则，M4 只读展示） */
 export const VERSION_KEEP_DENSITY_HINT =

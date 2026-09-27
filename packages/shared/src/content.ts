@@ -23,10 +23,10 @@ export const THUMBNAIL_MAX_EDGE = 400;
  */
 export const THUMBNAIL_TARGET_BYTES = 40 * 1024;
 
-/** 每条笔记保留的版本数：默认与可选范围（设置页据此渲染） */
+/** 每条笔记保留的版本数：默认值 + **可选范围**（契约校验与设置页同源，不再各写一份） */
 export const VERSIONS_DEFAULT = 100;
-export const VERSIONS_MIN = 20;
-export const VERSIONS_MAX = 500;
+export const VERSIONS_KEEP_MIN = 20;
+export const VERSIONS_KEEP_MAX = 500;
 
 /** 版本正文超过这个体积就用 `codec='none'`（不再 gzip——大文件再压收益低、耗 CPU） */
 export const VERSION_GZIP_MAX_BYTES = 256 * 1024;

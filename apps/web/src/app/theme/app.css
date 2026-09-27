@@ -646,6 +646,528 @@ button {
   box-shadow: inset 0 2px 0 0 var(--primary-line);
 }
 
+/*
+  表格屏整屏样式（M4-9；界面稿 §2、§三）
+  ——————————————————————————————————————————————————————————————
+  v0.4.42 发现的缺口：`features/tables/ui` 用到的 74 个类名里有 64 个在样式表里根本不存在，
+  整个表格屏（网格 / 图册 / 列面板 / 筛选条 / 尺寸条 / 编辑器头）是**裸的**。
+  本块按界面稿补齐，规则要点：
+  - §2.1 块顺序：正文头 → 工具栏 → 表格区/图册区 → 筛选条 → 尺寸条 → 状态栏；
+  - §2.1-3 表头**固定不参与滚动**、表体滚动、列多时**容器内横向滚动**（`overflow: auto` 只在这一层）；
+  - §2.3 触屏命中区 ≥44×44px（视觉尺寸不变，靠 `@media (hover: none)` 补内边距）；
+  - §3 列面板/图册与网格同族（同一套边框、圆角、间距）。
+  颜色与尺寸**只走令牌**（`DESIGN.md` §3.2-1 没有例外；颜色守卫会拦裸色值）。
+*/
+.tableeditor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.tableeditor__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.tableeditor__title {
+  font-size: var(--fs-title);
+  font-weight: 600;
+}
+
+/* 单篇加密的锁标识（M3 §六沿用到这里）：小胶囊，图标 + 文字一起表意 */
+.enc-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 1px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.tabletoolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.tabletoolbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.tabletoolbar__count,
+.tabletoolbar__hint {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.tablegrid {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 这一层是表格的**唯一**滚动容器（DESIGN.md §2.7「每层一个滚动容器」） */
+.tablegrid__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 细滚动条（原型 `.scroll-thin`）：滚动发生的地方都带上它，避免默认粗条压住内容 */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--line-2);
+  background-clip: content-box;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: content-box;
+}
+
+.tablegrid table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.tablegrid__th {
+  /* §2.1-3 表头固定：sticky 需要非 collapse 的边框与不透明底色（取值照原型 `.tbl th`） */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-width: 96px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tablegrid__th-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0;
+}
+
+.tablegrid__th-name {
+  overflow: hidden;
+  max-width: 200px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tablegrid__th-type {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.tablegrid__sort {
+  color: var(--primary-ink);
+}
+
+.tablegrid__th-menu {
+  margin-left: auto;
+}
+
+.tablegrid__td {
+  min-width: 96px;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+/* 行悬停整行变色（原型 `.tbl tbody tr:hover`）；格内的可点区域自己不做底色 */
+.tablegrid__tr:hover {
+  background: var(--panel-2);
+}
+
+.tablegrid__td--rowmenu,
+.tablegrid__th--rowmenu {
+  width: 44px;
+  min-width: 44px;
+}
+
+/* 单元格是 `button`（键盘可达），视觉上像"可点的格"；padding 与原型 `.tbl td` 同一节奏 */
+.tablegrid__cell {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.tablegrid__cell-empty {
+  color: var(--muted);
+}
+
+.tablegrid__cell-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tablegrid__cell-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.tablegrid__cell-image {
+  color: var(--muted);
+}
+
+/* 数字列写了非数字：**就地可见**的警告（界面稿 §2.3 的 Field 错误态） */
+.tablegrid__cell-warn {
+  display: block;
+  padding: 0 var(--sp-2) var(--sp-1);
+  color: var(--amber);
+  font-size: var(--fs-micro);
+}
+
+.tablegrid__input {
+  width: 100%;
+  min-height: 34px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--primary-line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.tablegrid__check {
+  width: 16px;
+  height: 16px;
+  margin: var(--sp-2) var(--sp-3);
+  accent-color: var(--primary);
+}
+
+/* 虚拟滚动的占位行：高度由行内 `style` 给，这里只保证不参与命中与选中 */
+.tablegrid__pad {
+  pointer-events: none;
+}
+
+.tablegrid__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.tablegrid__empty-title {
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.tablegrid__empty-hint {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+.tablefilterbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.tablefilterbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.tablefilterbar__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.tablefilterbar__foot {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.tablesizebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-5);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.tablesizebar__count {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.tablesizebar__warn {
+  color: var(--amber);
+}
+
+.tablesizebar__danger {
+  color: var(--red);
+}
+
+.tablesizebar__hint,
+.tablesizebar__foot {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.tablesizebar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* 图册档（界面稿 §2.6）：自适应网格，卡片 = 缩略图 + 标题 + 最多两个属性胶囊 */
+.gallery {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+/* 卡片形态照原型 `.gcard`：1:1 封面 + 正文块，悬停只加细边框与一层浅阴影 */
+.gallery__card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+  transition: 0.16s;
+}
+
+.gallery__card:hover {
+  border-color: var(--line-2);
+  box-shadow: var(--shadow-1);
+}
+
+.gallery__cover {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  border-bottom: 1px solid var(--line);
+  background: var(--ph-stripe);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.gallery__title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery__chips,
+.gallery__fields {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: var(--sp-1);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* 卡片正文块（原型 `.gcard__body` 的间距） */
+.gallery__card > .gallery__title,
+.gallery__card > .gallery__chips,
+.gallery__card > .gallery__fields {
+  padding: 0 var(--sp-3);
+}
+
+.gallery__card > .gallery__title {
+  padding-top: var(--sp-2);
+}
+
+.gallery__card > :last-child {
+  padding-bottom: var(--sp-2);
+}
+
+.gallery__empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.gallery__empty-title {
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+}
+
+.gallery__empty-hint {
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
+/* 列定义面板（界面稿 §三）：增删改列一律走这里 */
+.columndef {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  overflow: auto;
+}
+
+.columndef__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.columndef__type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.columndef__type-label {
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.columndef__types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-2);
+}
+
+/* 类型选项（原型 `.typeopt`）：整行可点，基线对齐，悬停只加一层边框色 */
+.columndef__type-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+  transition: 0.16s;
+}
+
+.columndef__type-option:hover {
+  border-color: var(--line-2);
+}
+
+.columndef__type-option input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.columndef__type-hint,
+.columndef__rowid-hint,
+.columndef__empty {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.columndef__rowid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-sm);
+}
+
+.columndef__rowid-name {
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
+.columndef__toggle,
+.columndef__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+/* 触屏：单元格与手动操作入口的命中区补到 ≥44px（界面稿 §2.3；视觉尺寸不变） */
+@media (hover: none) {
+  .tablegrid__cell,
+  .tablegrid__input {
+    min-height: 44px;
+  }
+
+  .tablegrid__check {
+    width: 20px;
+    height: 20px;
+    margin: var(--sp-3);
+  }
+}
+
 /* 标签格的 chip 编辑（M4-9 补）：输入框跟在 chip 后面，整体像一格里的多个值 */
 .tagchips {
   display: inline-flex;

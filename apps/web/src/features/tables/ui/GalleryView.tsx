@@ -42,7 +42,7 @@ export function GalleryView({ doc, columns, onCellChange, onBackToTable }: Galle
   }
 
   return (
-    <div className="gallery">
+    <div className="gallery scroll-thin">
       <ul className="gallery__grid">
         {cards.map((card) => (
           <li key={card.rowId}>

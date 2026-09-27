@@ -128,7 +128,7 @@ export function TableGrid({
   }
 
   return (
-    <div className="tablegrid__scroll" ref={containerRef} role="grid" aria-label="表格">
+    <div className="tablegrid__scroll scroll-thin" ref={containerRef} role="grid" aria-label="表格">
       <table className="tablegrid">
         <thead>
           <tr>

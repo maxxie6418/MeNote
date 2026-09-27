@@ -7,16 +7,26 @@
 import { Suspense, lazy, useRef, useState } from "react";
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
 import { Button } from "../../../app/ui/Controls";
+import { Modal } from "../../../app/ui/Modal";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
+import { TableDegradeNotice } from "../../tables/ui/TableDegradeNotice";
+import { useTableDoc } from "../../tables/useTableDoc";
+import { renderTableDocument } from "@menote/mdcore";
 import type { EditorHandle } from "../../../app/editor/Editor";
 
 const Editor = lazy(async () => {
   const mod = await import("../../../app/editor/Editor");
   return { default: mod.Editor };
+});
+
+/** 表格界面按需加载（与编辑器同一理由：不进首屏；表格只有表格条目才用得上） */
+const TableEditor = lazy(async () => {
+  const mod = await import("../../tables/ui/TableEditor");
+  return { default: mod.TableEditor };
 });
 
 const MarkdownPreview = lazy(async () => {
@@ -123,6 +133,11 @@ export function NoteWorkspace({
   const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
   /** 「添加附件」代点的隐藏文件输入（M4-10） */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** 表格条目的两种形态由它决定：能解析走表格界面，解析失败走自动降级（界面稿 §2.10） */
+  const isTable = item?.type === "table";
+  const table = useTableDoc(initialBody);
+  /** 主动降级的确认框（要改 `items.type`，属 API 变更 → 待拍板，见下面 Modal 的说明） */
+  const [degradeOpen, setDegradeOpen] = useState(false);
   // 打开条目时的初始正文；之后由 handleInput 持续跟上编辑器的最新内容
   const [previewSource, setPreviewSource] = useState(initialBody);
 
@@ -332,8 +347,43 @@ export function NoteWorkspace({
       <div className="docpane__body">
         {bodyLocked && encryption ? (
           <LockedDocPanel onUnlock={encryption.onUnlock} />
+        ) : isTable && table.state.kind === "table" ? (
+          /*
+            表格（M4-9 接线）：`type = 'table'` 且结构能解析 → **表格界面**（工具栏 / 网格 / 图册 /
+            大小条都在 `TableEditor` 里），不走 CodeMirror——结构化对象是唯一真源。
+          */
+          <Suspense fallback={<div className="docpane__center">表格加载中…</div>}>
+            <TableEditor
+              doc={table.state.doc}
+              onDocChange={(next) => {
+                table.commit(next);
+                handleInput(renderTableDocument(next));
+              }}
+              onRequestDegrade={() => setDegradeOpen(true)}
+            />
+          </Suspense>
         ) : (
-          <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
+          <>
+            {/*
+              自动降级（界面稿 §2.10）：**不静默改数据**——只把危险态提示条摆在正文区顶部，
+              下面照常按普通笔记打开（正文一字未改），并给出「查看原文」「下载当前内容」两条出路。
+            */}
+            {isTable ? (
+              <TableDegradeNotice
+                onViewSource={() => setMode("edit")}
+                onDownload={() => {
+                  const blob = new Blob([table.current()], { type: "text/markdown;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const anchor = document.createElement("a");
+                  anchor.href = url;
+                  anchor.download = `${item.title ?? "表格原文"}.md`;
+                  anchor.click();
+                  URL.revokeObjectURL(url);
+                }}
+              />
+            ) : null}
+
+            <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
             {mode === "split" ? (
             <div className="doc-split">
               <div className="doc-split__pane">
@@ -372,8 +422,33 @@ export function NoteWorkspace({
             </div>
           )}
           </Suspense>
+          </>
         )}
       </div>
+
+      {/* 主动降级的确认框（界面稿 §2.10：三段必须写全，且**不承诺可转回**） */}
+      <Modal
+        open={degradeOpen}
+        title="降级为普通笔记"
+        onClose={() => setDegradeOpen(false)}
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setDegradeOpen(false)}>
+              取消
+            </Button>
+            <Button variant="danger" size="sm" disabled title="需要更新条目类型（接口变更），待排期">
+              降级
+            </Button>
+          </>
+        }
+      >
+        <p>本表格的结构与列定义将被移除，内容按纯 Markdown 打开。</p>
+        <p>降级前会先自动封存一个版本，可在版本历史里找回原文。</p>
+        <p>
+          **不提供反向转回表格**（避免解析失败带来的数据风险）。这一步需要在服务端把条目类型从
+          「表格」改为「笔记」，属接口变更，**M4 暂未开放**——已记入待办。
+        </p>
+      </Modal>
 
       {snapshot && !bodyLocked ? (
         <DocStatusBar

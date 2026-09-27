@@ -81,6 +81,11 @@ export interface SettingsPanelProps {
    * 设置 feature 不认识它——这样两边都不越界。M2 时这里是一个置灰占位。
    */
   privacyPage?: ReactNode;
+  /**
+   * 「版本与回收站」分类的内容（M4-11）。与 `privacyPage` 同一套做法：
+   * 设置页负责分类与版式，策略设置与回收站的数据在 features 里，两边互不认识。
+   */
+  versionsPage?: ReactNode;
 }
 
 export function SettingsPanel({
@@ -96,6 +101,7 @@ export function SettingsPanel({
   onChangePassword,
   onLogout,
   privacyPage,
+  versionsPage,
 }: SettingsPanelProps) {
   const pages = NAV_ORDER.filter((candidate) => candidate !== "instance" || role === "owner");
   const meta = PAGE_META[page];
@@ -248,20 +254,12 @@ export function SettingsPanel({
         ) : null}
 
         {page === "versions" ? (
-          <section className="setcard" aria-label="版本与回收站">
-            <h3 className="setcard__title">版本与回收站</h3>
-            <div className="setrow">
-              <div className="setrow__label">
-                <span className="setrow__name">回收站</span>
-                <span className="setrow__desc">
-                  封存间隔、保留策略与回收站本体在 M4 提供；删除的条目会在那时先入回收站。
-                </span>
-              </div>
-              <button type="button" className="btn btn--sm" disabled title="回收站将在 M4 提供">
-                打开回收站
-              </button>
-            </div>
-          </section>
+          versionsPage ?? (
+            <section className="setcard" aria-label="版本与回收站">
+              <h3 className="setcard__title">版本与回收站</h3>
+              <p className="hint-line">这一分类的内容尚未接入。</p>
+            </section>
+          )
         ) : null}
 
         {page === "account" ? (

@@ -75,6 +75,42 @@ export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   search_bodies_when_unlocked: true,
 };
 
+/**
+ * 版本与回收站的策略设置（M4；《M4 设计》§4 / §八、【已定】默认值）。
+ *
+ * 四条都是**可改的设置**而不是常量，因为它们是用户偏好：封存多勤、留多少条、留多久、回收站留几天。
+ * 范围由契约在这里收口（`versions_keep` 20–500 等），界面只管显示错误，不自己再定一套数。
+ */
+export const VersionTrashSettingsSchema = v.object({
+  /** 停编辑多少分钟后自动封存一个版本（设计 §4.1 默认 10 分钟） */
+  seal_idle_minutes: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1440)),
+  /** 每条最多保留多少版本（默认 100，可选 20–500） */
+  versions_keep: v.pipe(v.number(), v.integer(), v.minValue(20), v.maxValue(500)),
+  /**
+   * 最长保留时长（天）。`0` = **不限**（默认）。
+   * 用 0 而不是 `null`：整份覆盖的设置里，少一个可空字段就多一类"没传/传 null/传 0"的分支。
+   */
+  versions_max_age_days: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** 回收站保留天数（默认 30，到期由每日维护永久删除） */
+  trash_retention_days: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(365)),
+});
+export type VersionTrashSettings = v.InferOutput<typeof VersionTrashSettingsSchema>;
+
+export const DEFAULT_VERSION_TRASH_SETTINGS: VersionTrashSettings = {
+  seal_idle_minutes: 10,
+  versions_keep: 100,
+  versions_max_age_days: 0,
+  trash_retention_days: 30,
+};
+
+/** 版本条数的可选范围（界面校验提示"请填 20–500"与契约同源） */
+export const VERSIONS_KEEP_MIN = 20;
+export const VERSIONS_KEEP_MAX = 500;
+
+/** 保留密度（设计 §4.3【已定】：定稿规则，M4 只读展示） */
+export const VERSION_KEEP_DENSITY_HINT =
+  "24 小时内全留 / 1–7 天每 6 小时 / 7–30 天每天 / 30 天–1 年每周 / 1 年以上每月";
+
 export const UserSettingsSchema = v.object({
   start_view: StartViewSchema,
   timezone: v.string(),
@@ -88,6 +124,11 @@ export const UserSettingsSchema = v.object({
    * 与 M2 给 `user_settings` 加字段时的处理一致；输出类型里它是必有的（默认值已补齐）。
    */
   privacy: v.optional(PrivacySettingsSchema, DEFAULT_PRIVACY_SETTINGS),
+  /**
+   * 版本与回收站的策略（M4）。同样是 **optional + 默认值**：
+   * 部署窗口内旧客户端 PUT 设置（不带该字段）不会被 422，输出类型里它必有。
+   */
+  version_trash: v.optional(VersionTrashSettingsSchema, DEFAULT_VERSION_TRASH_SETTINGS),
 });
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
@@ -99,6 +140,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
     (feature) => feature.id,
   ),
   privacy: DEFAULT_PRIVACY_SETTINGS,
+  version_trash: DEFAULT_VERSION_TRASH_SETTINGS,
 };
 
 /** `GET /api/settings` 与同步响应里的设置载荷 */

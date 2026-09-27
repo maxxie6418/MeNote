@@ -27,6 +27,8 @@ export interface SettingsViewProps {
   onChangeLoginPassword: (current: string, next: string) => Promise<string>;
   onLogout: () => void;
   privacyPage?: ReactNode;
+  /** 「版本与回收站」分类的内容（M4-11）：策略设置 + 回收站入口 */
+  versionsPage?: ReactNode;
 }
 
 export function SettingsView({
@@ -40,6 +42,7 @@ export function SettingsView({
   onChangeLoginPassword,
   onLogout,
   privacyPage,
+  versionsPage,
 }: SettingsViewProps) {
   const [registration, setRegistration] = useState<RegistrationState | null>(null);
 
@@ -74,6 +77,7 @@ export function SettingsView({
       }}
       onLogout={onLogout}
       privacyPage={privacyPage}
+      versionsPage={versionsPage}
     />
   );
 }

@@ -231,6 +231,51 @@ export async function trashCount(): Promise<number> {
 }
 
 /**
+ * 回收站条目数变化时的广播（模块级，极简）：
+ * 删除动作散在好几个 feature（列表行、编辑器、文件夹、Memo），
+ * 让设置页那个计数跟着更新最简单的办法就是"删完喊一嗓子"，
+ * 而不是把计数一路 prop drill 到每个删除入口。
+ */
+const countListeners = new Set<() => void>();
+
+export function notifyTrashCountChanged(): void {
+  for (const listener of countListeners) listener();
+}
+
+/**
+ * 回收站条目数的**实时计数**（设置页卡片头用；`DESIGN.md` §5.4-2：实时计数必须可见）。
+ *
+ * 读的是本地库，所以很快、离线也对；任何删除路径调用 `notifyTrashCountChanged()` 都会让它刷新。
+ */
+export function useTrashCount(): { count: number; refresh: () => Promise<void> } {
+  const [count, setCount] = useState(0);
+
+  const refresh = useCallback(async () => {
+    setCount(await countTrashedItems());
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void countTrashedItems().then((next) => {
+      if (alive) setCount(next);
+    });
+
+    const listener = (): void => {
+      void countTrashedItems().then((next) => {
+        if (alive) setCount(next);
+      });
+    };
+    countListeners.add(listener);
+    return () => {
+      alive = false;
+      countListeners.delete(listener);
+    };
+  }, []);
+
+  return { count, refresh };
+}
+
+/**
  * 移入回收站（软删）——**供其他 feature 调用**（笔记列表、文件夹树、编辑器「更多」菜单）。
  *
  * 放在这里而不是各自实现：软删必须走同一个端点与同一套本地记账（`rev` 不动、`meta_rev+1`、
@@ -241,6 +286,7 @@ export async function moveToTrash(id: string): Promise<{ deletedAt: number; meta
   if (result.deleted_at !== null) {
     await markItemTrashed(id, result.deleted_at, result.meta_rev);
   }
+  notifyTrashCountChanged();
   return { deletedAt: result.deleted_at ?? Date.now(), metaRev: result.meta_rev };
 }
 
@@ -248,5 +294,6 @@ export async function moveToTrash(id: string): Promise<{ deletedAt: number; meta
 export async function undoTrash(id: string): Promise<{ folderId: string | null }> {
   const result = await trashApi.restoreItem(id);
   await markItemRestored(id, result.meta_rev, result.folder_id);
+  notifyTrashCountChanged();
   return { folderId: result.folder_id };
 }

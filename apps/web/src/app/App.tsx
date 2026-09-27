@@ -7,7 +7,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { outboxCount } from "../data/db";
 import { trashApi } from "../data/api/endpoints";
-import { moveToTrash } from "../features/trash/useTrash";
+import { moveToTrash, useTrashCount } from "../features/trash/useTrash";
+import { VersionsTrashPage } from "../features/settings/ui/VersionsTrashPage";
 import { createSyncEngine, type SyncEngine } from "../data/sync";
 import { useAuth } from "../features/auth/model";
 import { AuthLoading, AuthScreens } from "./AuthScreens";
@@ -129,6 +130,8 @@ export default function App() {
 
   /** `onLoaded` 里要调 workspace 的方法，但 workspace 在下面才建：用 ref 顶一下 */
   const workspaceRef = useRef<NotesWorkspace | null>(null);
+  /** 设置页卡片头的回收站条目数（本地读；从回收站页回来时靠它刷新） */
+  const trashCounter = useTrashCount();
 
   const workspace = useNotesWorkspace({
     gate: privacy.gate,
@@ -172,6 +175,8 @@ export default function App() {
       try {
         const result = await trashApi.deleteFolder(folder.id);
         await workspace.refresh();
+        // 设置页卡片头的计数跟着更新（刚从回收站页回来/刚删过一条时它才准）
+        await trashCounter.refresh();
         pushToast(
           `「${folder.name}」及其中 ${result.items} 条内容、${result.folders - 1} 个子文件夹已移入回收站`,
           "warn",
@@ -439,6 +444,14 @@ export default function App() {
                 onPatchSettings={patchSettings}
               />
             }
+            versionsPage={
+              <VersionsTrashPage
+                settings={userSettings.settings.version_trash}
+                onPatchSettings={patchSettings}
+                trashCount={trashCounter.count}
+                onOpenTrash={() => navigate({ name: "trash" })}
+              />
+            }
           />
         ) : search.query.trim() !== "" ? (
           <SearchView
@@ -555,6 +568,7 @@ export default function App() {
               void moveToTrash(id)
                 .then(async () => {
                   await workspace.refresh();
+                  await trashCounter.refresh();
                   pushToast("已移入回收站，30 天内可恢复", "warn");
                 })
                 .catch((error: unknown) => {

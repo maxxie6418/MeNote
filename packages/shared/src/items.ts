@@ -8,6 +8,7 @@
  */
 import * as v from "valibot";
 import { base64UrlDecodeUtf8, base64UrlEncodeUtf8 } from "./base64url";
+import { PERMANENT_DELETE_BATCH } from "./content";
 import { BODY_HARD_LIMIT_BYTES } from "./limits";
 
 /** 内容类型（需求 §2.1） */
@@ -136,8 +137,35 @@ export const ItemMetaPatchSchema = v.object({
 });
 export type ItemMetaPatch = v.InferOutput<typeof ItemMetaPatchSchema>;
 
-/** 新建与全文保存的应答：正文大小由服务端实测，供客户端核对 */
-export const ItemBodyWriteResponseSchema = v.object({
+/**
+ * 回收站（M4-6；《M4 设计》§5.1 / §5.2）。
+ *
+ * 软删与恢复的应答形状一致：客户端据此更新本地那一行（含**恢复后实际落到的 `folder_id`**——
+ * 原文件夹没了会被挪到根目录，客户端必须跟着改，不能自己想当然）。
+ */
+export const TrashItemResponseSchema = v.object({
+  id: v.string(),
+  meta_rev: IntSchema,
+  /** 软删后有时刻；恢复后为 null */
+  deleted_at: NullableIntSchema,
+  folder_id: v.nullable(v.string()),
+});
+export type TrashItemResponse = v.InferOutput<typeof TrashItemResponseSchema>;
+
+/** 永久删除请求：**单批最多 10 条**（客户端分批；这个上限由 D1 的语句预算倒推） */
+export const PermanentDeleteRequestSchema = v.object({
+  ids: v.pipe(v.array(v.string()), v.minLength(1), v.maxLength(PERMANENT_DELETE_BATCH)),
+});
+export type PermanentDeleteRequest = v.InferOutput<typeof PermanentDeleteRequestSchema>;
+
+/** 永久删除应答：`sync_seq` 是这一批墓碑共享的序号（客户端可据此核对游标） */
+export const PermanentDeleteResponseSchema = v.object({
+  deleted: IntSchema,
+  sync_seq: IntSchema,
+});
+export type PermanentDeleteResponse = v.InferOutput<typeof PermanentDeleteResponseSchema>;
+
+/** 新建与全文保存的应答：正文大小由服务端实测，供客户端核对 */export const ItemBodyWriteResponseSchema = v.object({
   id: v.string(),
   rev: IntSchema,
   /** 服务端实测 UTF-8 字节数 */

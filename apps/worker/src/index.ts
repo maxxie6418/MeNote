@@ -16,6 +16,7 @@ import items from "./routes/items";
 import search from "./routes/search";
 import settings from "./routes/settings";
 import sync from "./routes/sync";
+import trash from "./routes/trash";
 import type { AppEnv, EnvBindings } from "./types";
 
 const app = new Hono<AppEnv>();
@@ -41,6 +42,7 @@ app.use("/api/auth/password", configGuard);
 app.route("/api", health);
 app.route("/api", auth);
 app.route("/api", items);
+app.route("/api", trash);
 app.route("/api", folders);
 app.route("/api", sync);
 app.route("/api", settings);

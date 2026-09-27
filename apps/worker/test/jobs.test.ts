@@ -131,6 +131,36 @@ describe("每日维护", () => {
     expect(tombstones.results.map((row) => row.entity_id)).toEqual(["expired"]);
   });
 
+  it("保留期按**用户设置**走（设成 7 天时第 8 天就该删）", async () => {
+    await seedUser();
+    // 8 天前删的：默认 30 天不该删，但用户把保留期设成 7 天后就该删
+    await seedTrashedItem("eight-days", NOW - 8 * DAY_MS);
+    await env.DB.prepare(
+      "INSERT INTO user_settings (user_id, json, rev, updated_at) VALUES ('u1', ?, 1, 1)",
+    )
+      .bind(JSON.stringify({ version_trash: { trash_retention_days: 7 } }))
+      .run();
+
+    const result = await runMaintenanceStep(env.DB, NOW);
+    expect(result.detail.deleted).toBe(1);
+    expect(await env.DB.prepare("SELECT 1 AS x FROM items WHERE id = 'eight-days'").first()).toBeNull();
+  });
+
+  it("设置行损坏时退回默认保留期（维护任务不因一行脏数据停摆）", async () => {
+    await seedUser();
+    await seedTrashedItem("broken-settings", NOW - 5 * DAY_MS);
+    await env.DB.prepare(
+      "INSERT INTO user_settings (user_id, json, rev, updated_at) VALUES ('u1', '{不是 JSON', 1, 1)",
+    ).run();
+
+    const result = await runMaintenanceStep(env.DB, NOW);
+    // 默认 30 天：5 天前的还没到期
+    expect(result.detail.deleted).toBe(0);
+    expect(
+      await env.DB.prepare("SELECT 1 AS x FROM items WHERE id = 'broken-settings'").first(),
+    ).not.toBeNull();
+  });
+
   it("附件：无引用标孤儿；到期登记 r2_gc_queue 并删行", async () => {
     await seedUser();
     // 一条已到期的孤儿（孤儿时刻早于保留期），一条刚标上的孤儿

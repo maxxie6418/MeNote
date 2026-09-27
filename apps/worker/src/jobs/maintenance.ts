@@ -127,31 +127,37 @@ async function executeStep(
  *
  * 复用 M4-6 的服务（同一批语句与墓碑语义），每轮最多 `quota` 条。
  */
+/**
+ * ① 回收站到期永久删除（M4-6 的服务 + 每用户保留期）。
+ *
+ * 保留期**按用户设置**（`user_settings.version_trash.trash_retention_days`，默认 30 天）——
+ * 设置页能改它，维护就必须读它，否则那个设置是假的。读不到（没写过设置/字段缺失）时用默认值。
+ */
 async function expireTrash(
   db: D1Database,
   now: number,
   quota: number,
 ): Promise<Record<string, number | string>> {
-  // 保留期用**默认 30 天**：按用户覆盖的设置在 M4-11（设置页「版本与回收站」）落地，
-  // 那时改成 JOIN user_settings 读；现在写死常量，与 `TRASH_RETENTION_DAYS_DEFAULT` 同一处来源
-  const byUser = await db
+  const rows = await db
     .prepare(
-      `SELECT i.id AS id, i.user_id AS user_id FROM items i
-       WHERE i.deleted_at IS NOT NULL AND i.deleted_at + (? * ?) <= ?
+      `SELECT i.id AS id, i.user_id AS user_id, i.deleted_at AS deleted_at, s.json AS settings_json
+       FROM items i LEFT JOIN user_settings s ON s.user_id = i.user_id
+       WHERE i.deleted_at IS NOT NULL
        ORDER BY i.deleted_at ASC
        LIMIT ?`,
     )
-    .bind(TRASH_RETENTION_DAYS_DEFAULT, DAY_MS, now, quota)
-    .all<{ id: string; user_id: string }>();
-  if (byUser.results.length === 0) return { deleted: 0 };
+    .bind(quota)
+    .all<{ id: string; user_id: string; deleted_at: number; settings_json: string | null }>();
 
-  // 逐用户分组：永久删除要求 user_id（也保证不会跨用户）
   const groups = new Map<string, string[]>();
-  for (const row of byUser.results) {
+  for (const row of rows.results) {
+    const retention = retentionDaysOf(row.settings_json);
+    if (row.deleted_at + retention * DAY_MS > now) continue; // 还没到期
     const list = groups.get(row.user_id) ?? [];
     list.push(row.id);
     groups.set(row.user_id, list);
   }
+  if (groups.size === 0) return { deleted: 0 };
 
   let deleted = 0;
   for (const [userId, ids] of groups) {
@@ -159,6 +165,18 @@ async function expireTrash(
     deleted += result.deleted;
   }
   return { deleted };
+}
+
+/** 从设置 JSON 里取回收站保留天数；解析不了就用默认值（维护任务不能因为一行脏数据停摆） */
+function retentionDaysOf(json: string | null): number {
+  if (!json) return TRASH_RETENTION_DAYS_DEFAULT;
+  try {
+    const parsed = JSON.parse(json) as { version_trash?: { trash_retention_days?: number } };
+    const value = parsed.version_trash?.trash_retention_days;
+    return typeof value === "number" && value >= 1 ? value : TRASH_RETENTION_DAYS_DEFAULT;
+  } catch {
+    return TRASH_RETENTION_DAYS_DEFAULT;
+  }
 }
 
 /**

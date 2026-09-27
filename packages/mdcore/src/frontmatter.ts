@@ -47,7 +47,20 @@ export interface ParsedDocument {
   raw: string | null;
 }
 
-const EMPTY_META: MenoteMeta = { type: null, tags: [], task: null, preservedLines: [] };
+/**
+ * 空的 meta。
+ *
+ * **必须是工厂、不能是共享常量**（2026-09-27 修）：早先写的是
+ * `const EMPTY_META = {...}` + `{ ...EMPTY_META }`——那是**浅拷贝**，于是每次解析都往
+ * **同一个** `preservedLines` / `tags` 数组里累计：同一进程里解析第二篇文档时，会带上上一篇的
+ * 保留行（表格的 `columns` / `views` 就在其中）。表格式编解码一开始用 `preservedLines`，
+ * 立刻把它照出来了：第二份文档的列定义变成"上一篇 + 这一篇"。
+ *
+ * 这类 bug 的可怕之处是它**跨文档、跨请求**地污染数据，而单测只解析一篇时完全看不出来。
+ */
+function emptyMeta(): MenoteMeta {
+  return { type: null, tags: [], task: null, preservedLines: [] };
+}
 
 /** 拆出围栏内的原始文本；没有合法 front matter 时返回 null（此时整篇都是正文） */
 function splitFences(markdown: string): { raw: string; body: string } | null {
@@ -178,21 +191,21 @@ function taskOf(segment: Segment): TaskFields {
 /** 解析条目 md：拿到结构化 meta、正文，以及原始 front matter 文本 */
 export function parseMenoteMeta(markdown: string): ParsedDocument {
   const split = splitFences(markdown);
-  if (!split) return { meta: { ...EMPTY_META }, body: markdown, raw: null };
+  if (!split) return { meta: emptyMeta(), body: markdown, raw: null };
 
   const blockLines = split.raw.split("\n");
   const menoteIndex = blockLines.findIndex((line) => /^menote\s*:/.test(line));
   if (menoteIndex === -1) {
     // 有 front matter 但没有 menote 键：保留原文，别丢
     return {
-      meta: { ...EMPTY_META, preservedLines: blockLines },
+      meta: { ...emptyMeta(), preservedLines: blockLines },
       body: split.body,
       raw: split.raw,
     };
   }
 
   const { segments } = splitSegments(blockLines.slice(menoteIndex + 1));
-  const meta: MenoteMeta = { ...EMPTY_META };
+  const meta: MenoteMeta = emptyMeta();
 
   for (const segment of segments) {
     if (segment.key === "type") meta.type = scalarOf(segment) || null;

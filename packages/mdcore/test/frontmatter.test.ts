@@ -21,8 +21,33 @@ menote:
 内容。
 `;
 
-describe("front matter 解析", () => {
-  it("取出 type / tags / task 与正文", () => {
+describe("解析之间不共享状态（2026-09-27 修复）", () => {
+  /**
+   * 早先这里是 `const EMPTY_META = {...}` + `{ ...EMPTY_META }`——**浅拷贝**，于是每次解析
+   * 都往同一个 `preservedLines` / `tags` 数组里累计。单篇文档的单测完全看不出来；
+   * 表格式编解码开始读 `preservedLines` 后立刻暴露：同一进程里第二份文档会带上第一篇的保留行。
+   */
+  it("连续解析两篇文档，preservedLines 不累计", () => {
+    const table = "---\nmenote:\n  type: table\n  columns:\n    - { id: c1, name: 甲, type: text }\n---\n\n正文";
+    const note = "---\nmenote:\n  type: note\n---\n\n另一篇";
+
+    const first = parseMenoteMeta(table);
+    expect(first.meta.preservedLines.some((line) => line.includes("columns"))).toBe(true);
+
+    const second = parseMenoteMeta(note);
+    expect(second.meta.preservedLines).toEqual([]);
+  });
+
+  it("tags 数组也不共享：改一篇不影响下一篇", () => {
+    const markdown = "---\nmenote:\n  type: note\n---\n\n正文";
+    const first = parseMenoteMeta(markdown);
+    first.meta.tags.push("污染");
+
+    expect(parseMenoteMeta(markdown).meta.tags).toEqual([]);
+  });
+});
+
+describe("front matter 解析", () => {  it("取出 type / tags / task 与正文", () => {
     const { meta, body } = parseMenoteMeta(DOC);
     expect(meta.type).toBe("note");
     expect(meta.tags).toEqual(["工作", "dev"]);

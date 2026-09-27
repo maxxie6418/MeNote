@@ -190,6 +190,61 @@ export const SQL_BUMP_SYNC_SEQ_ON_FOLDER_META = `UPDATE users SET sync_seq = syn
 export const SQL_SELECT_USER_TOMBSTONE_FLOOR =
   "SELECT tombstone_floor FROM users WHERE id = ?";
 
+// —— attachments / pending_uploads / r2_gc_queue（0004；M4-4）——
+
+/** 附件按身份取：`(user_id, sha256, kind)` 是它的身份（缩略图沿用原图的哈希） */
+export const SQL_SELECT_ATTACHMENT_BY_SHA = `SELECT id, r2_key, parent_id, size_bytes
+  FROM attachments WHERE user_id = ? AND sha256 = ? AND kind = ?`;
+
+/**
+ * 插附件行。**`INSERT OR IGNORE`**：同一文件重复上传时靠唯一索引
+ * `(user_id, sha256, kind)` 挡住，已有的行一字不动（`created_at` 不能被改写，
+ * 否则"谁先传的"就乱了）。
+ */
+export const SQL_INSERT_ATTACHMENT = `INSERT OR IGNORE INTO attachments
+  (id, user_id, kind, parent_id, sha256, r2_key, mime, size_bytes, width, height, filename, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+/** 引用：同一条目 + 同一附件只记一次（`version_id` 为 NULL 表示"当前稿引用"） */
+export const SQL_INSERT_ATTACHMENT_REF = `INSERT OR IGNORE INTO attachment_refs
+  (item_id, version_id, attachment_id, created_at) VALUES (?, ?, ?, ?)`;
+
+export const SQL_SELECT_ATTACHMENT_REFS = `SELECT attachment_id, version_id
+  FROM attachment_refs WHERE item_id = ?`;
+
+export const SQL_DELETE_ATTACHMENT = "DELETE FROM attachments WHERE id = ? AND user_id = ?";
+
+/** 上传登记：上传前先写（24 小时有效），落元数据时删 */
+export const SQL_INSERT_PENDING_UPLOAD = `INSERT INTO pending_uploads (r2_key, user_id, created_at, due_at)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT (r2_key) DO UPDATE SET due_at = excluded.due_at, created_at = excluded.created_at`;
+
+export const SQL_DELETE_PENDING_UPLOAD = "DELETE FROM pending_uploads WHERE r2_key = ?";
+
+export const SQL_SELECT_PENDING_UPLOAD =
+  "SELECT r2_key, due_at FROM pending_uploads WHERE r2_key = ?";
+
+/**
+ * 标记孤儿：**没有任何引用**的附件置 `orphaned_at`。
+ *
+ * 注意"回收站里的条目"仍算引用（`attachment_refs` 行还在）——所以这里只按引用表判定，
+ * 与《M4 设计》§5.1「条目删除不动 attachment_refs」是一致的。
+ */
+export const SQL_MARK_ORPHANS_OF_USER = `UPDATE attachments SET orphaned_at = ?, updated_at = ?
+  WHERE user_id = ? AND orphaned_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM attachment_refs r WHERE r.attachment_id = attachments.id)`;
+
+/** 到期的孤儿（标满保留期）：单个用户 / 全部用户两个版本，前者给手动 GC，后者给每日维护 */
+export const SQL_SELECT_ORPHANED_DUE = `SELECT id, r2_key, user_id FROM attachments
+  WHERE user_id = ? AND orphaned_at IS NOT NULL AND orphaned_at + (? * ?) <= ?`;
+
+export const SQL_SELECT_ORPHANED_DUE_ALL = `SELECT id, r2_key, user_id FROM attachments
+  WHERE orphaned_at IS NOT NULL AND orphaned_at + (? * ?) <= ?`;
+
+/** R2 待删队列：同一把键可能被"删除"与"孤儿"两条路径登记，用 `INSERT OR IGNORE` 保早的那次 */
+export const SQL_INSERT_R2_GC = `INSERT OR IGNORE INTO r2_gc_queue
+  (r2_key, user_id, reason, due_at, created_at) VALUES (?, ?, ?, ?, ?)`;
+
 // —— tombstones（0004；M4-7）——
 
 /** 增量拉取墓碑：与条目/文件夹同一套"从游标之后、按序号升序、多取一行探截断"的写法 */

@@ -20,13 +20,13 @@ export interface EnvBindings {
    */
   BACKUP_CRED_KEY?: string;
   /**
-   * 附件与版本正文的对象存储（M4；架构 §5.2）。
+   * 附件与版本正文的对象存储（M4；架构 §5.2、设计 §3.1）。
    *
-   * **可选**：新增绑定不会自动供给——没在 Cloudflare 端建好桶并写进 `wrangler.jsonc` 之前，
-   * 本地与线上的 `env.BUCKET` 都是 `undefined`。所有用到它的代码都必须**容忍缺失**
-   * （明确报错或跳过），否则一个没配的绑定会让整个 Worker 起不来。
+   * **可选**是刻意的：本地 `pnpm dev` 若没带上绑定、或某个实例还没建桶时，
+   * 用它的代码要能明确报错而不是让整个 Worker 起不来。生产由 `wrangler.jsonc` 的
+   * `r2_buckets` 绑定（`binding: "ATTACHMENTS"`、桶 `menote-attachments`，部署时自动供给）。
    */
-  BUCKET?: R2Bucket;
+  ATTACHMENTS?: R2Bucket;
 }
 
 /** 已通过会话鉴权的用户（挂到 Hono 的 context 上） */

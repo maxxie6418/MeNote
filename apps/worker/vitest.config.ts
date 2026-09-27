@@ -16,6 +16,14 @@ export default defineConfig({
           AUTH_PEPPER: "test-pepper-not-a-real-secret",
           BACKUP_CRED_KEY: "test-backup-cred-not-a-real-secret",
         },
+        /**
+         * 附件桶（M4-4）：**只在测试里**给 miniflare 加一个同名桶绑定。
+         *
+         * 为什么不在 `wrangler.jsonc` 里声明：生产绑定要等用户开通 R2 之后再加，
+         * 而"新增绑定不会自动供给"——先写进部署配置会让 Workers Builds 挂在没有桶的账户上。
+         * 测试用 miniflare 的桶（真实的 R2 API 形状，不是内存假件），所以代码路径是真的。
+         */
+        r2Buckets: ["ATTACHMENTS"],
       },
     }),
   ],

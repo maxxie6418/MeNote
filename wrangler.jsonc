@@ -24,6 +24,19 @@
   ],
   "observability": {
     "enabled": true
+  },
+  // 附件与版本正文的对象存储（M4；《M4 设计》§3.1）。与 D1 一样不写 id：部署时自动供给。
+  // 键形如 a/{uid}/{sha256} 与 a/{uid}/{sha256}.t（缩略图）。
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "menote-attachments"
+    }
+  ],
+  // 定时任务（M4-8；架构 §12.1：每 15 分钟一轮——R2 GC、每日维护推进一步、注册开关归位）。
+  // 用户设置里的三样都按"配额 + 游标 + 幂等"容忍重复，**不加锁**（设计 §7 的结论）。
+  "triggers": {
+    "crons": ["*/15 * * * *"]
   }
   // 注意：**不要**在这里写 "secrets": { "required": [...] }。
   // 该字段是 deploy 的硬门禁（不是"提示"）：机密没设时 `wrangler deploy` 直接失败，

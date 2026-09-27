@@ -252,16 +252,18 @@ describe("Cron 一轮", () => {
         .run();
     }
 
-    // 测试环境还没绑 R2（`wrangler.jsonc` 的 `r2_buckets` 等用户点头），所以这里用一个最小替身，
-    // 只记录"删了哪些键"——真桶的行为在本地手验（wrangler dev 的 miniflare）里再看
+    // 现在生产绑定已就位（`wrangler.jsonc` 的 `r2_buckets`），测试里直接用 miniflare 的真实桶；
+    // 只额外记录"删了哪些键"，好断言游标推进到哪一把
     const deletedKeys: string[] = [];
+    const realBucket = env.ATTACHMENTS as R2Bucket;
     const bucket = {
       delete: async (key: string) => {
         deletedKeys.push(key);
+        await realBucket.delete(key);
       },
     } as unknown as R2Bucket;
 
-    const first = await runScheduled({ DB: env.DB, BUCKET: bucket }, NOW);
+    const first = await runScheduled({ DB: env.DB, ATTACHMENTS: bucket }, NOW);
     expect(first.gcDeleted).toBe(JOB_R2_GC_BATCH);
     expect(deletedKeys).toHaveLength(JOB_R2_GC_BATCH);
     expect(await meta(KEY_GC_CURSOR)).toBe(`k${String(JOB_R2_GC_BATCH - 1).padStart(3, "0")}`);
@@ -269,7 +271,7 @@ describe("Cron 一轮", () => {
     const left = await env.DB.prepare("SELECT COUNT(*) AS n FROM r2_gc_queue").first<{ n: number }>();
     expect(left?.n).toBe(5);
 
-    const second = await runScheduled({ DB: env.DB, BUCKET: bucket }, NOW);
+    const second = await runScheduled({ DB: env.DB, ATTACHMENTS: bucket }, NOW);
     expect(second.gcDeleted).toBe(5);
     expect(deletedKeys).toHaveLength(total);
   });

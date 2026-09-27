@@ -9,6 +9,7 @@
  * 服务端**不信任**客户端传来的尺寸与体积，但两边算的是同一套阈值——不一致会导致"客户端说行、
  * 服务端说不行"这种最难查的问题，所以只有这一处。
  */
+import * as v from "valibot";
 
 /** 单附件硬上限（与 `attachments.size_bytes` 的 CHECK 一致） */
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -52,3 +53,36 @@ export const JOB_IDLE_SEAL_BATCH = 3;
 
 /** 天 → 毫秒（各处保留期都用它换算，避免各写一遍 `* 24 * 60 * 60 * 1000`） */
 export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 附件的三种客户端请求形状（M4-4；服务端与客户端共用同一份校验） */
+
+/** `POST /api/attachments/check`：客户端算出哈希与大小后先问一句"传过没有" */
+export const AttachmentCheckSchema = v.object({
+  sha256: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/i)),
+  size: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_ATTACHMENT_BYTES)),
+  /** 缺省 = 原图 */
+  kind: v.optional(v.picklist(["original", "thumb"])),
+});
+export type AttachmentCheck = v.InferOutput<typeof AttachmentCheckSchema>;
+
+/** 缩略图那一行的元数据（浏览器端生成，设计 §3.3） */
+export const AttachmentThumbSchema = v.object({
+  size: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_ATTACHMENT_BYTES)),
+  mime: v.nullable(v.string()),
+  width: v.nullable(v.number()),
+  height: v.nullable(v.number()),
+});
+
+/** `POST /api/attachments/finalize`：落元数据（原图 + 可选的缩略图 + 可选的条目引用） */
+export const AttachmentFinalizeSchema = v.object({
+  sha256: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/i)),
+  size: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_ATTACHMENT_BYTES)),
+  mime: v.nullable(v.string()),
+  width: v.nullable(v.number()),
+  height: v.nullable(v.number()),
+  filename: v.nullable(v.string()),
+  thumb: v.optional(v.nullable(AttachmentThumbSchema)),
+  /** 这次上传要挂到哪条条目上（引用由客户端显式上报） */
+  itemId: v.optional(v.nullable(v.string())),
+});
+export type AttachmentFinalize = v.InferOutput<typeof AttachmentFinalizeSchema>;

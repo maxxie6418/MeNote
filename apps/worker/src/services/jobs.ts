@@ -35,7 +35,8 @@ export interface ScheduledSummary {
 
 export interface ScheduledEnv {
   DB: D1Database;
-  BUCKET?: R2Bucket;
+  /** 附件与版本对象桶（`wrangler.jsonc` 绑为 `ATTACHMENTS`）；缺绑定时 R2 GC 只跳过、不删队列行 */
+  ATTACHMENTS?: R2Bucket;
 }
 
 /**
@@ -103,14 +104,14 @@ async function runR2Gc(env: ScheduledEnv, now: number, quota: number): Promise<n
 
   let deleted = 0;
   for (const row of rows.results) {
-    if (!env.BUCKET) {
+    if (!env.ATTACHMENTS) {
       // 没绑对象存储：**队列行也不删**。删行等于宣布"对象已清理"，而它还在桶外面漂着——
       // 宁可下一轮重来，也不能把待删记录丢掉（这正是 r2_gc_queue 存在的意义）
-      console.error("cron: BUCKET 未绑定，跳过 R2 GC（队列保留）");
+      console.error("cron: ATTACHMENTS 未绑定，跳过 R2 GC（队列保留）");
       return deleted;
     }
     try {
-      await env.BUCKET.delete(row.r2_key);
+      await env.ATTACHMENTS.delete(row.r2_key);
     } catch (error) {
       // 删除失败就留到下一轮（队列行不删）
       console.error(`cron: r2 delete failed for ${row.r2_key}`, error);

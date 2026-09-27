@@ -129,6 +129,19 @@ export const CryptoStateSchema = v.object({
 });
 export type CryptoState = v.InferOutput<typeof CryptoStateSchema>;
 
+/**
+ * `PUT /api/crypto` 的请求体。
+ *
+ * `k` 只在**首次启用**时提供：浏览器没有（也不该有）`BACKUP_CRED_KEY`，
+ * 所以第二份包裹（供 Worker/重置使用的 `k_wrapped_backup`）由**服务端**用它包出来。
+ * 改密 / 重置时浏览器手里已有旧的备份包裹，原样带回来即可，不必再传 K。
+ */
+export const CryptoWriteSchema = v.object({
+  materials: CryptoMaterialsSchema,
+  k: v.optional(Base64UrlSchema),
+});
+export type CryptoWrite = v.InferOutput<typeof CryptoWriteSchema>;
+
 /** `POST /api/crypto/reset` 的响应：明文 K（base64url），浏览器用完即弃 */
 export const CryptoResetResponseSchema = v.object({ k: Base64UrlSchema });
 export type CryptoResetResponse = v.InferOutput<typeof CryptoResetResponseSchema>;

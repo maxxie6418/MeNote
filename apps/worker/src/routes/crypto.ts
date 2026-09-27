@@ -9,7 +9,7 @@
  *
  * 响应一律 `no-store`：这是门禁材料，任何中间缓存都不该留。
  */
-import { CryptoMaterialsSchema } from "@menote/shared";
+import { CryptoWriteSchema } from "@menote/shared";
 import { Hono } from "hono";
 import * as v from "valibot";
 import { DomainError } from "../errors";
@@ -31,12 +31,12 @@ app.get("/crypto", requireSession, async (c) => {
 });
 
 app.put("/crypto", requireSession, async (c) => {
-  const parsed = v.safeParse(CryptoMaterialsSchema, await readJsonBody(c));
+  const parsed = v.safeParse(CryptoWriteSchema, await readJsonBody(c));
   if (!parsed.success) throw new DomainError("invalid", "请求内容不合法");
 
   c.header("Cache-Control", "no-store");
   return c.json(
-    await putCryptoMaterials(c.env.DB, c.get("user").id, parsed.output, Date.now()),
+    await putCryptoMaterials(c.env, c.env.DB, c.get("user").id, parsed.output, Date.now()),
   );
 });
 

@@ -10,15 +10,20 @@
  */
 import {
   BACKUP_CRED_KEY_SECRET,
+  CRYPTO_IV_BYTES,
+  CRYPTO_KEY_BYTES,
   CRYPTO_SALT_BYTES,
+  CRYPTO_TAG_BYTES,
   CRYPTO_VERIFIER_BYTES,
   CRYPTO_WRAPPED_BYTES,
   cryptoBlobFromBase64Url,
   cryptoBlobToBase64Url,
+  packCryptoBlob,
   unpackCryptoBlob,
   type CryptoMaterials,
   type CryptoResetResponse,
   type CryptoState,
+  type CryptoWrite,
 } from "@menote/shared";
 import {
   SQL_COUNT_PRIVACY_ITEMS,
@@ -102,13 +107,45 @@ export async function getCryptoState(db: D1Database, userId: string): Promise<Cr
   return { enabled: true, materials: toMaterials(row), rev: row.rev, updated_at: row.updated_at };
 }
 
-/** `PUT /api/crypto`：启用 / 改密 / 重置后的整体覆盖（后写为准，`rev + 1`） */
+/**
+ * `PUT /api/crypto`：启用 / 改密 / 重置后的整体覆盖（后写为准，`rev + 1`）。
+ *
+ * `input.k` 只在**首次启用**时提供——见 `wrapContentKeyWithBackupSecret` 的说明；
+ * 改密 / 重置时把 `GET` 拿到的旧备份包裹原样带回来即可。
+ */
 export async function putCryptoMaterials(
+  env: EnvBindings,
   db: D1Database,
   userId: string,
-  materials: CryptoMaterials,
+  input: CryptoWrite,
   now: number,
 ): Promise<CryptoState> {
+  const existing = await db.prepare(SQL_SELECT_USER_CRYPTO).bind(userId).first<CryptoRow>();
+
+  let backupWrap = input.materials.k_wrapped_backup;
+  if (input.k !== undefined) {
+    const secret = env[BACKUP_CRED_KEY_SECRET];
+    if (!secret) {
+      throw new DomainError(
+        "retry_later",
+        "实例未配置 BACKUP_CRED_KEY 机密，无法启用隐私锁（请联系实例管理员）",
+      );
+    }
+    let contentKey: Uint8Array<ArrayBuffer>;
+    try {
+      contentKey = cryptoBlobFromBase64Url(input.k);
+    } catch {
+      throw new DomainError("invalid", "内容密钥的编码不合法");
+    }
+    if (contentKey.length !== CRYPTO_KEY_BYTES) {
+      throw new DomainError("invalid", "内容密钥长度不合法");
+    }
+    backupWrap = await wrapContentKeyWithBackupSecret(secret, contentKey);
+  } else if (!existing) {
+    throw new DomainError("invalid", "首次启用隐私锁必须随请求提供内容密钥");
+  }
+
+  const materials: CryptoMaterials = { ...input.materials, k_wrapped_backup: backupWrap };
   const { salt, verifier, wrappedPw, wrappedBackup } = assertMaterials(materials);
   await db
     .prepare(SQL_UPSERT_USER_CRYPTO)
@@ -151,9 +188,37 @@ export async function deleteCryptoMaterials(db: D1Database, userId: string): Pro
 }
 
 /** `BACKUP_CRED_KEY` 是任意字符串机密，用 SHA-256 归一成 32 字节 AES-GCM 密钥 */
-async function deriveBackupCredKey(secret: string): Promise<CryptoKey> {
+async function deriveBackupCredKey(
+  secret: string,
+  usages: Array<"decrypt" | "encrypt"> = ["decrypt"],
+): Promise<CryptoKey> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
-  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["decrypt"]);
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, usages);
+}
+
+/**
+ * 用备份凭据把内容密钥 K 包起来（**只在首次启用时走这条路**）。
+ *
+ * 为什么服务端要做这一步：`BACKUP_CRED_KEY` 是 Worker 机密，浏览器拿不到也不该拿到；
+ * 而"重置隐私密码"要求服务端能解出 K。所以启用时浏览器把 K 交给服务端包一次
+ * （内容本来就是明文存储，服务端知道 K 不改变保护边界，见《隐私锁设计》§1 的 P1/P3）。
+ */
+async function wrapContentKeyWithBackupSecret(
+  secret: string,
+  contentKey: Uint8Array<ArrayBuffer>,
+): Promise<string> {
+  const wrapKey = await deriveBackupCredKey(secret, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(CRYPTO_IV_BYTES));
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, wrapKey, contentKey),
+  );
+  return cryptoBlobToBase64Url(
+    packCryptoBlob({
+      iv,
+      ciphertext: sealed.slice(0, sealed.length - CRYPTO_TAG_BYTES),
+      tag: sealed.slice(sealed.length - CRYPTO_TAG_BYTES),
+    }),
+  );
 }
 
 /**

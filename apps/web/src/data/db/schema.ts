@@ -7,7 +7,7 @@
  * 本地库只是缓存：遇到无法迁移的情况可以清空后从服务端重建（清空前把 outbox 未上传项导出）。
  */
 import Dexie, { type EntityTable } from "dexie";
-import type { FolderMeta, ItemMeta, UserSettings } from "@menote/shared";
+import type { CryptoMaterials, FolderMeta, ItemMeta, UserSettings } from "@menote/shared";
 
 /** 本地待上传标记：null 表示已同步 */
 export type PendingKind =
@@ -125,6 +125,23 @@ export interface ConflictRow {
   created_at: number;
 }
 
+/**
+ * 隐私锁门禁材料的本地缓存（M3；《隐私锁设计》§10）。
+ *
+ * **只有一行**（`key = "user"`），服务端 `user_crypto` 是唯一权威：
+ * 缓存它是为了**离线解锁**（本地用 verifier 校验，不回服务端），以及省掉每次解锁的往返。
+ * 它不参与同步，也不等于"已解锁"——解锁态是内存里的会话状态。
+ */
+export interface PrivacyStateRow {
+  key: "user";
+  enabled: boolean;
+  materials: CryptoMaterials | null;
+  /** 服务端材料版本；变高即覆盖本地并清空解锁态（密码在别处改过） */
+  rev: number;
+  updated_at: number;
+  cached_at: number;
+}
+
 export class MenoteDatabase extends Dexie {
   items!: EntityTable<LocalItem, "id">;
   bodies!: EntityTable<BodyRow, "item_id">;
@@ -135,6 +152,7 @@ export class MenoteDatabase extends Dexie {
   searchIndex!: EntityTable<SearchIndexRow, "item_id">;
   settings!: EntityTable<SettingsRow, "key">;
   conflicts!: EntityTable<ConflictRow, "copy_id">;
+  privacyState!: EntityTable<PrivacyStateRow, "key">;
 
   constructor(name = "menote") {
     super(name);
@@ -178,6 +196,19 @@ export class MenoteDatabase extends Dexie {
       searchIndex: "item_id, sync_seq, updated_at",
       settings: "key",
       conflicts: "copy_id, original_id",
+    });
+    // 5：新增隐私锁材料缓存（M3）。与设置表同构：一行、纯本地、支持离线解锁。
+    this.version(5).stores({
+      items: "id, folder_id, [folder_id+updated_at], memo_at, sync_seq, is_task, deleted_at",
+      bodies: "item_id",
+      drafts: "item_id",
+      folders: "id, parent_id, sync_seq",
+      outbox: "++seq, entity_id, [entity+entity_id], next_retry_at",
+      syncState: "key",
+      searchIndex: "item_id, sync_seq, updated_at",
+      settings: "key",
+      conflicts: "copy_id, original_id",
+      privacyState: "key",
     });
   }
 }

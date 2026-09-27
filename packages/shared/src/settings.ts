@@ -36,11 +36,41 @@ export const QUICK_MENU_FEATURES: ReadonlyArray<{
   pendingStep: string | null;
 }> = [
   { id: "theme", label: "主题切换", defaultOn: true, pendingStep: null },
-  { id: "lock", label: "立即锁定", defaultOn: true, pendingStep: "M3" },
+  { id: "lock", label: "立即锁定", defaultOn: true, pendingStep: null },
   { id: "search", label: "搜索", defaultOn: false, pendingStep: null },
   { id: "trash", label: "回收站", defaultOn: false, pendingStep: "M4" },
   { id: "backup", label: "立即备份", defaultOn: false, pendingStep: "M5" },
 ];
+
+/** 隐私锁解锁档位（三档；「仅本次查看」已于 2026-09-27 作废，见《隐私锁设计》§4.2） */
+export const PrivacyTierSchema = v.picklist(["session", "minutes", "device"]);
+export type PrivacyTier = v.InferOutput<typeof PrivacyTierSchema>;
+
+/** 「N 分钟」档的可选值（默认 5，见《隐私锁设计》§4.2） */
+export const PrivacyMinutesSchema = v.picklist([1, 5, 15, 30, 60]);
+export type PrivacyMinutes = v.InferOutput<typeof PrivacyMinutesSchema>;
+
+/**
+ * 隐私锁设置（M3；《隐私锁设计》§7.1）。
+ *
+ * 注意：**门禁的判定契约不在这里**——运行时 gate 见 `privacy.ts`。这里只是"用户配置的持久形态"。
+ */
+export const PrivacySettingsSchema = v.object({
+  /** 范围成员；加密空间恒在范围内，不落库 */
+  scope: v.object({ memo: v.boolean() }),
+  tier: PrivacyTierSchema,
+  minutes: PrivacyMinutesSchema,
+  /** 「解锁时可搜索加密内容」——**只作用于隐私条目的正文命中**（标题不看它） */
+  search_bodies_when_unlocked: v.boolean(),
+});
+export type PrivacySettings = v.InferOutput<typeof PrivacySettingsSchema>;
+
+export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
+  scope: { memo: true },
+  tier: "minutes",
+  minutes: 5,
+  search_bodies_when_unlocked: true,
+};
 
 export const UserSettingsSchema = v.object({
   start_view: StartViewSchema,
@@ -48,6 +78,13 @@ export const UserSettingsSchema = v.object({
   editor_mode: EditorModeSchema,
   /** 选中的功能项；**数组顺序即菜单里的显示顺序** */
   quick_menu: v.array(QuickMenuFeatureSchema),
+  /**
+   * 隐私锁设置（M3）。
+   *
+   * **optional + 默认值**：部署窗口内旧客户端（不带该字段）PUT 设置不会被 422——
+   * 与 M2 给 `user_settings` 加字段时的处理一致；输出类型里它是必有的（默认值已补齐）。
+   */
+  privacy: v.optional(PrivacySettingsSchema, DEFAULT_PRIVACY_SETTINGS),
 });
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
@@ -58,6 +95,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   quick_menu: QUICK_MENU_FEATURES.filter((feature) => feature.defaultOn).map(
     (feature) => feature.id,
   ),
+  privacy: DEFAULT_PRIVACY_SETTINGS,
 };
 
 /** `GET /api/settings` 与同步响应里的设置载荷 */

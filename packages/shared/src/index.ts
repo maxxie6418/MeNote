@@ -64,6 +64,7 @@ export * from "./folders";
 export * from "./hash";
 export * from "./items";
 export * from "./limits";
+export * from "./privacy";
 export * from "./search";
 export * from "./settings";
 export * from "./sync";

@@ -5,7 +5,7 @@
  * 图片瀑布流是另一个视图，按计划依赖 M4 的图片管线，不在 M2。
  */
 import type { LocalItem, MemoContent } from "../../../data/db";
-import { groupMemosByDay } from "../model";
+import { dayPartsInZone, groupMemosByDay, timeLabelInZone } from "../model";
 import { MemoItem } from "./MemoItem";
 import { Icon } from "../../../app/ui/Icon";
 
@@ -52,26 +52,50 @@ export function MemoTimeline({
   }
 
   return (
+    /*
+      时间轴按原型（`deliverables/pages-redesign-2026-09-27/index.html` 的 `.tl__*`）：
+      **两列**（左栏 88px + 32px 列间距）——日期行放「日期 / 星期」，条目行放「时刻」，
+      主干上有节点（日期=主色实心点、条目=空心点，悬停转主色）。
+      行结构：`.timeline__row` 是 grid，节点/圆点用绝对定位落在主干上（`left: 104px` = 88 + 32/2）。
+    */
     <div className="timeline">
-      {days.map((day) => (
-        <section key={day.dayKey} className="timeline__day" aria-label={day.dayLabel}>
-          <h3 className="timeline__date">{day.dayLabel}</h3>
-          {day.memos.map((memo) => (
-            <MemoItem
-              key={memo.id}
-              memo={memo}
-              entry={contents[memo.id] ?? { content: "", convertedTo: null }}
-              onSave={onSave}
-              onTogglePinned={onTogglePinned}
-              onConvert={onConvert}
-              onDelete={onDelete}
-              onOpenConverted={onOpenConverted}
-              onSelectTag={onSelectTag}
-              timeZone={timeZone}
-            />
-          ))}
-        </section>
-      ))}
+      {days.map((day) => {
+        // 同一天的 Memo 在用户时区里同属一天，用第一条的时刻取「日期 / 星期」
+        const parts = dayPartsInZone(day.memos[0]?.memo_at ?? 0, timeZone);
+        return (
+          <section key={day.dayKey} className="timeline__day" aria-label={day.dayLabel}>
+            <div className="timeline__row">
+              <div className="timeline__gutter">
+                <span className="timeline__date">{parts.date}</span>
+                <span className="timeline__wd">{parts.weekday}</span>
+              </div>
+              <span className="timeline__node" aria-hidden="true" />
+            </div>
+            {day.memos.map((memo) => (
+              <article key={memo.id} className="timeline__row timeline__item">
+                <div className="timeline__gutter">
+                  <time className="timeline__time" dateTime={new Date(memo.memo_at ?? 0).toISOString()}>
+                    {timeLabelInZone(memo.memo_at ?? 0, timeZone)}
+                  </time>
+                </div>
+                <span className="timeline__dot" aria-hidden="true" />
+                <div className="timeline__content">
+                  <MemoItem
+                    memo={memo}
+                    entry={contents[memo.id] ?? { content: "", convertedTo: null }}
+                    onSave={onSave}
+                    onTogglePinned={onTogglePinned}
+                    onConvert={onConvert}
+                    onDelete={onDelete}
+                    onOpenConverted={onOpenConverted}
+                    onSelectTag={onSelectTag}
+                  />
+                </div>
+              </article>
+            ))}
+          </section>
+        );
+      })}
     </div>
   );
 }

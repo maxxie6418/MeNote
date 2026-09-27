@@ -44,6 +44,24 @@ export function dayLabelInZone(epochMs: number, timeZone: string = DEFAULT_TIME_
   }).format(new Date(epochMs));
 }
 
+/**
+ * 日期与星期**分开**取（原型 `tl__date` + `tl__wd` 是两行）。
+ *
+ * 为什么要拆：`dayLabelInZone` 把两者拼成一个字符串，界面上无法给它们不同的字号/颜色。
+ */
+export function dayPartsInZone(
+  epochMs: number,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): { date: string; weekday: string } {
+  const instant = new Date(epochMs);
+  return {
+    date: new Intl.DateTimeFormat("zh-CN", { timeZone, month: "long", day: "numeric" }).format(
+      instant,
+    ),
+    weekday: new Intl.DateTimeFormat("zh-CN", { timeZone, weekday: "short" }).format(instant),
+  };
+}
+
 /** 时刻文案，如「14:05」 */
 export function timeLabelInZone(epochMs: number, timeZone: string = DEFAULT_TIME_ZONE): string {
   return new Intl.DateTimeFormat("zh-CN", {

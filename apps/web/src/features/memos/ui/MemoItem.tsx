@@ -11,7 +11,6 @@ import type { LocalItem, MemoContent } from "../../../data/db";
 import { Icon } from "../../../app/ui/Icon";
 import { Chip } from "../../../app/ui/Chip";
 import { DropdownMenu } from "../../../app/ui/Menu";
-import { timeLabelInZone } from "../model";
 
 const MarkdownPreview = lazy(async () => {
   const mod = await import("../../../app/editor/MarkdownPreview");
@@ -29,7 +28,6 @@ export interface MemoItemProps {
   onDelete?: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
-  timeZone?: string;
 }
 
 export function MemoItem({
@@ -41,7 +39,6 @@ export function MemoItem({
   onDelete,
   onOpenConverted,
   onSelectTag,
-  timeZone,
 }: MemoItemProps) {
   const content = entry.content;
   const [editing, setEditing] = useState(false);
@@ -60,9 +57,7 @@ export function MemoItem({
   return (
     <article className="memo" data-memo-id={memo.id}>
       <header className="memo__head">
-        <time className="memo__time" dateTime={new Date(memo.memo_at ?? 0).toISOString()}>
-          {timeLabelInZone(memo.memo_at ?? 0, timeZone)}
-        </time>
+        {/* 时刻移到时间轴的左栏（原型 `.tl__time`）——卡片里不再重复显示，避免同一信息出现两次 */}
         {memo.is_task === 1 ? (
           <span className="memo__flag" title="这是一条清单 Memo">
             <Icon name="check-square" size={13} />

@@ -1210,6 +1210,81 @@ button {
   flex-direction: column;
 }
 
+/*
+  时间轴两列（原型 `.tl__row`）：左栏 88px + 32px 列间距，节点落在主干上（88 + 32/2 = 104px）。
+  取值全部照原型：日期 `--fs-body-lg`/600、星期与时刻 muted + `--fs-micro`、时刻等宽。
+*/
+.timeline__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  column-gap: 32px;
+}
+
+.timeline__gutter {
+  min-width: 0;
+  padding-top: var(--sp-2);
+  text-align: right;
+}
+
+.timeline__date {
+  /* 原型 `.tl__date` */
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.timeline__wd {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.timeline__time {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
+/* 日期节点：主色实心点，用 box-shadow 在主干上开一个口（原型 `.tl__node`） */
+.timeline__node {
+  position: absolute;
+  left: 104px;
+  top: 18px;
+  width: 9px;
+  height: 9px;
+  transform: translateX(-50%);
+  border-radius: var(--radius-circle);
+  background: var(--primary);
+  box-shadow: 0 0 0 4px var(--bg);
+}
+
+/* 条目圆点：空心，悬停变主色（原型 `.tl__dot`） */
+.timeline__dot {
+  position: absolute;
+  left: 104px;
+  top: 16px;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%);
+  border: 1.6px solid var(--line-2);
+  border-radius: var(--radius-circle);
+  background: var(--panel);
+  transition: border-color 0.16s, background 0.16s;
+}
+
+.timeline__item:hover .timeline__dot {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.timeline__content {
+  min-width: 0;
+  padding: var(--sp-1) 0 var(--sp-4);
+}
+
 .timeline__date {
   /* 原型 `.tl__date` */
   display: block;

@@ -46,3 +46,32 @@ export {
 } from "./tags";
 
 export { firstHeading, splitFirstLineAsTitle } from "./markdown";
+
+export {
+  CELL_NOTICE_CHARS,
+  COLUMN_NOTICE_COUNT,
+  ROW_ID_COLUMN,
+  TABLE_COLUMN_TYPES,
+  TABLE_VIEWS,
+  ensureRowIds,
+  escapeCell,
+  isRowId,
+  makeRowId,
+  normalizeAttachmentNames,
+  parseTableDocument,
+  renderRow,
+  renderTableDocument,
+  sameRowId,
+  splitRow,
+  unescapeCell,
+  type EnsureRowIdsResult,
+  type ParseTableResult,
+  type TableAttachmentLine,
+  type TableColumn,
+  type TableColumnType,
+  type TableDoc,
+  type TableNotice,
+  type TableNoticeKind,
+  type TableViewKind,
+  type TableViews,
+} from "./table";

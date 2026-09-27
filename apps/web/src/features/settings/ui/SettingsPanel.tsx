@@ -9,6 +9,7 @@ import type { EditorMode, StartView, UserSettings } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
 import type { ThemeMode } from "../../../app/theme/useTheme";
 import type { SettingsPageId } from "../../../app/router";
+import { APP_VERSION, PROJECT_REPO_URL } from "../../../app/about";
 import { CardQuickMenu } from "./CardQuickMenu";
 
 const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
@@ -18,11 +19,13 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   privacy: { title: "隐私锁", summary: "加密空间与门禁（M3 提供）" },
   versions: { title: "版本与回收站", summary: "版本历史与回收站（M4 提供）" },
   instance: { title: "实例管理", summary: "本实例的注册开关与用量（仅管理员）" },
+  about: { title: "关于", summary: "版本号与项目地址" },
 };
 
 /**
  * 导航顺序即需求 §7.5 的最终形态顺序，但**只列出本里程碑已实现的分类**（避免点进去空页面）：
  * 备份 / 分享 / MCP / 数据管理 等各自里程碑再进导航。
+ * 「关于」是用户 2026-09-27 追加的第 11 个分类（需求 §7.5 的 10 个之外），放最后。
  */
 const NAV_ORDER: readonly SettingsPageId[] = [
   "general",
@@ -31,6 +34,7 @@ const NAV_ORDER: readonly SettingsPageId[] = [
   "privacy",
   "versions",
   "instance",
+  "about",
 ];
 
 /** 常用时区（第一版给常见几档 + 当前值；完整时区表等有需要再补） */
@@ -309,6 +313,28 @@ export function SettingsPanel({
                 <span className="setrow__desc">将在 M6 提供</span>
               </div>
               <span className="setrow__desc">M6</span>
+            </div>
+          </section>
+        ) : null}
+
+        {page === "about" ? (
+          <section className="setcard" aria-label="关于">
+            <h3 className="setcard__title">关于 MeNote</h3>
+            <div className="setrow">
+              <div className="setrow__label">
+                <span className="setrow__name">版本</span>
+                <span className="setrow__desc">当前部署的版本号</span>
+              </div>
+              <span className="setrow__desc">v{APP_VERSION}</span>
+            </div>
+            <div className="setrow">
+              <div className="setrow__label">
+                <span className="setrow__name">项目地址</span>
+                <span className="setrow__desc">源码仓库（GitHub）</span>
+              </div>
+              <a className="link" href={PROJECT_REPO_URL} target="_blank" rel="noreferrer noopener">
+                {PROJECT_REPO_URL}
+              </a>
             </div>
           </section>
         ) : null}

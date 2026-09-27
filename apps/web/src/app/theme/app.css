@@ -863,6 +863,12 @@ button {
   font-size: var(--fs-micro);
 }
 
+/* 文字链接（DESIGN.md §3.3：`--primary-ink` 的用途之一是链接） */
+.link {
+  color: var(--primary-ink);
+  text-decoration: underline;
+}
+
 .empty {
   display: flex;
   flex-direction: column;

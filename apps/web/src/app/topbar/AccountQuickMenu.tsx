@@ -13,6 +13,7 @@
  */
 import type { QuickMenuFeature, UserSettings } from "@menote/shared";
 import { QUICK_MENU_FEATURES } from "@menote/shared";
+import { APP_VERSION } from "../about";
 import { Avatar } from "../ui/Controls";
 import { DropdownMenu, type MenuItemSpec } from "../ui/Menu";
 import type { ThemeMode } from "../theme/useTheme";
@@ -72,6 +73,7 @@ export function AccountQuickMenu({
             <span className="acct__sub">
               {user.role === "owner" ? "owner" : "成员"} · 本地实例
             </span>
+            <span className="acct__sub">MeNote v{APP_VERSION}</span>
           </div>
         </div>
       }

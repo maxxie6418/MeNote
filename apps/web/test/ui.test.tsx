@@ -16,6 +16,7 @@ import { RegisterPage } from "../src/features/auth/ui/RegisterPage";
 import { DocStatusBar } from "../src/features/notes/ui/DocStatusBar";
 import { NoteList } from "../src/features/notes/ui/NoteList";
 import { SettingsPanel } from "../src/features/settings/ui/SettingsPanel";
+import { APP_VERSION, PROJECT_REPO_URL } from "../src/app/about";
 import type { LocalItem } from "../src/data/db";
 
 afterEach(cleanup);
@@ -120,6 +121,8 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
     const menu = screen.getByRole("menu", { name: "账户与设置" });
+    // 账户菜单顶部显示版本号（用户 2026-09-27 要求）
+    expect(within(menu).getByText(`MeNote v${APP_VERSION}`)).toBeTruthy();
     await user.click(within(menu).getByRole("menuitem", { name: "设置" }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
@@ -337,7 +340,15 @@ describe("设置壳", () => {
     render(<SettingsPanel {...baseProps} page="general" />);
 
     const nav = screen.getByRole("navigation", { name: "设置分类" });
-    for (const label of ["通用", "账户与安全", "编辑器", "隐私锁", "版本与回收站", "实例管理"]) {
+    for (const label of [
+      "通用",
+      "账户与安全",
+      "编辑器",
+      "隐私锁",
+      "版本与回收站",
+      "实例管理",
+      "关于",
+    ]) {
       expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
     }
     // 未实现的分类不进导航（避免点进去空页面）
@@ -346,6 +357,15 @@ describe("设置壳", () => {
 
     const light = screen.getByRole("button", { name: "浅色" });
     expect(light.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("关于页：显示版本号与项目仓库地址", () => {
+    render(<SettingsPanel {...baseProps} page="about" />);
+
+    expect(screen.getByText(`v${APP_VERSION}`)).toBeTruthy();
+    const link = screen.getByRole("link", { name: PROJECT_REPO_URL }) as HTMLAnchorElement;
+    expect(link.href).toBe(PROJECT_REPO_URL);
+    expect(link.target).toBe("_blank");
   });
 
   it("通用页：启动视图与快捷菜单开关都会即时回调", async () => {

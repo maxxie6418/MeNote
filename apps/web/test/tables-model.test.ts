@@ -39,6 +39,8 @@ import {
   unparsableCount,
   visibleColumns,
   visibleRows,
+  windowRange,
+  VIRTUAL_ROW_THRESHOLD,
   type TableViewState,
 } from "../src/features/tables/model";
 import { renderTableDocument } from "@menote/mdcore";
@@ -336,6 +338,61 @@ describe("列定义面板要用的判定", () => {
   it("hasDataColumn：只剩 `_id` 时为假（面板据此禁用「确定」）", () => {
     expect(hasDataColumn(doc())).toBe(true);
     expect(hasDataColumn(doc({ columns: [{ id: ROW_ID_COLUMN, name: "ID", type: "text" }] }))).toBe(false);
+  });
+});
+
+describe("大表窗口（虚拟滚动）", () => {
+  it("小表不窗口化（全渲染）", () => {
+    const range = windowRange({ rowCount: 20, rowHeight: 36, scrollTop: 500, viewportHeight: 400 });
+    expect(range).toEqual({ start: 0, end: 20, topPad: 0, bottomPad: 0 });
+  });
+
+  it("量不出视口时不窗口化（jsdom 的 clientHeight 恒为 0，宁可全渲染也不露白）", () => {
+    const range = windowRange({ rowCount: 5000, rowHeight: 36, scrollTop: 0, viewportHeight: 0 });
+    expect(range.start).toBe(0);
+    expect(range.end).toBe(5000);
+  });
+
+  it("行高不合法时不窗口化（算错不如不算）", () => {
+    expect(windowRange({ rowCount: 5000, rowHeight: 0, scrollTop: 0, viewportHeight: 400 }).end).toBe(5000);
+  });
+
+  it("大表：只渲染可见段 + 上下占位行，且占位高度之和 = 未渲染行数 × 行高", () => {
+    const rowCount = 10_000;
+    const rowHeight = 36;
+    const viewportHeight = 720;
+    const overscan = 8;
+    const middle = windowRange({ rowCount, rowHeight, scrollTop: 36 * 5000, viewportHeight, overscan });
+
+    expect(middle.start).toBe(5000 - overscan);
+    const rendered = middle.end - middle.start;
+    expect(rendered).toBe(Math.ceil(viewportHeight / rowHeight) + overscan * 2);
+    // 占位行撑住总高度：上下占位 + 已渲染 = 全表
+    expect(middle.topPad).toBe(middle.start * rowHeight);
+    expect(middle.bottomPad).toBe((rowCount - middle.end) * rowHeight);
+    expect(middle.topPad + rendered * rowHeight + middle.bottomPad).toBe(rowCount * rowHeight);
+  });
+
+  it("滚到顶部与底部都不越界", () => {
+    const top = windowRange({ rowCount: 1000, rowHeight: 36, scrollTop: -50, viewportHeight: 400 });
+    expect(top.start).toBe(0);
+    expect(top.topPad).toBe(0);
+
+    const bottom = windowRange({ rowCount: 1000, rowHeight: 36, scrollTop: 36 * 999, viewportHeight: 400 });
+    expect(bottom.end).toBe(1000);
+    expect(bottom.bottomPad).toBe(0);
+  });
+
+  it("阈值边界：恰好 100 行不窗口化，101 行开始窗口化", () => {
+    const at = windowRange({ rowCount: VIRTUAL_ROW_THRESHOLD, rowHeight: 36, scrollTop: 0, viewportHeight: 400 });
+    expect(at.end).toBe(VIRTUAL_ROW_THRESHOLD);
+    const over = windowRange({
+      rowCount: VIRTUAL_ROW_THRESHOLD + 1,
+      rowHeight: 36,
+      scrollTop: 0,
+      viewportHeight: 400,
+    });
+    expect(over.end).toBeLessThan(VIRTUAL_ROW_THRESHOLD + 1);
   });
 });
 

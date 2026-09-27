@@ -26,6 +26,7 @@ import {
   type TableSort,
   type TableViewState,
 } from "../model";
+import { useVirtualWindow } from "./useVirtualWindow";
 
 const COLUMN_TYPE_LABELS: Readonly<Record<TableColumnType, string>> = {
   text: "文字",
@@ -102,6 +103,8 @@ export function TableGrid({
   emptyAction,
 }: TableGridProps) {
   const doc = state.doc;
+  // 大表只渲染可见的那一段（小表/量不出视口时自动退化成全渲染）
+  const { containerRef, range } = useVirtualWindow(rows.length);
 
   if (doc.rows.length === 0) {
     return (
@@ -114,7 +117,7 @@ export function TableGrid({
   }
 
   return (
-    <div className="tablegrid__scroll" role="grid" aria-label="表格">
+    <div className="tablegrid__scroll" ref={containerRef} role="grid" aria-label="表格">
       <table className="tablegrid">
         <thead>
           <tr>
@@ -145,7 +148,14 @@ export function TableGrid({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => {
+          {/*
+            大表窗口化：上下各一个占位行撑住滚动条高度（界面稿 §2.9）。
+            占位行 `aria-hidden` 且没有单元格内容——读屏与"复制整表"都不该看见它。
+          */}
+          {range.topPad > 0 ? (
+            <tr aria-hidden="true" className="tablegrid__pad" style={{ height: range.topPad }} />
+          ) : null}
+          {rows.slice(range.start, range.end).map((row) => {
             const rowId = cellValue(row, ROW_ID_COLUMN);
             return (
               <tr key={rowId} className="tablegrid__tr">
@@ -171,6 +181,9 @@ export function TableGrid({
               </tr>
             );
           })}
+          {range.bottomPad > 0 ? (
+            <tr aria-hidden="true" className="tablegrid__pad" style={{ height: range.bottomPad }} />
+          ) : null}
         </tbody>
       </table>
     </div>

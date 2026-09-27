@@ -479,6 +479,67 @@ export function galleryCards(doc: TableDoc): Array<{
   }));
 }
 
+// ——————————————————————————— 大表窗口 ———————————————————————————
+
+/**
+ * 虚拟滚动的窗口（M4-9；《M4 界面稿》§2.9「表体虚拟滚动、表头固定」）。
+ *
+ * **为什么自己算**：`<table>` 里做窗口比 div 列表难——用"上下各一个占位行"撑住滚动条高度，
+ * 才能既保住表格语义（`<table>`/`<thead>`/`role=grid`）又只渲染可见的几十行。
+ * 上下占位行的高度 = 未渲染行数 × 行高，所以 `rowHeight` 必须是**固定的**：行高按 4px 刻度，
+ * 内容变化不改行高（这也是界面稿 §2.9 的要求）。
+ *
+ * 纯函数、不碰 DOM：真实滚动位置与视口高度由调用方量出来传进来，所以这段逻辑可以单测。
+ */
+export interface WindowRange {
+  /** 第一条要渲染的行（含） */
+  start: number;
+  /** 最后一条要渲染的行（不含） */
+  end: number;
+  /** 上方占位行的高度（px） */
+  topPad: number;
+  /** 下方占位行的高度（px） */
+  bottomPad: number;
+}
+
+export interface WindowInput {
+  rowCount: number;
+  rowHeight: number;
+  /** 滚动容器当前滚动位置（px） */
+  scrollTop: number;
+  /** 视口高度（px）；量不出来（如 jsdom）时传 0，表示"不窗口化" */
+  viewportHeight: number;
+  /** 上下各多渲染几条，滚动时不至于露白 */
+  overscan?: number;
+}
+
+/** 超过这个行数才窗口化：小表全渲染更简单，也少一层 DOM 结构 */
+export const VIRTUAL_ROW_THRESHOLD = 100;
+
+export const DEFAULT_ROW_HEIGHT = 36;
+
+export function windowRange({
+  rowCount,
+  rowHeight,
+  scrollTop,
+  viewportHeight,
+  overscan = 8,
+}: WindowInput): WindowRange {
+  const all: WindowRange = { start: 0, end: rowCount, topPad: 0, bottomPad: 0 };
+  // 小表、量不出视口、或行高不合法 → 不窗口化（宁可多渲染，也不要露白或算错）
+  if (rowCount <= VIRTUAL_ROW_THRESHOLD || viewportHeight <= 0 || rowHeight <= 0) return all;
+
+  const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const visible = Math.ceil(viewportHeight / rowHeight) + overscan * 2;
+  const end = Math.min(rowCount, first + visible);
+  return {
+    start: first,
+    end,
+    topPad: first * rowHeight,
+    bottomPad: (rowCount - end) * rowHeight,
+  };
+}
+
 // ——————————————————————————— 降级 ———————————————————————————
 
 export type DegradeReason = "not_table" | "broken_structure";

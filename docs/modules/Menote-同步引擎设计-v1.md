@@ -17,7 +17,7 @@
 | v1.2 | v0.1.6 | 2026-09-26 | M1-5 落地回写：新增 §3.5（文件夹接口、应答形状、新建状态码、服务端不重算哈希的取舍、413 超限、正文行缺失的 upsert 分支） | deepseek-v4.1-flash |
 | v1.3 | v0.1.7 | 2026-09-26 | M1-6 落地回写：`full_resync` 条件收紧为 `cursor > 0` 且 `< tombstone_floor`（否则游标 0 会死循环）；§3.3 补"某类没有新行时不参与 `next_cursor` 的 min"（实测出现过的原地打转问题） | deepseek-v4.1-flash |
 | v1.4 | v0.1.9 | 2026-09-26 | M1-8 落地回写：新增 §4.8（草稿清理顺序、`full_resync` 只清已同步内容、失败列表哨兵、元数据冲突胜者、冲突副本、退避上限、无 Web Locks 的退化） | deepseek-v4.1-flash |
-| v1.5 | v0.5.0 | 2026-09-27 | **M4 落地回写**（M4 设计 §九 第 5 行）：①**§3.2** 载荷新增第三类 `tombstones`（**可选**，缺省 `[]`——部署窗口兼容，实现时踩过一次 `undefined.length`），写明客户端要按 `entity`/`entity_id` 硬删六处并清 outbox 的待上传 op；`full_resync` 在 M4 起是**真条件**（墓碑 180 天后清理推进 `tombstone_floor`）；②**§3.3** 的 `next_cursor` 从"两类末端取 min"改为**三类**（items / folders / **tombstones**）并写明漏掉墓碑会导致"已永久删除的条目在某台设备上永远残留"；补墓碑写入幂等与 M4 批量删除的 200 行上限依据（`PERMANENT_DELETE_BATCH = 10`，共享一个 `sync_seq`）；③**§五** 的 M4 边界表逐行核对：墓碑与永久删除 ✅、附件元数据同步与版本元数据**只做到一半**（同步载荷不含 `attachments`；`item_versions` 无 `sync_seq`、按需拉取；`pre_conflict` 封存路径未接）——如实标注，避免后人以为漏做 | deepseek-v4.1-flash |
+| v1.5 | v0.4.25（M4 收口期间的写回；里程碑版本为 v0.5.0） | 2026-09-27 | **M4 落地回写**（M4 设计 §九 第 5 行）：①**§3.2** 载荷新增第三类 `tombstones`（**可选**，缺省 `[]`——部署窗口兼容，实现时踩过一次 `undefined.length`），写明客户端要按 `entity`/`entity_id` 硬删六处并清 outbox 的待上传 op；`full_resync` 在 M4 起是**真条件**（墓碑 180 天后清理推进 `tombstone_floor`）；②**§3.3** 的 `next_cursor` 从"两类末端取 min"改为**三类**（items / folders / **tombstones**）并写明漏掉墓碑会导致"已永久删除的条目在某台设备上永远残留"；补墓碑写入幂等与 M4 批量删除的 200 行上限依据（`PERMANENT_DELETE_BATCH = 10`，共享一个 `sync_seq`）；③**§五** 的 M4 边界表逐行核对：墓碑与永久删除 ✅、附件元数据同步与版本元数据**只做到一半**（同步载荷不含 `attachments`；`item_versions` 无 `sync_seq`、按需拉取；`pre_conflict` 封存路径未接）——如实标注，避免后人以为漏做 | deepseek-v4.1-flash |
 
 ---
 

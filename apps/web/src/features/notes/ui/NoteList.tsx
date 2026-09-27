@@ -165,7 +165,15 @@ export function NoteList({
                   aria-current={item.id === selectedId}
                   onClick={() => onSelect(item.id)}
                 >
-                  <span className="itemrow__title">
+                  {/*
+                    行结构照原型 `.docrow`：**26px 图标块 + 主块（标题/摘要两行）+ 右侧时间**。
+                    图标按条目类型给（笔记 / 表格），它是**辅助**——标题文字才是主要信息。
+                  */}
+                  <span className="itemrow__ico" aria-hidden="true">
+                    <Icon name={item.type === "table" ? "table" : "note"} size={13} />
+                  </span>
+                  <span className="itemrow__main">
+                    <span className="itemrow__title">
                     {item.pinned === 1 ? (
                       <span className="itemrow__mark" title="已置顶">
                         置顶
@@ -202,20 +210,21 @@ export function NoteList({
                       </span>
                     ) : null}
                     {summaryOf(item)}
+                    </span>
+                    {/*
+                      摘要在锁定时换成"已加密"：正文没解密就不该露内容面的任何线索
+                      （连摘要也不给——摘要就是从正文里取的）
+                    */}
+                    {item.enc_self === 1 && !itemUnlocked(item.id) ? (
+                      <span className="itemrow__excerpt">已加密</span>
+                    ) : summaries[item.id] ? (
+                      <span className="itemrow__excerpt">{summaries[item.id]}</span>
+                    ) : null}
                   </span>
                   <span className="itemrow__meta">
                     <span>{formatTime(item.updated_at)}</span>
                     {item.pending ? <span>{PENDING_LABEL[item.pending] ?? "待上传"}</span> : null}
                   </span>
-                  {/*
-                    摘要在锁定时换成"已加密"：正文没解密就不该露内容面的任何线索
-                    （连摘要也不给——摘要就是从正文里取的）
-                  */}
-                  {item.enc_self === 1 && !itemUnlocked(item.id) ? (
-                    <span className="itemrow__excerpt">已加密</span>
-                  ) : summaries[item.id] ? (
-                    <span className="itemrow__excerpt">{summaries[item.id]}</span>
-                  ) : null}
                 </button>
 
                 <div className="itemrow__menu">

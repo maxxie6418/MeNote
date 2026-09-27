@@ -385,14 +385,21 @@ button {
   padding: var(--sp-2);
 }
 
+/*
+  笔记列表行（原型 `notes-tables.html` 的 `.docrow*` → 我们的 `.itemrow*`）
+  ——————————————————————————————————————————————————————————————
+  **横向一行**：26px 图标块 + 主块（标题 + 摘要两行）+ 右侧时间。
+  v0.4.49 按原型改结构（此前是竖向三行、无图标块）。
+*/
 .itemrow {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  align-items: center;
+  gap: var(--sp-2);
   width: 100%;
-  padding: 9px var(--sp-3);
+  padding: var(--sp-2);
   border-radius: var(--radius);
   text-align: left;
+  transition: background 0.16s;
 }
 
 .itemrow:hover {
@@ -403,13 +410,43 @@ button {
   background: var(--primary-soft);
 }
 
+/* 类型图标块（原型 `.docrow__ico`）：底是浅灰块，选中行换白底 + 主色字 */
+.itemrow__ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.itemrow[aria-current="true"] .itemrow__ico {
+  background: var(--panel);
+  color: var(--primary-ink);
+}
+
+/* 主块：标题与摘要上下两行，整体可压缩 */
+.itemrow__main {
+  flex: 1;
+  min-width: 0;
+}
+
 .itemrow__title {
+  display: block;
   font-size: var(--fs-body);
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 选中态标题变主色 + 加粗（原型 `.docrow[aria-current="true"] .docrow__t`） */
+.itemrow[aria-current="true"] .itemrow__title {
+  color: var(--primary-ink);
+  font-weight: 600;
 }
 
 /* 置顶 / 收藏 / 待上传等标记：文字表意，颜色只是辅助（DESIGN.md 禁止项 #4） */
@@ -425,7 +462,9 @@ button {
 }
 
 .itemrow__excerpt {
-  font-size: var(--fs-small);
+  display: block;
+  margin-top: 1px;
+  font-size: var(--fs-micro);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -439,8 +478,8 @@ button {
 
 .itemrow__menu {
   position: absolute;
-  top: var(--sp-1);
-  right: var(--sp-1);
+  top: var(--sp-2);
+  right: var(--sp-2);
   opacity: 0;
 }
 
@@ -456,12 +495,15 @@ button {
   }
 }
 
+/* 右侧时间（原型 `.docrow__when`）：不参与压缩 + 等宽数字 */
 .itemrow__meta {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   font-size: var(--fs-micro);
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .docpane {
@@ -1601,40 +1643,11 @@ button {
 }
 
 /*
-  笔记列表与首页导航：按原型（`notes-tables.html` 的 `.docrow*` / `index.html` 的 `.nav-group*`）对齐
+  首页导航 / 提示条 / 胶囊变体等零散类（原型 `index.html` 的 `.nav-group*` 等）
   ——————————————————————————————————————————————————————————————
-  **结构差异（待议）**：原型 `.docrow` 是横向一行（26px 图标块 + 主块 + 右侧时间），
-  我们的 `.itemrow` 是**竖向排列**（标题 → 摘要 → 时间），且没有图标块。
-  本轮只对齐"不需要改结构"的取值，结构差异留待细节讨论（用户口径："先简单还原，细节后面再讨论"）。
+  **注意**：`.itemrow*`（笔记行）的取值已并入文件前部的主块（v0.4.49 按原型改结构后，
+  不再需要这里的覆盖；此前那份覆盖是在"只改取值、不动结构"阶段加的）。
 */
-.itemrow {
-  /* 原型 `.docrow`：padding 用 `--sp-2`、圆角 `--radius`、悬停整块变色、选中态走主色浅底 */
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius);
-  transition: background 0.16s;
-}
-
-.itemrow[aria-current="true"] .itemrow__title {
-  color: var(--primary-ink);
-  font-weight: 600;
-}
-
-.itemrow__title {
-  /* 原型 `.docrow__t`：常态不加粗，选中态才 600（见上一条） */
-  font-weight: 400;
-}
-
-.itemrow__excerpt {
-  /* 原型 `.docrow__sub`：`--fs-micro` + 与标题贴紧 */
-  margin-top: 1px;
-  font-size: var(--fs-micro);
-}
-
-.itemrow__meta {
-  /* 原型 `.docrow__when`：等宽数字，右侧不参与压缩 */
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
 
 /* 列表栏的状态提示条（此前**没有规则**）：一行小字 + 右侧链接，占位不抢眼 */
 .panel-hint {

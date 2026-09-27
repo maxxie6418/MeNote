@@ -19,6 +19,7 @@ import search from "./routes/search";
 import settings from "./routes/settings";
 import sync from "./routes/sync";
 import trash from "./routes/trash";
+import versions from "./routes/versions";
 import type { AppEnv, EnvBindings } from "./types";
 
 const app = new Hono<AppEnv>();
@@ -46,6 +47,7 @@ app.route("/api", auth);
 app.route("/api", items);
 app.route("/api", attachments);
 app.route("/api", trash);
+app.route("/api", versions);
 app.route("/api", folders);
 app.route("/api", sync);
 app.route("/api", settings);

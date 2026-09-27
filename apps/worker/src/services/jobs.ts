@@ -11,10 +11,11 @@
  * ④ **idle 封存兜底 3 条** ⑤ 外部备份【接口位】 ⑥ 每日维护推进一步。
  * ③④⑤ 依赖 M5/M6 的服务与 R2；没有时**明确跳过**并把原因记进返回值，而不是假装跑过。
  */
-import { JOB_R2_GC_BATCH, JOB_SWEEP_BATCH } from "@menote/shared";
+import { JOB_IDLE_SEAL_BATCH, JOB_R2_GC_BATCH, JOB_SWEEP_BATCH } from "@menote/shared";
 import { SQL_UPSERT_APP_META } from "../db/tables";
 import { getRegistrationState, setRegistrationState } from "../services/settings";
 import { runMaintenanceStep, type MaintenanceResult } from "../jobs/maintenance";
+import { sealIdleVersions } from "./versions";
 
 export const KEY_GC_CURSOR = "job:gc:cursor";
 
@@ -78,9 +79,27 @@ export async function runScheduled(env: ScheduledEnv, now: number = Date.now()):
     console.error("cron: r2 gc failed", error);
   }
 
+  // ③ 快照队列【接口位】：快照文件属 M5/M6，M4 只留位置
+  summary.snapshot = { skipped: "快照队列属 M5/M6（接口位已留）" };
+
+  // ④ idle 封存兜底：客户端"关了标签页就走了"的那一批，由服务端补封（每轮 3 条）
+  try {
+    summary.idleSeal = {
+      // 10 分钟＝设计默认档；用户把 `seal_idle_minutes` 调大/调小只影响"早一点或晚一点封存一次"，
+      // 不会丢内容（逐用户精确判定要按用户查设置，收益不抵这一步的复杂度）
+      sealed: await sealIdleVersions(env, now, 10, JOB_IDLE_SEAL_BATCH),
+    };
+  } catch (error) {
+    console.error("cron: idle seal failed", error);
+    summary.idleSeal = { skipped: "本轮 idle 封存失败，下轮重试" };
+  }
+
+  // ⑤ 外部备份【接口位】：备份状态机属 M5
+  summary.backup = { skipped: "外部备份属 M5（接口位已留）" };
+
   // ⑥ 每日维护（放最后：前面几个都是"每轮都跑"的，这个是"一天一圈"的）
   try {
-    summary.maintenance = await runMaintenanceStep(env.DB, now);
+    summary.maintenance = await runMaintenanceStep(env, now);
   } catch (error) {
     console.error("cron: maintenance failed", error);
   }

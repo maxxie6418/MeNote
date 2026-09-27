@@ -66,14 +66,14 @@ describe("每日维护", () => {
   it("每轮推进一步并写 job:maintenance:step；走完一圈后记 day", async () => {
     await seedUser();
 
-    const first = await runMaintenanceStep(env.DB, NOW);
+    const first = await runMaintenanceStep(env, NOW);
     expect(first.skipped).toBe(false);
     expect(first.step).toBe(MAINTENANCE_STEPS[0]);
     expect(await meta(KEY_MAINTENANCE_STEP)).toBe("1");
 
     // 依次走完剩下的步骤
     for (let index = 1; index < MAINTENANCE_STEPS.length; index += 1) {
-      const result = await runMaintenanceStep(env.DB, NOW);
+      const result = await runMaintenanceStep(env, NOW);
       expect(result.step).toBe(MAINTENANCE_STEPS[index]);
     }
     expect(await meta(KEY_MAINTENANCE_DAY)).toBe(utcDay(NOW));
@@ -83,15 +83,15 @@ describe("每日维护", () => {
   it("同一天不再重复推进（day 游标挡住）", async () => {
     await seedUser();
     for (let index = 0; index < MAINTENANCE_STEPS.length; index += 1) {
-      await runMaintenanceStep(env.DB, NOW);
+      await runMaintenanceStep(env, NOW);
     }
 
-    const again = await runMaintenanceStep(env.DB, NOW);
+    const again = await runMaintenanceStep(env, NOW);
     expect(again.skipped).toBe(true);
     expect(again.step).toBeNull();
 
     // 换一天又能跑
-    const tomorrow = await runMaintenanceStep(env.DB, NOW + DAY_MS);
+    const tomorrow = await runMaintenanceStep(env, NOW + DAY_MS);
     expect(tomorrow.skipped).toBe(false);
   });
 
@@ -102,7 +102,7 @@ describe("每日维护", () => {
     const counts: number[] = [];
     for (let round = 0; round < 2; round += 1) {
       for (let index = 0; index < MAINTENANCE_STEPS.length; index += 1) {
-        await runMaintenanceStep(env.DB, NOW + round * DAY_MS);
+        await runMaintenanceStep(env, NOW + round * DAY_MS);
       }
       counts.push(
         (await env.DB.prepare("SELECT COUNT(*) AS n FROM tombstones").first<{ n: number }>())?.n ?? 0,
@@ -119,7 +119,7 @@ describe("每日维护", () => {
     await seedTrashedItem("expired", NOW - (TRASH_RETENTION_DAYS_DEFAULT + 1) * DAY_MS);
     await seedTrashedItem("fresh", NOW - 1 * DAY_MS);
 
-    const result = await runMaintenanceStep(env.DB, NOW);
+    const result = await runMaintenanceStep(env, NOW);
     expect(result.step).toBe("trash_expiry");
     expect(result.detail.deleted).toBe(1);
 
@@ -141,7 +141,7 @@ describe("每日维护", () => {
       .bind(JSON.stringify({ version_trash: { trash_retention_days: 7 } }))
       .run();
 
-    const result = await runMaintenanceStep(env.DB, NOW);
+    const result = await runMaintenanceStep(env, NOW);
     expect(result.detail.deleted).toBe(1);
     expect(await env.DB.prepare("SELECT 1 AS x FROM items WHERE id = 'eight-days'").first()).toBeNull();
   });
@@ -153,7 +153,7 @@ describe("每日维护", () => {
       "INSERT INTO user_settings (user_id, json, rev, updated_at) VALUES ('u1', '{不是 JSON', 1, 1)",
     ).run();
 
-    const result = await runMaintenanceStep(env.DB, NOW);
+    const result = await runMaintenanceStep(env, NOW);
     // 默认 30 天：5 天前的还没到期
     expect(result.detail.deleted).toBe(0);
     expect(
@@ -176,9 +176,9 @@ describe("每日维护", () => {
     ).run();
 
     // 走到第三步（attachment_orphans）
-    await runMaintenanceStep(env.DB, NOW); // 0 trash_expiry
-    await runMaintenanceStep(env.DB, NOW); // 1 version_sweep
-    const result = await runMaintenanceStep(env.DB, NOW); // 2 attachment_orphans
+    await runMaintenanceStep(env, NOW); // 0 trash_expiry
+    await runMaintenanceStep(env, NOW); // 1 version_sweep
+    const result = await runMaintenanceStep(env, NOW); // 2 attachment_orphans
     expect(result.step).toBe("attachment_orphans");
     expect(result.detail.removed).toBe(1);
 
@@ -200,10 +200,10 @@ describe("每日维护", () => {
       "INSERT INTO attachment_refs (item_id, version_id, attachment_id, created_at) VALUES ('ghost-item', NULL, 'ghost-att', 1)",
     ).run();
 
-    await runMaintenanceStep(env.DB, NOW); // 0
-    await runMaintenanceStep(env.DB, NOW); // 1
-    await runMaintenanceStep(env.DB, NOW); // 2
-    const result = await runMaintenanceStep(env.DB, NOW); // 3 ref_integrity
+    await runMaintenanceStep(env, NOW); // 0
+    await runMaintenanceStep(env, NOW); // 1
+    await runMaintenanceStep(env, NOW); // 2
+    const result = await runMaintenanceStep(env, NOW); // 3 ref_integrity
     expect(result.step).toBe("ref_integrity");
     expect(result.detail.removed_refs).toBe(1);
   });
@@ -224,9 +224,9 @@ describe("每日维护", () => {
 
     // 走到最后一步（cleanup）
     for (let index = 0; index < MAINTENANCE_STEPS.length - 1; index += 1) {
-      await runMaintenanceStep(env.DB, NOW);
+      await runMaintenanceStep(env, NOW);
     }
-    const result = await runMaintenanceStep(env.DB, NOW);
+    const result = await runMaintenanceStep(env, NOW);
     expect(result.step).toBe("cleanup");
     expect(result.detail.tombstones).toBe(1);
 
@@ -307,7 +307,8 @@ describe("Cron 一轮", () => {
     await seedUser();
     const summary = await runScheduled({ DB: env.DB }, NOW);
     expect(summary.snapshot).toEqual({ skipped: "快照队列属 M5/M6（接口位已留）" });
-    expect(summary.idleSeal).toEqual({ skipped: "idle 封存依赖版本服务与 R2（M4-5）" });
+    // idle 封存（M4-5）已经落地：没有候选时如实报 0，而不是报"跳过"
+    expect(summary.idleSeal).toEqual({ sealed: 0 });
     expect(summary.backup).toEqual({ skipped: "外部备份属 M5（接口位已留）" });
     expect(QUOTAS.sweep).toBeGreaterThan(0);
   });

@@ -86,3 +86,32 @@ export const AttachmentFinalizeSchema = v.object({
   itemId: v.optional(v.nullable(v.string())),
 });
 export type AttachmentFinalize = v.InferOutput<typeof AttachmentFinalizeSchema>;
+
+/** 版本封存原因（设计 §4.1）；界面显示的中文映射见 `VERSION_REASON_LABELS` */
+export const VersionReasonSchema = v.picklist([
+  "autosave_idle",
+  "session",
+  "manual",
+  "pre_restore",
+  "pre_conflict",
+  "pre_mcp",
+  "pre_convert",
+]);
+export type VersionReason = v.InferOutput<typeof VersionReasonSchema>;
+
+/** 封存原因的**中文映射**（集中一处：界面与日志用同一份，不各写一遍） */
+export const VERSION_REASON_LABELS: Readonly<Record<VersionReason, string>> = {
+  autosave_idle: "自动封存",
+  session: "会话恢复",
+  manual: "手动保存",
+  pre_restore: "恢复前",
+  pre_conflict: "冲突副本",
+  pre_mcp: "外部修改前",
+  pre_convert: "表格降级前",
+};
+
+/** `POST /api/items/:id/versions`：手动封存（备注可空） */
+export const VersionSealSchema = v.object({
+  label: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(200)))),
+});
+export type VersionSeal = v.InferOutput<typeof VersionSealSchema>;

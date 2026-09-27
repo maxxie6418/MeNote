@@ -11,15 +11,21 @@
 import {
   ATTACHMENT_ORPHAN_RETENTION_DAYS,
   DAY_MS,
+  DEFAULT_VERSION_TRASH_SETTINGS,
   PERMANENT_DELETE_BATCH,
   TOMBSTONE_RETENTION_DAYS,
   TRASH_RETENTION_DAYS_DEFAULT,
+  type VersionTrashSettings,
 } from "@menote/shared";
 import { SQL_DELETE_OLD_TOMBSTONES, SQL_SELECT_MIN_TOMBSTONE_SEQ, SQL_UPSERT_APP_META } from "../db/tables";
 import { permanentDeleteItems } from "../services/trash";
+import { sweepVersions } from "../services/version-retention";
+import type { StorageEnv } from "../types";
 
 export const KEY_MAINTENANCE_DAY = "job:maintenance:day";
 export const KEY_MAINTENANCE_STEP = "job:maintenance:step";
+/** 版本稀疏化的条目游标（设计 §7 的四个游标键之一） */
+export const KEY_SWEEP_CURSOR = "job:sweep:item";
 
 /** 五步的编号与名字（顺序是语义的一部分，别重排） */
 export const MAINTENANCE_STEPS = [
@@ -69,10 +75,11 @@ async function tableExists(db: D1Database, name: string): Promise<boolean> {
  * `now` 由调用方传入（测试要固定时间）。
  */
 export async function runMaintenanceStep(
-  db: D1Database,
+  env: StorageEnv,
   now: number,
   quota = PERMANENT_DELETE_BATCH,
 ): Promise<MaintenanceResult> {
+  const db = env.DB;
   const today = utcDay(now);
   const lastDay = await readMeta(db, KEY_MAINTENANCE_DAY);
   if (lastDay === today) {
@@ -83,7 +90,7 @@ export async function runMaintenanceStep(
   const index = Number.isFinite(rawStep) && rawStep >= 0 && rawStep < MAINTENANCE_STEPS.length ? rawStep : 0;
   const step = MAINTENANCE_STEPS[index] ?? MAINTENANCE_STEPS[0];
 
-  const detail = await executeStep(db, step, now, quota);
+  const detail = await executeStep(env, step, now, quota);
 
   // 走到头就把"今天走完了"记下来，并把圈内游标归零；否则推进一格
   const nextIndex = index + 1;
@@ -100,17 +107,18 @@ export async function runMaintenanceStep(
 }
 
 async function executeStep(
-  db: D1Database,
+  env: StorageEnv,
   step: MaintenanceStep,
   now: number,
   quota: number,
 ): Promise<Record<string, number | string>> {
+  const db = env.DB;
   switch (step) {
     case "trash_expiry":
       return expireTrash(db, now, quota);
     case "version_sweep":
-      // 版本稀疏化需要版本服务与 R2 正文（M4-5）；未落地前明确跳过，而不是假装做过
-      return { skipped: "版本稀疏化待 M4-5（需要 R2）" };
+      // 版本稀疏化（M4-5）：按游标扫有版本的条目，逐条按**该用户的保留设置**裁剪
+      return sweepVersionsStep(env, now, quota);
     case "attachment_orphans":
       return handleAttachmentOrphans(db, now);
     case "ref_integrity":
@@ -123,10 +131,54 @@ async function executeStep(
 }
 
 /**
- * ① 回收站到期永久删除（保留期默认 30 天，来自用户设置）。
+ * ② 版本稀疏化（M4-5）：按 `job:sweep:item` 游标扫有版本的条目，逐条裁剪。
  *
- * 复用 M4-6 的服务（同一批语句与墓碑语义），每轮最多 `quota` 条。
+ * 每轮的 `quota` 是**条目数**（不是版本数）——一条条目里删几个版本是它自己按保留设置决定的。
  */
+async function sweepVersionsStep(
+  env: StorageEnv,
+  now: number,
+  quota: number,
+): Promise<Record<string, number | string>> {
+  const db = env.DB;
+  const cursor = parseSweepCursor(await readMeta(db, KEY_SWEEP_CURSOR));
+
+  const result = await sweepVersions(
+    env,
+    now,
+    (userId) => versionTrashSettingsOf(db, userId),
+    cursor,
+    quota,
+  );
+  await writeMeta(db, KEY_SWEEP_CURSOR, `${result.next.createdAt}:${result.next.id}`);
+  // 扫完一轮（本批不足配额）就把游标归零，下一轮从头再扫
+  if (result.scanned < quota) await writeMeta(db, KEY_SWEEP_CURSOR, "");
+
+  return { scanned: result.scanned, removed: result.removed };
+}
+
+function parseSweepCursor(raw: string | null): { createdAt: number; id: string } {
+  if (!raw) return { createdAt: 0, id: "" };
+  const [createdAt, id] = raw.split(":");
+  const parsed = Number.parseInt(createdAt ?? "0", 10);
+  return { createdAt: Number.isFinite(parsed) ? parsed : 0, id: id ?? "" };
+}
+
+/** 取某用户的版本保留设置（没写过设置就用默认值） */
+async function versionTrashSettingsOf(db: D1Database, userId: string): Promise<VersionTrashSettings> {
+  const row = await db
+    .prepare("SELECT json FROM user_settings WHERE user_id = ?")
+    .bind(userId)
+    .first<{ json: string }>();
+  if (!row?.json) return DEFAULT_VERSION_TRASH_SETTINGS;
+  try {
+    const parsed = JSON.parse(row.json) as { version_trash?: VersionTrashSettings };
+    return { ...DEFAULT_VERSION_TRASH_SETTINGS, ...parsed.version_trash };
+  } catch {
+    return DEFAULT_VERSION_TRASH_SETTINGS;
+  }
+}
+
 /**
  * ① 回收站到期永久删除（M4-6 的服务 + 每用户保留期）。
  *

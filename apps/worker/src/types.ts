@@ -1,9 +1,20 @@
 import type { UserRole } from "@menote/shared";
 
-/** Worker 绑定（wrangler.jsonc 声明；本地 dev 与测试由 miniflare/workerd 模拟） */
-export interface EnvBindings {
-  /** D1 数据库（M1 起由运行时自愈建表，见 db/selfheal.ts） */
+/**
+ * 只用到 **D1 与对象桶** 的最小环境。
+ *
+ * 服务层按需收窄到这个形状，而不是到处依赖完整的 `EnvBindings`：
+ * 一来服务层确实只用这两样（依赖少一点，测试替身就简单一点），
+ * 二来"某个服务偷偷读了机密"这种事会直接在类型上暴露。
+ */
+export interface StorageEnv {
   DB: D1Database;
+  /** 附件与版本正文的对象桶；本地没带绑定时为 `undefined`，用到它的代码必须容忍 */
+  ATTACHMENTS?: R2Bucket;
+}
+
+/** Worker 绑定（wrangler.jsonc 声明；本地 dev 与测试由 miniflare/workerd 模拟） */
+export interface EnvBindings extends StorageEnv {
   /** Static Assets 绑定（前端构建产物） */
   ASSETS: Fetcher;
   /**
@@ -19,14 +30,6 @@ export interface EnvBindings {
    * （否则一个没配的机密会让整个隐私锁功能全灭）。派生：`SHA-256(机密字节)` → 32 字节 AES-GCM 密钥。
    */
   BACKUP_CRED_KEY?: string;
-  /**
-   * 附件与版本正文的对象存储（M4；架构 §5.2、设计 §3.1）。
-   *
-   * **可选**是刻意的：本地 `pnpm dev` 若没带上绑定、或某个实例还没建桶时，
-   * 用它的代码要能明确报错而不是让整个 Worker 起不来。生产由 `wrangler.jsonc` 的
-   * `r2_buckets` 绑定（`binding: "ATTACHMENTS"`、桶 `menote-attachments`，部署时自动供给）。
-   */
-  ATTACHMENTS?: R2Bucket;
 }
 
 /** 已通过会话鉴权的用户（挂到 Hono 的 context 上） */

@@ -245,6 +245,65 @@ export const SQL_SELECT_ORPHANED_DUE_ALL = `SELECT id, r2_key, user_id FROM atta
 export const SQL_INSERT_R2_GC = `INSERT OR IGNORE INTO r2_gc_queue
   (r2_key, user_id, reason, due_at, created_at) VALUES (?, ?, ?, ?, ?)`;
 
+// —— item_versions（0004；M4-5）——
+
+/** 插版本元数据（正文在 R2，不在库里） */
+export const SQL_INSERT_VERSION = `INSERT INTO item_versions
+  (id, item_id, user_id, rev, reason, label, keep, codec, size_bytes, content_hash, title, r2_key, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+/** 最近一个版本：**去重**（`content_hash` 相同就不生成新版本）与稀疏化都要看它 */
+export const SQL_SELECT_LATEST_VERSION = `SELECT id, content_hash, created_at, keep, reason
+  FROM item_versions WHERE user_id = ? AND item_id = ?
+  ORDER BY created_at DESC, id DESC LIMIT 1`;
+
+/** 版本列表（新的在前；游标是 `created_at`，同一毫秒用 id 兜底排序稳定） */
+export const SQL_SELECT_VERSIONS_PAGE = `SELECT id, rev, reason, label, keep, codec, size_bytes,
+    content_hash, title, created_at
+  FROM item_versions WHERE user_id = ? AND item_id = ? AND created_at < ?
+  ORDER BY created_at DESC, id DESC LIMIT ?`;
+
+export const SQL_SELECT_VERSION_BY_ID = `SELECT id, item_id, user_id, rev, reason, label, keep,
+    codec, size_bytes, content_hash, title, r2_key, created_at
+  FROM item_versions WHERE id = ? AND user_id = ?`;
+
+export const SQL_SET_VERSION_KEEP = "UPDATE item_versions SET keep = ? WHERE id = ? AND user_id = ?";
+
+export const SQL_DELETE_VERSION = "DELETE FROM item_versions WHERE id = ? AND user_id = ?";
+
+/** 该条目的版本总数与"可删的非 keep 版本"（稀疏化按条数裁剪时用） */
+export const SQL_COUNT_VERSIONS =
+  "SELECT COUNT(*) AS n FROM item_versions WHERE user_id = ? AND item_id = ?";
+
+export const SQL_SELECT_OLDEST_REMOVABLE = `SELECT id, r2_key, created_at FROM item_versions
+  WHERE user_id = ? AND item_id = ? AND keep = 0
+  ORDER BY created_at ASC, id ASC LIMIT ?`;
+
+/** 稀疏化的候选（旧的在前）：`keep = 0` 且**不是手动版本**——手动版本默认 `keep = 1`，
+ *  但仍显式排掉一次，免得将来 `keep` 被用户关掉后把"手动存的"删了 */
+export const SQL_SELECT_SWEEP_CANDIDATES = `SELECT id, r2_key, created_at, reason FROM item_versions
+  WHERE user_id = ? AND item_id = ? AND keep = 0`;
+
+/** 每日维护：按游标扫有版本的条目（分批，避免一次拉全表） */
+export const SQL_SELECT_ITEMS_WITH_VERSIONS = `SELECT DISTINCT item_id, user_id FROM item_versions
+  WHERE (created_at, id) > (?, ?) ORDER BY created_at ASC, id ASC LIMIT ?`;
+
+/**
+ * idle 兜底封存的候选：**停编辑超过 N 分钟**、且**比最后一个版本还新**（否则会把同一份内容反复封存）。
+ *
+ * `item_bodies` 里是当前正文——服务端封存要自己读它（此刻客户端已经走了）。
+ * 没有版本时 `COALESCE(..., 0)` 让条件成立，所以"从没封存过"也算候选。
+ */
+export const SQL_SELECT_IDLE_SEAL_CANDIDATES = `SELECT i.id AS item_id, i.user_id AS user_id,
+    i.rev AS rev, i.title AS title, i.content_hash AS content_hash, i.size_bytes AS size_bytes,
+    b.body AS body
+  FROM items i JOIN item_bodies b ON b.item_id = i.id
+  WHERE i.deleted_at IS NULL
+    AND i.last_edit_at IS NOT NULL AND i.last_edit_at <= ?
+    AND i.last_edit_at > COALESCE(
+      (SELECT MAX(v.created_at) FROM item_versions v WHERE v.item_id = i.id AND v.user_id = i.user_id), 0)
+  ORDER BY i.last_edit_at ASC LIMIT ?`;
+
 // —— tombstones（0004；M4-7）——
 
 /** 增量拉取墓碑：与条目/文件夹同一套"从游标之后、按序号升序、多取一行探截断"的写法 */

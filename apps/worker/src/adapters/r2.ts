@@ -9,7 +9,7 @@
  * - 缩略图：`a/{user_id}/{sha256}.t`
  * - 版本快照：`v/{user_id}/{item_id}/{version_id}`（M4-5 用）
  */
-import type { EnvBindings } from "../types";
+import type { StorageEnv } from "../types";
 
 export type AttachmentKind = "original" | "thumb";
 
@@ -50,16 +50,17 @@ export class BlobStoreUnavailableError extends Error {
  * 新增绑定不会自动供给——声明成必填会让没配好的实例**整个 Worker 起不来**，
  * 而不是只有附件功能不可用。这两者的差别很大。
  */
-export function attachmentsBucket(env: EnvBindings): R2Bucket {
+export function attachmentsBucket(env: StorageEnv): R2Bucket {
   if (!env.ATTACHMENTS) throw new BlobStoreUnavailableError();
   return env.ATTACHMENTS;
 }
 
 /** 写对象（流式，Worker 不缓冲请求体） */
 export async function putBlob(
-  env: EnvBindings,
+  env: StorageEnv,
   key: string,
-  body: ReadableStream | ArrayBuffer,
+  // 直接用 R2 自己的入参类型：适配层不该比被适配的 API 更窄（窄了就要在调用处做无意义的转换）
+  body: Parameters<R2Bucket["put"]>[1],
   options: { httpMetadata?: R2HTTPMetadata; customMetadata?: Record<string, string> } = {},
 ): Promise<R2Object> {
   return attachmentsBucket(env).put(key, body, options);
@@ -67,7 +68,7 @@ export async function putBlob(
 
 /** 读对象；带 `range` 时返回那一段（`Range` 请求用） */
 export async function getBlob(
-  env: EnvBindings,
+  env: StorageEnv,
   key: string,
   range?: BlobRange,
 ): Promise<BlobObject | null> {
@@ -89,11 +90,11 @@ export async function getBlob(
 }
 
 /** 元信息（不读正文；`check` 与下载头要用它） */
-export async function headBlob(env: EnvBindings, key: string): Promise<R2Object | null> {
+export async function headBlob(env: StorageEnv, key: string): Promise<R2Object | null> {
   return attachmentsBucket(env).head(key);
 }
 
 /** 删对象（GC 用；删不存在的对象不算错，与 R2 的语义一致） */
-export async function deleteBlob(env: EnvBindings, key: string): Promise<void> {
+export async function deleteBlob(env: StorageEnv, key: string): Promise<void> {
   await attachmentsBucket(env).delete(key);
 }

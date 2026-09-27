@@ -3,16 +3,16 @@
  *
  * 四条业务规则（都在这里，不在适配层）：
  * 1. **去重按 `(user_id, sha256, kind)`**：同一用户传同一个文件只会有一行（秒传），
- *    缩略图沿用原图的 `sha256`，`parent_id` 指原图——所以"重复上传"复用的是**两行**；
+ *    缩略图沿用原图的 `sha256`，`parent_id` 指原图；
  * 2. **先登记后落元数据**：上传前写 `pending_uploads`（24 小时有效），落元数据时删登记；
- *    每日维护把"登记了却没落元数据"的对象当孤儿——这样**不需要 `ListObjects`**（桶不可枚举是好事）；
+ *    每日维护把"登记了却没落元数据"的对象当孤儿——这样**不需要 `ListObjects`**；
  * 3. **Worker 不缓冲、不算哈希**：请求体直接写桶，`sha256` 由客户端在查询串里给并用于拼键；
  * 4. **引用由客户端上报**：服务端不解析正文，也不去读 `## 附件` 章节的语义。
  *
  * 与隐私锁的关系：附件**仍按明文存储**（《隐私锁设计》§6.11），锁定时界面占位、不渲染；
  * 服务端不做额外过滤——附件按哈希寻址、不可枚举，猜不到就等于拿不到。
  */
-import { MAX_ATTACHMENT_BYTES, PENDING_UPLOAD_TTL_HOURS, DAY_MS, newUlid } from "@menote/shared";
+import { DAY_MS, MAX_ATTACHMENT_BYTES, PENDING_UPLOAD_TTL_HOURS, newUlid } from "@menote/shared";
 import {
   attachmentKey,
   deleteBlob,
@@ -21,12 +21,9 @@ import {
   type AttachmentKind,
   type BlobRange,
 } from "../adapters/r2";
-
-/** 附件类型也在这里再导出一次：路由只依赖服务层，不必知道适配层 */
-export type { AttachmentKind };
 import {
-  SQL_DELETE_PENDING_UPLOAD,
   SQL_DELETE_ATTACHMENT,
+  SQL_DELETE_PENDING_UPLOAD,
   SQL_INSERT_ATTACHMENT,
   SQL_INSERT_ATTACHMENT_REF,
   SQL_INSERT_PENDING_UPLOAD,
@@ -38,8 +35,11 @@ import {
   SQL_SELECT_ORPHANED_DUE_ALL,
   SQL_SELECT_PENDING_UPLOAD,
 } from "../db/tables";
-import type { EnvBindings } from "../types";
 import { DomainError } from "../errors";
+import type { StorageEnv } from "../types";
+
+/** 附件类型也从服务层再导出一次：路由只依赖服务层，不必知道适配层 */
+export type { AttachmentKind };
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -98,20 +98,19 @@ export async function checkAttachment(
  * （桶不可枚举，没人知道它在）。先登记的话，最坏情况只是一条到期被清掉的登记。
  */
 export async function putAttachmentBlob(
-  env: EnvBindings,
+  env: StorageEnv,
   userId: string,
   input: { sha256: string; kind: AttachmentKind; contentType: string | null; body: ReadableStream },
   now: number,
 ): Promise<{ key: string; size: number }> {
   const sha256 = requireSha256(input.sha256);
-  // 用流的长度未知，所以大小上限靠**元数据落库时的 CHECK** 与客户端的 `check` 一起兜；
-  // 这里至少挡住"完全没有 body"的情况。
   const key = attachmentKey(userId, sha256, input.kind);
 
   await env.DB.prepare(SQL_INSERT_PENDING_UPLOAD)
     .bind(key, userId, now, now + PENDING_UPLOAD_TTL_HOURS * 60 * 60 * 1000)
     .run();
 
+  // 请求流直接写桶：Worker 不缓冲、也不算哈希（大小上限由客户端 check 与落库 CHECK 一起兜）
   const object = await putBlob(env, key, input.body, {
     httpMetadata: input.contentType ? { contentType: input.contentType } : undefined,
   });
@@ -177,16 +176,16 @@ export async function finalizeAttachment(
   ];
 
   if (input.thumb) {
-    const thumbId = `${attachmentId}-t`;
     statements.push(
       db
         .prepare(SQL_INSERT_ATTACHMENT)
         .bind(
-          thumbId,
+          `${attachmentId}-t`,
           userId,
           "thumb",
           attachmentId,
-          sha256, // 缩略图沿用原图的哈希：身份 = (user, sha256, kind)
+          // 缩略图沿用原图的哈希：身份 = (user, sha256, kind)
+          sha256,
           attachmentKey(userId, sha256, "thumb"),
           input.thumb.mime,
           input.thumb.size,
@@ -201,9 +200,7 @@ export async function finalizeAttachment(
   }
 
   if (input.itemId) {
-    statements.push(
-      db.prepare(SQL_INSERT_ATTACHMENT_REF).bind(input.itemId, null, attachmentId, now),
-    );
+    statements.push(db.prepare(SQL_INSERT_ATTACHMENT_REF).bind(input.itemId, null, attachmentId, now));
   }
 
   await db.batch(statements);
@@ -218,11 +215,15 @@ export async function finalizeAttachment(
 
 /** 下载：按哈希取对象（`thumb` 取缩略图），支持 `Range` */
 export async function serveAttachment(
-  env: EnvBindings,
+  env: StorageEnv,
   userId: string,
   sha256Raw: string,
   options: { thumb?: boolean; range?: BlobRange } = {},
-): Promise<{ body: ReadableStream | null; size: number; range?: { offset: number; length: number; total: number } }> {
+): Promise<{
+  body: ReadableStream | null;
+  size: number;
+  range?: { offset: number; length: number; total: number };
+}> {
   const sha256 = requireSha256(sha256Raw);
   const kind: AttachmentKind = options.thumb ? "thumb" : "original";
 
@@ -291,7 +292,7 @@ export async function gcAttachments(
   return { marked: marked.meta.changes ?? 0, removed };
 }
 
-/** 每日维护用：把到期孤儿的对象登记进 GC 队列并删行（`user_id` 为空表示所有用户） */
+/** 每日维护用：把所有用户里到期孤儿的对象登记进 GC 队列并删行 */
 export async function sweepOrphanedAttachments(
   db: D1Database,
   now: number,
@@ -312,7 +313,7 @@ export async function sweepOrphanedAttachments(
 }
 
 /** 删对象（GC 队列处理时用；失败交给调用方决定是否保留队列行） */
-export async function deleteAttachmentObject(env: EnvBindings, key: string): Promise<void> {
+export async function deleteAttachmentObject(env: StorageEnv, key: string): Promise<void> {
   await deleteBlob(env, key);
 }
 

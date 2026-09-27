@@ -17,6 +17,7 @@
 | v1.2 | v0.3.3 | 2026-09-27 | **M3-2 完成**：`packages/shared/src/privacy.ts` 判定契约 + `privacy` 设置契约 + 22 个用例（全套 487 通过）；用户已授权 M3/M4 一并执行、允许 wiki 回写与前端接线层拆分 | deepseek-v4.1-flash |
 | v1.3 | v0.3.4 | 2026-09-27 | **M3-3 完成**：迁移 0003 `user_crypto`、crypto 四端点、`ensureEncSpace`（注册/登录补建）、`db/privacy.ts` 过滤常量、`BACKUP_CRED_KEY` 可选绑定；新增 16 个用例并把 7 个既有用例按"每个账号自带空间行"修正（全套 511 通过） | deepseek-v4.1-flash |
 | v1.4 | v0.3.5 | 2026-09-27 | **M3-4 前半完成**：crypto 原语 / 纯函数状态机 / 材料缓存 + Dexie v5 / `PUT /api/crypto` 的 `k` 契约（首次启用由服务端包裹，补掉"浏览器拿不到 BACKUP_CRED_KEY"的设计缺口）；web 337、worker 108、全套 542 通过；剩余组装层（hook / 广播握手 / api 方法） | deepseek-v4.1-flash |
+| v1.5 | v0.3.6 | 2026-09-27 | **M3-4 完成**：`cryptoApi`、五个隐私广播事件（只带状态不带内容）、`usePrivacyLock` 组装层（缓存装门禁 / rev 失效 / 设备长期档 / 计时 / 多标签握手 / 动作集）；修掉"有缓存但离线时门禁不生效"的真 bug；全套 549 通过 | deepseek-v4.1-flash |
 
 ---
 
@@ -68,10 +69,10 @@
 - **涉及文件**：`apps/worker/src/db/migrations/0003_user_crypto.ts`（新增）、`apps/worker/src/db/selfheal.ts`（注册迁移 + `REQUIRED_TABLES`）、`apps/worker/src/db/tables.ts`（crypto 语句常量）、`apps/worker/src/db/privacy.ts`（`PRIVACY_EXCLUDE_SQL` 常量）、`apps/worker/src/services/crypto.ts` + `routes/crypto.ts`（新增，四点端点）、`apps/worker/src/services/folders.ts`（`ensureEncSpace`）、`apps/worker/src/routes/auth.ts`（注册与登录两处调用）、`apps/worker/src/services/search.ts`（改用常量）、`apps/worker/src/types.ts`（`BACKUP_CRED_KEY`）、`apps/worker/src/index.ts`（挂子路由）、`.dev.vars.example`、`apps/worker/vitest.config.ts`。
 - **验收**：空库首个请求后 `user_crypto` 出现在 `sqlite_master`；迁移幂等（连调两次版本不变）；`GET/PUT/DELETE /api/crypto` 与 `POST /api/crypto/reset` 各自有用例（含 `DELETE` 在"有隐私内容"时 409、`reset` 用 `BACKUP_CRED_KEY` 解包成功）；`ensureEncSpace` 并发两次只留一行、M1/M2 存量账号登录后补建；搜索语句断言包含 `PRIVACY_EXCLUDE_SQL`。
 
-### M3-4 前端门禁核心（crypto 模块 + 会话态 + 多标签 + 计时）—— 🟡 **前半完成（2026-09-27，v0.3.5）**
+### M3-4 前端门禁核心（crypto 模块 + 会话态 + 多标签 + 计时）—— ✅ **完成（2026-09-27，v0.3.6）**
 
-> 已完成：`features/privacy/crypto.ts`（PBKDF2 / verifier / K 包裹解包）、`features/privacy/model.ts`（纯函数状态机）、`data/db/privacy.ts` + Dexie v5（材料缓存与 `rev` 失效）、服务端 `PUT /api/crypto` 的 `k` 契约（首次启用由服务端包裹）。
-> 待做：`app/usePrivacyLock.ts` 组装层（取材料 / 缓存 / 计时器 / 设备长期标记）、`data/sync/broadcast.ts` 的四个隐私事件与新标签页握手、`data/api/endpoints.ts` 的 crypto 客户端方法。
+> 已完成：`features/privacy/crypto.ts`（PBKDF2 / verifier / K 包裹解包）、`features/privacy/model.ts`（纯函数状态机）、`data/db/privacy.ts` + Dexie v5（材料缓存与 `rev` 失效）、`data/api/endpoints.ts` 的 `cryptoApi`、`data/sync/broadcast.ts` 的五个隐私事件、`features/privacy/usePrivacyLock.ts`（组装层：缓存装门禁 / 服务端刷新 / 设备长期档 / 计时 / 多标签握手 / 动作集）、服务端 `PUT /api/crypto` 的 `k` 契约（首次启用由服务端包裹）。
+> 顺带修掉一个真 bug：有缓存但离线时门禁原本不生效（现在缓存一读到就按"已启用 + 锁定"处理）。
 
 - **涉及文件**：`apps/web/src/features/privacy/model.ts`（状态机 / 档位 / 计时 / 握手）、`apps/web/src/features/privacy/crypto.ts`（PBKDF2 派生、verifier 校验、K 包裹与解包）、`apps/web/src/data/db/privacy.ts`（`privacyState` 缓存 + `rev` 失效）、`apps/web/src/data/db/schema.ts`（Dexie v5：`privacyState` 新表 + `searchIndex` 拆列）、`apps/web/src/data/sync/broadcast.ts`（四个新事件）、`apps/web/src/app/usePrivacyGate.ts`（组装 `PrivacyGate` 供 props 注入）。
 - **验收**：正确/错误密码的 verifier 校验各有用例；K 包裹解包往返一致；服务端 `rev` 变高 → 覆盖缓存并清空解锁态；多标签握手（替身）与"无人应答 = 锁定"；N 分钟计时用假时钟；`BroadcastChannel` 缺失时降级不报错。

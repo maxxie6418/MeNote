@@ -80,6 +80,9 @@ export async function markFolderRestored(
  * 本体、正文缓存、草稿、搜索索引、冲突关联，以及出站队列里同 id 的待上传操作
  * （条目已被永久删除，那条 op 再发只会 404）。
  *
+ * **文件夹也在同一批里**（2026-09-27 起支持文件夹的永久删除）：按 id 一并删掉 `folders` 行，
+ * 并清掉队列里同 id 的 `patch_folder` 操作。两类 id 混在一起是安全的——各自表里找不到就跳过。
+ *
  * 服务端稍后还会通过墓碑把这些再确认一次——**幂等**，重复清不会更糟。
  */
 export async function purgeLocalItems(ids: readonly string[]): Promise<void> {
@@ -88,13 +91,29 @@ export async function purgeLocalItems(ids: readonly string[]): Promise<void> {
 
   await db.transaction(
     "rw",
-    [db.items, db.bodies, db.drafts, db.searchIndex, db.conflicts, db.outbox, db.attachmentsMeta],
+    [
+      db.items,
+      db.folders,
+      db.bodies,
+      db.drafts,
+      db.searchIndex,
+      db.conflicts,
+      db.outbox,
+      db.attachmentsMeta,
+    ],
     async () => {
       await db.items.bulkDelete(list);
+      // 文件夹本体（没有它的 id 时 Dexie 直接忽略）
+      await db.folders.bulkDelete(list);
       await db.bodies.bulkDelete(list);
       await db.drafts.bulkDelete(list);
       await db.searchIndex.bulkDelete(list);
-      await db.outbox.filter((row) => row.entity === "item" && list.includes(row.entity_id)).delete();
+      await db.outbox
+        .filter(
+          (row) =>
+            (row.entity === "item" || row.entity === "folder") && list.includes(row.entity_id),
+        )
+        .delete();
       await db.conflicts
         .filter((row) => list.includes(row.original_id) || list.includes(row.copy_id))
         .delete();

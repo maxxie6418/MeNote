@@ -167,7 +167,7 @@ describe("保留天数走用户设置（不是写死的 30）", () => {
 });
 
 describe("文件夹行的界面", () => {
-  it("显示类型「文件夹」与文件夹图标，并且**不给可用的永久删除**（服务端还不支持）", () => {
+  it("显示类型「文件夹」与文件夹图标，并且**永久删除可用**（2026-09-27 服务端已支持）", () => {
     render(
       <TrashPage
         rows={[trashFolderRow(folder(), NOW, noPrivacyGate())]}
@@ -182,9 +182,9 @@ describe("文件夹行的界面", () => {
     );
 
     expect(screen.getByText("文件夹")).toBeTruthy();
+    // 文件夹的永久删除此前是置灰的（服务端只支持条目）；v0.4.52 补上服务端能力后已解禁
     const purge = screen.getByRole("button", { name: "永久删除" }) as HTMLButtonElement;
-    expect(purge.disabled).toBe(true);
-    expect(purge.getAttribute("title")).toContain("文件夹的永久删除暂未开放");
+    expect(purge.disabled).toBe(false);
     // 恢复照常可用
     expect((screen.getByRole("button", { name: "恢复" }) as HTMLButtonElement).disabled).toBe(false);
   });

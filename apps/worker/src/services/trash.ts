@@ -260,13 +260,18 @@ export async function restoreItem(
 }
 
 /**
- * 永久删除一批（**单批最多 10 条**）。
+ * 永久删除一批（**单批最多 10 条**：一次 batch 里的**每类实体**各 10 个 id）。
  *
- * 七条语句，次序刻意如此：
+ * 条目侧的语句次序刻意如此：
  * 1. 写墓碑（同一批共享一个 `sync_seq`：`SELECT sync_seq + 1 FROM users` 内联进语句）；
  * 2. 推进计数器（守卫 = 墓碑确实写进去了，避免重放时白推）；
  * 3. 版本正文的 R2 键进 GC 队列（**先登记再删元数据**：反过来的话键就找不回来了）；
  * 4. 删附件引用；5. 删版本元数据；6. 删正文；7. 删条目本体。
+ *
+ * **文件夹**（2026-09-27 按用户拍板加入）：同样写墓碑（`entity = 'folder'`，与本批共用一个
+ * `sync_seq`）再删 `folders` 行。**不动它的子项**——被删文件夹的内容与子文件夹本来就在回收站里，
+ * 各自按本条链路处理；恢复"父夹已不存在"的子项时服务端会把它放回根目录（`restoreItem` /
+ * `restoreFolder` 的父夹判定）。
  *
  * 附件**不在这里删**（设计 §5.2）：可能还有别的条目/版本引用它，交给每日维护的孤儿流程。
  */
@@ -291,11 +296,20 @@ export async function permanentDeleteItems(
   const syncSeq = seqRow?.next ?? 1;
 
   const statements = [
-    // 1 墓碑：整批同一个 sync_seq；同一实体再次被永久删除时更新到新序号（否则第二次传不出去）
+    // 1 墓碑（条目）：整批同一个 sync_seq；同一实体再次被永久删除时更新到新序号（否则第二次传不出去）
     db
       .prepare(
         `INSERT INTO tombstones (user_id, entity, entity_id, sync_seq, deleted_at)
          SELECT ?, 'item', i.id, ?, ? FROM items i WHERE i.user_id = ? AND i.id IN (${slots})
+         ON CONFLICT (user_id, entity, entity_id)
+         DO UPDATE SET sync_seq = excluded.sync_seq, deleted_at = excluded.deleted_at`,
+      )
+      .bind(userId, syncSeq, now, userId, ...ids),
+    // 1b 墓碑（文件夹）：同一个 sync_seq 与同一条计数器语句，所以两边的序号天然一致
+    db
+      .prepare(
+        `INSERT INTO tombstones (user_id, entity, entity_id, sync_seq, deleted_at)
+         SELECT ?, 'folder', f.id, ?, ? FROM folders f WHERE f.user_id = ? AND f.id IN (${slots})
          ON CONFLICT (user_id, entity, entity_id)
          DO UPDATE SET sync_seq = excluded.sync_seq, deleted_at = excluded.deleted_at`,
       )
@@ -339,19 +353,26 @@ export async function permanentDeleteItems(
     db
       .prepare(`DELETE FROM items WHERE user_id = ? AND id IN (${slots})`)
       .bind(userId, ...ids),
+    // 8 文件夹本体（同样带 user_id）
+    db
+      .prepare(`DELETE FROM folders WHERE user_id = ? AND id IN (${slots})`)
+      .bind(userId, ...ids),
   ];
 
   const results = await db.batch(statements);
-  // 最后一条是删条目本体，它的 changes 就是真正删掉的行数
-  const deleted = results[results.length - 1]?.meta.changes ?? 0;
+  // 条目本体与文件夹本体各一条（索引 7 / 8）：真正删掉的行数是两者之和
+  const deletedItems = results[7]?.meta.changes ?? 0;
+  const deletedFolders = results[8]?.meta.changes ?? 0;
 
-  return { deleted, sync_seq: syncSeq };
+  return { deleted: deletedItems + deletedFolders, sync_seq: syncSeq };
 }
 
 /**
- * 清空回收站：把当前所有软删条目按 `PERMANENT_DELETE_BATCH` 分批永久删除。
+ * 清空回收站：把当前所有软删**条目与文件夹**按 `PERMANENT_DELETE_BATCH` 分批永久删除。
  *
  * 每批一个 batch（各自推进 `sync_seq`），返回总删除数。**只删回收站里的**（`deleted_at IS NOT NULL`）。
+ * 两类实体分别取批（2026-09-27 起文件夹也支持永久删除）——同一个批里可以同时含条目与文件夹，
+ * `permanentDeleteItems` 会按各自的存在性分别写墓碑。
  */
 export async function emptyTrash(
   db: D1Database,
@@ -361,19 +382,21 @@ export async function emptyTrash(
   let deleted = 0;
   let batches = 0;
 
-  for (let round = 0; round < 100; round += 1) {
-    const rows = await db
-      .prepare(
-        "SELECT id FROM items WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at ASC LIMIT ?",
-      )
-      .bind(userId, PERMANENT_DELETE_BATCH)
-      .all<{ id: string }>();
-    const ids = rows.results.map((row) => row.id);
-    if (ids.length === 0) break;
+  for (const table of ["items", "folders"] as const) {
+    for (let round = 0; round < 100; round += 1) {
+      const rows = await db
+        .prepare(
+          `SELECT id FROM ${table} WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at ASC LIMIT ?`,
+        )
+        .bind(userId, PERMANENT_DELETE_BATCH)
+        .all<{ id: string }>();
+      const ids = rows.results.map((row) => row.id);
+      if (ids.length === 0) break;
 
-    const result = await permanentDeleteItems(db, userId, ids, now);
-    deleted += result.deleted;
-    batches += 1;
+      const result = await permanentDeleteItems(db, userId, ids, now);
+      deleted += result.deleted;
+      batches += 1;
+    }
   }
 
   return { deleted, batches };

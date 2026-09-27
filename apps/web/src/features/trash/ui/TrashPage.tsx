@@ -212,20 +212,16 @@ export function TrashPage({
                     恢复
                   </Button>
                   {/*
-                    文件夹行不给「永久删除」：服务端的永久删除只认条目（`permanentDeleteItems` 的 SQL
-                    只扫 `items`），点了必然报错。**禁用并写明原因**，而不是藏掉按钮——
-                    藏掉会让人以为"文件夹不会永久删除"。
+                    「永久删除」对条目与文件夹都可用（文件夹的永久删除 2026-09-27 补齐）。
+                    保留 `purgeable` 判断：将来若有"这一行不能删"的情形，依旧是禁用 + 写明原因，
+                    而不是藏掉按钮（藏掉会让人以为"这种东西不会永久删除"）。
                   */}
                   <Button
                     variant="danger"
                     size="sm"
                     onClick={() => setPending({ kind: "purge", ids: [row.id] })}
                     disabled={offline || !row.purgeable}
-                    title={
-                      !row.purgeable
-                        ? "文件夹的永久删除暂未开放（服务端只支持条目），先恢复或等保留期到期"
-                        : blockedTitle
-                    }
+                    title={blockedTitle}
                   >
                     永久删除
                   </Button>

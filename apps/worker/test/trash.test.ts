@@ -256,6 +256,60 @@ describe("软删与恢复", () => {
 });
 
 describe("永久删除", () => {
+  it("**文件夹也能永久删除**：删 `folders` 行 + 写 `entity='folder'` 墓碑（2026-09-27 补）", async () => {
+    const user = await registerUser("Alice", nextDevice());
+    await openRegistration(user.cookie);
+    const folderId = await createFolder(user.cookie, "要删的文件夹");
+    // 先软删（进回收站），再永久删除——界面上的顺序就是这样
+    await SELF.fetch(`${ORIGIN}/api/folders/${folderId}`, {
+      method: "DELETE",
+      headers: headers(user.cookie),
+    });
+
+    const response = await permanentDelete(user.cookie, [folderId]);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { deleted: number; sync_seq: number };
+    expect(body.deleted).toBe(1);
+
+    const tombstone = await env.DB.prepare(
+      "SELECT entity, sync_seq FROM tombstones WHERE user_id = ? AND entity_id = ?",
+    )
+      .bind(user.id, folderId)
+      .first<{ entity: string; sync_seq: number }>();
+    expect(tombstone?.entity).toBe("folder");
+    expect(tombstone?.sync_seq).toBe(body.sync_seq);
+
+    // 文件夹本体没了
+    expect(
+      await env.DB.prepare("SELECT 1 AS x FROM folders WHERE id = ?").bind(folderId).first(),
+    ).toBeNull();
+  });
+
+  it("条目与文件夹混在同一批：各写各的墓碑、共用同一个 `sync_seq`", async () => {
+    const user = await registerUser("Alice", nextDevice());
+    await openRegistration(user.cookie);
+    const noteId = await createNote(user.cookie, "甲");
+    const folderId = await createFolder(user.cookie, "夹");
+    await deleteItem(user.cookie, noteId);
+    await SELF.fetch(`${ORIGIN}/api/folders/${folderId}`, {
+      method: "DELETE",
+      headers: headers(user.cookie),
+    });
+
+    const response = await permanentDelete(user.cookie, [noteId, folderId]);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { deleted: number; sync_seq: number };
+    expect(body.deleted).toBe(2);
+
+    const rows = await env.DB.prepare(
+      "SELECT entity, sync_seq FROM tombstones WHERE user_id = ? ORDER BY entity",
+    )
+      .bind(user.id)
+      .all<{ entity: string; sync_seq: number }>();
+    expect(rows.results.map((row) => row.entity)).toEqual(["folder", "item"]);
+    expect(new Set(rows.results.map((row) => row.sync_seq))).toEqual(new Set([body.sync_seq]));
+  });
+
   it("永久删除写墓碑，且同批共享同一个 sync_seq", async () => {
     const user = await registerUser("Alice", nextDevice());
     await openRegistration(user.cookie);
@@ -392,6 +446,34 @@ describe("永久删除", () => {
       .first<{ n: number }>();
     expect(tombstones?.n).toBe(12);
   });
+
+  it("清空回收站也清**文件夹**（2026-09-27 补：文件夹与条目一起清）", async () => {
+    const user = await registerUser("Alice", nextDevice());
+    await openRegistration(user.cookie);
+    const noteId = await createNote(user.cookie, "条目");
+    const folderId = await createFolder(user.cookie, "文件夹");
+    await deleteItem(user.cookie, noteId);
+    await SELF.fetch(`${ORIGIN}/api/folders/${folderId}`, {
+      method: "DELETE",
+      headers: headers(user.cookie),
+    });
+
+    const response = await emptyTrashRequest(user.cookie);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { deleted: number };
+    expect(body.deleted).toBe(2);
+
+    expect(await env.DB.prepare("SELECT 1 AS x FROM items WHERE id = ?").bind(noteId).first()).toBeNull();
+    expect(
+      await env.DB.prepare("SELECT 1 AS x FROM folders WHERE id = ?").bind(folderId).first(),
+    ).toBeNull();
+    const byEntity = await env.DB.prepare(
+      "SELECT entity, COUNT(*) AS n FROM tombstones WHERE user_id = ? GROUP BY entity ORDER BY entity",
+    )
+      .bind(user.id)
+      .all<{ entity: string; n: number }>();
+    expect(byEntity.results.map((row) => `${row.entity}:${row.n}`)).toEqual(["folder:1", "item:1"]);
+  });
   it("永久删除的 D1 语句数留有余量（10 条时打印实际条数并断言 ≤45）", async () => {
     // 用最小替身只数语句：真库跑的是同一批语句，这里要钉的是"语句预算"这个容易悄悄变胖的指标
     const batches: unknown[][] = [];
@@ -418,7 +500,8 @@ describe("永久删除", () => {
     const statementCount = batches[0]?.length ?? 0;
     // 失败时把实际条数打出来，便于判断是哪一步变胖了
     expect(statementCount, `永久删除 10 条用了 ${statementCount} 条语句`).toBeLessThanOrEqual(45);
-    expect(statementCount).toBe(7); // 1 墓碑 + 1 计数器 + 1 GC 登记 + 4 删除
+    // 2 墓碑（条目 + 文件夹）+ 1 计数器 + 1 GC 登记 + 5 删除（引用/版本/正文/条目/文件夹）
+    expect(statementCount).toBe(9);
   });
 });
 

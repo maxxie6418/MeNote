@@ -37,9 +37,9 @@ export interface TrashRowModel {
   /**
    * 能否**永久删除**这一行。
    *
-   * 文件夹目前**不能**：服务端的永久删除只认条目（`permanentDeleteItems` 的 SQL 只扫 `items`），
-   * 关掉它是为了让界面别给一个点了会报错的入口——真正缺的是服务端能力，已登记为待办
-   * （收口复核 §七）。
+   * 条目与文件夹都可以（文件夹的永久删除在 2026-09-27 按用户拍板补上：服务端删 `folders` 行
+   * 并写 `entity='folder'` 墓碑）。保留这个字段是因为**不同行确实可能不可删**
+   * （例如以后要加"还在被引用的空间"之类），界面据此置灰并写明原因。
    */
   purgeable: boolean;
 }
@@ -125,8 +125,8 @@ export function trashFolderRow(
     deletedAt,
     remainingDays: remain,
     urgent: remain <= URGENT_REMAINING_DAYS,
-    // 服务端还没有文件夹的永久删除（见 `TrashRowModel.purgeable` 的说明）
-    purgeable: false,
+    // 文件夹也可以永久删除（服务端自 2026-09-27 起支持：删 `folders` 行 + `entity='folder'` 墓碑）
+    purgeable: true,
   };
 }
 

@@ -109,20 +109,27 @@ describe("策略设置项", () => {
     expect(screen.queryByText("请填 20–500")).toBeNull();
   });
 
-  it("「不限」默认打开：数值输入禁用并说明不限；取消后给一个可用起点", async () => {
+  it("「不限」默认打开：数值输入禁用并由**可见文案**说明；关掉后给一个可用起点", async () => {
     const user = userEvent.setup();
     const { onPatchSettings } = renderPage();
 
     const age = screen.getByLabelText("最长保留时长（天）") as HTMLInputElement;
     expect(age.disabled).toBe(true);
-    expect(age.getAttribute("title")).toBe("当前是「不限」");
+    // 为什么灰着必须**可见**地写出来，不靠 `title` 悬停（DESIGN.md §6.1 / §145）
+    expect(age.getAttribute("title")).toBeNull();
     expect(screen.getByText(/不限：只按条数稀疏化/)).toBeTruthy();
 
-    await user.click(screen.getByRole("checkbox", { name: "不限（最长保留时长）" }));
+    // 开关与其它设置项统一用 role="switch"（2026-09-28 设置页 B 批）
+    const unlimited = screen.getByRole("switch", { name: "不限（最长保留时长）" });
+    expect(unlimited.getAttribute("aria-checked")).toBe("true");
+
+    await user.click(unlimited);
     const last = onPatchSettings.mock.calls.at(-1)?.[0] as {
       version_trash: { versions_max_age_days: number };
     };
     expect(last.version_trash.versions_max_age_days).toBe(30);
+    // 这里不断言点击后的 `aria-checked`：本用例的 `onPatchSettings` 只记录调用、不重渲染，
+    // 开关是受控的（值来自 `settings`），所以点完 DOM 上仍是原值——那属于 Harness 的限制，不是实现问题。
   });
 
   it("回收站保留天数默认 30，可改", async () => {

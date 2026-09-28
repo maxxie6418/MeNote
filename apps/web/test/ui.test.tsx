@@ -465,6 +465,17 @@ describe("设置壳", () => {
     expect(light.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("页头收成一条：`h1` 标题 + **可见的分类计数** + 说明收进 ⓘ（2026-09-28 设置页 B 批）", () => {
+    render(<SettingsPanel {...baseProps} page="general" />);
+
+    // 标题与其它屏同级（首页 `.pane-head h1` / 待办 `.tkhead`）——此前这里是 h2
+    expect(screen.getByRole("heading", { level: 1, name: "通用" })).toBeTruthy();
+    // 实时计数保持**可见**，不进 ⓘ（DESIGN.md §5.4-2）
+    expect(screen.getByText("共 7 个分类")).toBeTruthy();
+    // 口径说明收进 ⓘ（可点开的按钮），不在正文里平铺
+    expect(screen.getByRole("button", { name: "通用分类说明" })).toBeTruthy();
+  });
+
   it("关于页：显示版本号与项目仓库地址", () => {
     render(<SettingsPanel {...baseProps} page="about" />);
 

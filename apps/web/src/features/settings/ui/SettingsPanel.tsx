@@ -15,20 +15,27 @@ import { APP_VERSION, PROJECT_REPO_URL } from "../../../app/about";
 import { CardQuickMenu } from "./CardQuickMenu";
 import { InstancePage } from "./InstancePage";
 
+/**
+ * 分类的标题与一行简述。
+ *
+ * **只有已实现的分类在这里**（`SETTINGS_PAGES` 是唯一真源）：定稿的 11 类里
+ * 备份 / 分享 / MCP / 数据管理四类还没做，**不进导航**（不是灰掉——灰掉会让人以为点了会有什么）。
+ * 简述不进页面正文，只进页头那个 ⓘ（DESIGN.md §5.4-1：说明性文字不平铺）。
+ */
 const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
-  general: { title: "通用", summary: "启动视图、时区、主题与快捷菜单" },
+  general: { title: "通用", summary: "启动视图、时区、主题、笔记本树与快捷菜单" },
   account: { title: "账户与安全", summary: "登录密码与会话" },
-  editor: { title: "编辑器", summary: "默认编辑模式" },
-  privacy: { title: "隐私锁", summary: "加密空间与门禁（M3 提供）" },
-  versions: { title: "版本与回收站", summary: "版本历史与回收站（M4 提供）" },
+  editor: { title: "编辑器", summary: "打开笔记时的默认编辑模式" },
+  privacy: { title: "隐私锁", summary: "加密空间、门禁与隐私密码" },
+  versions: { title: "版本与回收站", summary: "版本封存与保留策略、回收站保留天数" },
   instance: { title: "实例管理", summary: "本实例的注册开关与用量（仅管理员）" },
   about: { title: "关于", summary: "版本号与项目地址" },
 };
 
 /**
  * 导航顺序即需求 §7.5 的最终形态顺序，但**只列出本里程碑已实现的分类**（避免点进去空页面）：
- * 备份 / 分享 / MCP / 数据管理 等各自里程碑再进导航。
- * 「关于」是用户 2026-09-27 追加的第 11 个分类（需求 §7.5 的 10 个之外），放最后。
+ * 备份 / 分享 / MCP / 数据管理 四类各自里程碑再进导航（定稿共 11 类，当前进导航 7 类）。
+ * 「关于」是用户 2026-09-27 追加的分类，放最后。
  *
  * **清单直接引用路由那一份**（2026-09-27 修复）：两处各写一份会漂移——M3 加「隐私锁」时只加了
  * 这里、没加路由白名单，点「隐私锁」会落到「通用」。
@@ -196,11 +203,15 @@ export function SettingsPanel({
       </nav>
 
       <div className="settings__body">
+        {/*
+          页头收成一条（2026-09-28 设置页重构 B 批）：标题（`h1` + `--fs-title`/650，与其它屏的
+          页头同级）· 说明（**进 ⓘ**，不平铺）· **分类计数保持可见**（实时计数不靠悬停）· 出口在右端。
+          此前这里是 `h2` + 一个平铺的 `p`，与首页 `.pane-head h1`、待办 `.tkhead` 三套写法。
+        */}
         <header className="settings__head">
-          <h2>{meta.title}</h2>
-          <p>
-            {meta.summary} · 共 {pages.length} 个分类
-          </p>
+          <h1 className="settings__title">{meta.title}</h1>
+          <InfoHint label={`${meta.title}分类说明`}>{meta.summary}</InfoHint>
+          <span className="settings__count">共 {pages.length} 个分类</span>
           {/*
             出口（2026-09-27 修复）：设置是**主操作区独立页**，此前除了"退出登录"没有别的路回笔记区——
             功能栏的视图切换只改笔记视图状态、搜索框的结果也被 `route === "settings"` 的分支挡住，
@@ -266,18 +277,26 @@ export function SettingsPanel({
                   <span className="setrow__name">时区</span>
                   <span className="setrow__desc">Memo 时间轴与待办日期按它分天</span>
                 </div>
-                <select
-                  className="field__input"
-                  aria-label="时区"
-                  value={userSettings.timezone}
-                  onChange={(event) => onPatchSettings({ timezone: event.target.value })}
-                >
-                  {timezoneOptions(userSettings.timezone).map((zone) => (
-                    <option key={zone} value={zone}>
-                      {zone}
-                    </option>
-                  ))}
-                </select>
+                {/*
+                  版式统一到 `.setrow__control`（与版本页那些行内输入一致）。
+                  **控件本身保持原生 `<select>`**：完整时区表 400+ 项做成单选组会把这一页撑爆，
+                  可搜索下拉是另一个组件（设置页稿 §八-3），本轮不引——这是稿里"全部改 radioset"
+                  那一条的**唯一例外**，按用户口径以本条为准。
+                */}
+                <div className="setrow__control">
+                  <select
+                    className="field__input"
+                    aria-label="时区"
+                    value={userSettings.timezone}
+                    onChange={(event) => onPatchSettings({ timezone: event.target.value })}
+                  >
+                    {timezoneOptions(userSettings.timezone).map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* 待办筛选条的形态（v0.5.2；定稿：两种都留，让用户自选） */}
@@ -527,7 +546,8 @@ function AccountPage({
         </Button>
       </form>
 
-      <div className="setrow" style={{ marginTop: "var(--sp-4)" }}>
+      {/* 间距走 `.setrow` 自身的内边距与上边框，不再给子元素加内联 `margin`（DESIGN.md §4.3 / #14） */}
+      <div className="setrow">
         <div className="setrow__label">
           <span className="setrow__name">退出登录</span>
           <span className="setrow__desc">只清除本机会话；本机缓存的笔记不会被删除</span>

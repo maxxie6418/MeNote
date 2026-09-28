@@ -63,7 +63,15 @@ export function InstancePage({
       <div className="setrow">
         <div className="setrow__label">
           <span className="setrow__name">到期自动关闭</span>
-          <span className="setrow__desc">留空表示不自动关闭；填了就在这一天结束时关闭</span>
+          {/*
+            禁用原因**可见**（DESIGN.md §6.1 / §145：不能只靠 `title` 悬停）：
+            开关关着时直接写着"先打开注册开关"，而不是把原因塞进悬停提示。
+          */}
+          <span className="setrow__desc">
+            {registrationOpen
+              ? "留空表示不自动关闭；填了就在这一天结束时关闭"
+              : "先打开注册开关，才能设到期时间"}
+          </span>
         </div>
         <div className="setrow__control">
           <input
@@ -72,7 +80,6 @@ export function InstancePage({
             aria-label="注册到期日"
             value={deadlineDraft}
             disabled={!registrationOpen}
-            title={registrationOpen ? undefined : "先打开注册开关再设到期时间"}
             onChange={(event) => {
               const value = event.target.value;
               setDeadlineDraft(value);

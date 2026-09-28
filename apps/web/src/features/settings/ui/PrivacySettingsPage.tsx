@@ -190,7 +190,13 @@ export function PrivacySettingsPage({
                     离线也能改。
                   </InfoHint>
                 )}
-                <button type="button" className="link" onClick={() => setEnableOpen(false)}>
+                {/* 「取消」是**按钮**语义，就用幽灵按钮——`<button class="link">` 是拿按钮冒充文字链接
+                    （DESIGN.md §5.3：文字链接才用 `.link`，不得用按钮冒充链接，反之亦然） */}
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => setEnableOpen(false)}
+                >
                   取消
                 </button>
               </div>

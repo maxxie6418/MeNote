@@ -89,12 +89,14 @@ describe("实例管理：注册开关与到期自动关闭", () => {
     expect(onChangeRegistration).toHaveBeenCalledWith(true, 0);
   });
 
-  it("注册开关关着时，到期日期框禁用并说明要先打开开关", () => {
+  it("注册开关关着时，到期日期框禁用，且**可见地**写着要先打开开关（不靠悬停）", () => {
     render(<SettingsPanel {...baseProps({ registrationOpen: false })} />);
 
     const date = screen.getByLabelText("注册到期日") as HTMLInputElement;
     expect(date.disabled).toBe(true);
-    expect(date.title).toContain("先打开注册开关");
+    // 原因必须看得见（DESIGN.md §6.1 / §145：禁用不能只靠 `title` 悬停）
+    expect(date.getAttribute("title")).toBeNull();
+    expect(screen.getByText("先打开注册开关，才能设到期时间")).toBeTruthy();
   });
 
   it("未实现的项保持**可见**的里程碑标记（不能只靠悬停）", () => {

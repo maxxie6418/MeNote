@@ -165,7 +165,6 @@ export function VersionsTrashPage({
               inputMode="numeric"
               value={ageDraft}
               disabled={unlimitedAge}
-              title={unlimitedAge ? "当前是「不限」" : undefined}
               onChange={(event) => {
                 setAgeDraft(event.target.value);
                 const parsed = parseIntOrNull(event.target.value);
@@ -175,24 +174,30 @@ export function VersionsTrashPage({
               }}
             />
             <span className="setrow__unit">天</span>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={unlimitedAge}
-                aria-label="不限（最长保留时长）"
-                onChange={(event) => {
-                  if (event.target.checked) {
-                    setAgeDraft("");
-                    onPatchSettings({ version_trash: { ...settings, versions_max_age_days: 0 } });
-                  } else {
-                    // 取消「不限」给一个可用的起点（30 天），而不是留空让用户猜
-                    setAgeDraft("30");
-                    onPatchSettings({ version_trash: { ...settings, versions_max_age_days: 30 } });
-                  }
-                }}
-              />
-              不限
-            </label>
+            {/*
+              「不限」统一用 `role="switch"` + `.toggle`（2026-09-28 B 批）：此前是
+              `<label><input type="checkbox">`，与其它开关两套写法。
+              "为什么这个输入框灰着"由**可见的** `setrow__desc` 说明（上一行的 desc 会变成
+              "不限：只按条数稀疏化，不按时间删"），不再靠 `title` 悬停（DESIGN.md §6.1 / §145）。
+            */}
+            <button
+              type="button"
+              role="switch"
+              className="toggle"
+              aria-checked={unlimitedAge}
+              aria-label="不限（最长保留时长）"
+              onClick={() => {
+                if (unlimitedAge) {
+                  // 取消「不限」给一个可用的起点（30 天），而不是留空让用户猜
+                  setAgeDraft("30");
+                  onPatchSettings({ version_trash: { ...settings, versions_max_age_days: 30 } });
+                } else {
+                  setAgeDraft("");
+                  onPatchSettings({ version_trash: { ...settings, versions_max_age_days: 0 } });
+                }
+              }}
+            />
+            <span className="setrow__unit">不限</span>
           </div>
         </div>
 

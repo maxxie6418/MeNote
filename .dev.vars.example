@@ -5,19 +5,15 @@
 # 生产环境不放这里：在 Cloudflare 部署页的机密项里填写，
 # wrangler.jsonc 的 "secrets": { "required": [...] } 已声明需要哪些机密。
 
-# AUTH_PEPPER —— 登录校验与假盐派生用（架构 §13.2、需求 §5.4）
-#   用途：auth_verifier = HMAC-SHA256(AUTH_PEPPER, 浏览器派生的登录密钥)；
-#        prelogin 对不存在的用户名返回 HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:<用户名小写>") 的前 16 字节。
+# AUTH_PEPPER —— **唯一的根机密**：登录校验、假盐派生，以及隐私锁的备份包裹键派生（架构 §13.2、需求 §5.4）
+#   用途：① auth_verifier = HMAC-SHA256(AUTH_PEPPER, 浏览器派生的登录密钥)；
+#        ② prelogin 对不存在的用户名返回 HMAC-SHA256(AUTH_PEPPER, "menote-prelogin-v1:<用户名小写>") 的前 16 字节；
+#        ③ **备份包裹键**（包裹内容密钥 K，供「重置隐私密码」与 M5 的备份加密）
+#           由它**域分离派生**：SHA-256(AUTH_PEPPER 字节 ‖ "menote-backup-wrap-v1") → 32 字节 AES-GCM 密钥。
+#           所以实例**只需要配这一个机密**（原先单独的 BACKUP_CRED_KEY 已删除，2026-09-28）。
 #   生成：openssl rand -base64 32
+#   注意：**换掉它会让已存的 `k_wrapped_backup` 解不开**（登录校验也会全失效）——在解锁态重新包裹一次 K 才可修复备份那一路。
 AUTH_PEPPER=<openssl rand -base64 32 的输出>
-
-# BACKUP_CRED_KEY —— 备份凭据：包裹内容密钥 K 的第二把钥匙（架构 §7.2 / §12.4）
-#   用途：① M3 起「重置隐私密码」时服务端用它解出 K 交回浏览器重新包裹；
-#        ② M5 起 Cron 备份加密时用它解出 K。
-#   派生：SHA-256(机密字节) → 32 字节 AES-GCM 密钥（换机器不用改算法）。
-#   生成：openssl rand -base64 32
-#   注意：**换掉该机密会让已存的 `k_wrapped_backup` 解不开**——在解锁态重新包裹一次 K 即可修复。
-BACKUP_CRED_KEY=<openssl rand -base64 32 的输出>
 
 # 后续里程碑新增的机密在此追加（当前无需在 wrangler.jsonc 里声明 secrets.required，
 # 缺机密时由各端点自己给出明确错误，见 middleware/config-guard.ts 的说明）。

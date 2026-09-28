@@ -83,11 +83,8 @@ CHANGELOG.md      每次改动一条记录
 - **主通道是 Workers Builds**：推送到 `main` 自动构建部署；非生产分支与 PR 自动获得预览 URL。构建命令 `pnpm install --frozen-lockfile && pnpm build`，部署命令 `npx wrangler deploy`（根目录会生成部署指针指向构建产物配置）。
 - **部署成功后必须做一步**：在 Dashboard 给这个 Worker 添加机密 **`AUTH_PEPPER`**（Settings → Variables and Secrets → 类型选 **Secret**，值用 `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` 生成）。
   没配之前注册/登录会返回 503 并提示缺哪一项（这是刻意的 fail-closed：绝不用空密钥算 HMAC）。**这个值以后不要更换**——密码校验值是 `HMAC(AUTH_PEPPER, 登录密钥)`，换了所有已有账号都登不进去。
-- **第二个机密 `BACKUP_CRED_KEY` 也建议现在就加**（同样 Settings → Variables and Secrets → 类型 Secret，值用 `openssl rand -base64 32` 生成）。
-  它是给内容密钥 K 包第二份钥匙用的（「重置隐私密码」现在就要用，后续的备份加密也要用）。**不加的表现**：点「启用隐私锁」会被服务端拒回 503，提示"实例未配置 `BACKUP_CRED_KEY` 机密，无法启用隐私锁"——其它功能不受影响。
-  **这个值同样要稳定**：换掉它会让已存的 `k_wrapped_backup` 解不开（重置隐私密码与备份加密随之中断），补救办法是在**解锁态**下重新包裹一次 K（重跑一次加密设置）。本地开发同理：`apps/web/.dev.vars` 里也要有它，否则本地启用隐私锁一样 503。
-  **嫌麻烦的省事做法（可选）**：自托管的个人实例可以把 `BACKUP_CRED_KEY` 直接填成**与 `AUTH_PEPPER` 相同的值**——代码不要求两者不同（任意字符串都行），功能完全正常，配置也只剩一处要记。代价只有一条：**两把钥匙的轮换从此绑在一起**（本来就都建议"设了别换"），即"换一个等于换两个"。若你希望"登录校验"与"备份包裹"各用一把独立钥匙，就分开配。
-  **为什么默认要求配它、而不是自动降级**：首次启用隐私锁时，服务端要用它包出第二份密钥包裹（供"忘记隐私密码"时重置）。若允许"没配也先启用"，用户就会进入**一个再也重置不了密码的状态**——那样更坑，所以这里是 fail-closed。
+- **机密只需要这一个**（2026-09-28 起）：隐私锁里"包裹内容密钥 K"的备份包裹键由 `AUTH_PEPPER` **域分离派生**（`SHA-256(AUTH_PEPPER ‖ "menote-backup-wrap-v1")`），不需要再配第二个机密。原先那个 `BACKUP_CRED_KEY` **已从工程里删除**：老部署上留着它不影响运行（代码不再读它），可以直接删掉。
+  换 `AUTH_PEPPER` 除了会让所有人登不进去，还会让已存的 `k_wrapped_backup` 解不开（"重置隐私密码"随之中断）——两件事都会发生，所以它更是"设了就别换"。
 - 表结构不用手工迁移：首个 API 请求会运行时自愈建表。
 - **命令行部署**：`pnpm build && pnpm deploy`（需 `wrangler login`）。
 - 建议顺手打开 **SSL/TLS → Edge Certificates → Always Use HTTPS**，避免用户用 http 进来（那样浏览器不提供 WebCrypto，注册与保存都会失败）。

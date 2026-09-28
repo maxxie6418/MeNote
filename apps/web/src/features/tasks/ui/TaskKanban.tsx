@@ -40,6 +40,11 @@ export function TaskKanban({
       {columns.map((column) => (
         <section key={column.status} className="kanban__col" aria-label={column.label}>
           <h3 className="kanban__head">
+            {/* 列头圆点（原型 `.tkgrp__dot`）：颜色不单独表意，旁边就是列名与条数 */}
+            <span
+              className={`tasklist__dot tasklist__dot--${column.status}`}
+              aria-hidden="true"
+            />
             {column.label}
             <span className="tasklist__count">{column.tasks.length}</span>
           </h3>

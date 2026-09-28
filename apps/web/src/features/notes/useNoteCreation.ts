@@ -31,7 +31,7 @@ export function useNoteCreation(input: UseNoteCreationInput) {
   const { folders, view, refresh, open, setView, onLocalWrite } = input;
 
   const createNote = useCallback(
-    async (options?: { title?: string; body?: string }) => {
+    async (options?: { title?: string; body?: string }): Promise<string> => {
       const id = newUlid();
       /*
         **落点 = 当前选中的笔记本**。此前只有加密空间那条分支带 `folder_id`，
@@ -56,6 +56,8 @@ export function useNoteCreation(input: UseNoteCreationInput) {
       await refresh();
       await open(id);
       onLocalWrite?.();
+      // 返回新 id：调用方要用它给"打开这一篇"的轻提示动作（2026-09-28）
+      return id;
     },
     [folders, onLocalWrite, open, refresh, view],
   );

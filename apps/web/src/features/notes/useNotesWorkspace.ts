@@ -129,7 +129,7 @@ export interface NotesWorkspace {
   snapshot: NoteEditorSnapshot | null;
   refresh: () => Promise<void>;
   open: (id: string) => Promise<void>;
-  createNote: (options?: { title?: string; body?: string }) => Promise<void>;
+  createNote: (options?: { title?: string; body?: string }) => Promise<string>;
   changeTitle: (title: string) => Promise<void>;
   /** 时间轴上的 Memo（不含已删除的；按 memo_at 倒序，置顶由界面层再排） */
   memos: LocalItem[];

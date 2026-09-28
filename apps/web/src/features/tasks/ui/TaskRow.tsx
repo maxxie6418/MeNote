@@ -17,7 +17,7 @@ import type { LocalItem } from "../../../data/db";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
 import { DropdownMenu } from "../../../app/ui/Menu";
-import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, type TaskStatus } from "@menote/mdcore";
+import { TASK_PRIORITY_LABELS, type TaskStatus } from "@menote/mdcore";
 import { isOverdue, statusOf, taskAdvance } from "../model";
 
 export interface TaskRowProps {
@@ -72,27 +72,36 @@ export function TaskRow({
         {title}
       </button>
 
+      {/*
+        元信息照原型（`.tkrow__meta`）：只有"日期 + 优先级"两个胶囊。
+        - 逾期写成「已逾期 · 9月24日」（原型顺序如此，先状态后日期）；
+        - 优先级只写字（原型 `高` / `中`），不写"优先级"三个字；
+        - **行内不再重复状态文字**：状态由分组名 + 右侧推进按钮的文字承载，
+          不靠颜色单独表意（DESIGN.md 禁止项 #4 仍成立）。
+      */}
       <span className="taskrow__meta">
         {task.task_due ? (
           <Chip variant="compact" tone={overdue ? "red" : "neutral"}>
-            截止 {task.task_due}
-            {overdue ? " · 已逾期" : ""}
+            {overdue ? `已逾期 · ${task.task_due}` : task.task_due}
           </Chip>
-        ) : null}
+        ) : (
+          <Chip variant="compact" tone="neutral">
+            未设日期
+          </Chip>
+        )}
         {task.task_priority ? (
           <Chip variant="compact" tone={task.task_priority === "high" ? "amber" : "neutral"}>
-            优先级{" "}
             {TASK_PRIORITY_LABELS[task.task_priority as "high" | "medium" | "low"] ??
               task.task_priority}
           </Chip>
         ) : null}
-        <span className="taskrow__status">{TASK_STATUS_LABELS[status]}</span>
       </span>
 
       <span className="taskrow__actions">
+        {/* 行内推进按钮是**幽灵**（原型 `.tkrow` 用 `btn btn--ghost`；看板卡片才是描边那档） */}
         <button
           type="button"
-          className="btn btn--sm"
+          className="btn btn--ghost btn--sm"
           onClick={() => onStatusChange(task.id, action.next)}
         >
           {action.label}

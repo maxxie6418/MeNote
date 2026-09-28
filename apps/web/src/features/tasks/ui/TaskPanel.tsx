@@ -21,6 +21,7 @@ import { useState } from "react";
 import type { LocalItem } from "../../../data/db";
 import { isMemoVisible, type PrivacyGate } from "@menote/shared";
 import { Button } from "../../../app/ui/Controls";
+import { Icon } from "../../../app/ui/Icon";
 import { InfoHint } from "../../../app/ui/InfoHint";
 import { LockedPlaceholder } from "../../../app/ui/LockedPlaceholder";
 import { SegmentedControl } from "../../../app/ui/SegmentedControl";
@@ -166,6 +167,7 @@ export function TaskPanel({
             onClick={onAdd}
             title="回到功能栏的录入框记一条待办"
           >
+            <Icon name="plus" size={13} />
             添加待办
           </Button>
         </div>
@@ -203,6 +205,7 @@ export function TaskPanel({
               onClearMarker={onClearMarker}
               hideDone={hideDone}
               onToggleHideDone={() => setHideDone((value) => !value)}
+              onAdd={onAdd}
             />
           )}
         </div>

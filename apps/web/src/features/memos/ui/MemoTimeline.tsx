@@ -7,6 +7,7 @@
 import type { LocalItem, MemoContent } from "../../../data/db";
 import { dayPartsInZone, groupMemosByDay, timeLabelInZone } from "../model";
 import { MemoItem } from "./MemoItem";
+import { Button } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
 
 export interface MemoTimelineProps {
@@ -20,6 +21,8 @@ export interface MemoTimelineProps {
   onDelete?: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
+  /** 空状态里的「切到录入框」出口（原型 `.empty` 有主按钮；面板已有这个回调） */
+  onAdd?: () => void;
   timeZone?: string;
 }
 
@@ -32,6 +35,7 @@ export function MemoTimeline({
   onDelete,
   onOpenConverted,
   onSelectTag,
+  onAdd,
   timeZone,
 }: MemoTimelineProps) {
   const days = groupMemosByDay(memos, timeZone);
@@ -47,6 +51,13 @@ export function MemoTimeline({
         <p className="memo-empty__hint">
           用功能栏的录入框随手记一条：记完按 Ctrl+Enter 就会出现在这里。
         </p>
+        {/* 空状态必须给出口（DESIGN.md §5.4-3） */}
+        {onAdd ? (
+          <Button size="sm" variant="secondary" onClick={onAdd}>
+            <Icon name="clock" size={13} />
+            切到录入框
+          </Button>
+        ) : null}
       </div>
     );
   }

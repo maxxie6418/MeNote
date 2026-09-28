@@ -115,14 +115,15 @@ describe("待办列表", () => {
     expect(container.textContent).not.toContain("随手一记"); // is_task = 0
   });
 
-  it("卡片显示截止与优先级；逾期未完成的标出来", () => {
+  it("行内元信息照原型：逾期写「已逾期 · 日期」、优先级只写字；状态由分组名与推进按钮承载", () => {
     const { container } = renderPanel();
 
-    expect(within(card(container, "t1")).getByText(/截止 2026-09-20/)).toBeTruthy();
-    expect(within(card(container, "t1")).getByText(/已逾期/)).toBeTruthy();
-    expect(within(card(container, "t1")).getByText(/优先级 高/)).toBeTruthy();
-    // 状态是文字而不是只有颜色
-    expect(within(card(container, "t1")).getByText("待办")).toBeTruthy();
+    // 原型 `.tkrow__meta`：状态在前、日期在后；优先级不带「优先级」三个字
+    expect(within(card(container, "t1")).getByText(/已逾期 · 2026-09-20/)).toBeTruthy();
+    expect(within(card(container, "t1")).getByText(/高/)).toBeTruthy();
+    // 状态不靠颜色：推进按钮的文字（开始 / 完成 / 重开）与分组名都在
+    expect(within(card(container, "t1")).getByRole("button", { name: "开始" })).toBeTruthy();
+    expect(within(card(container, "t1")).queryByText("待办")).toBeNull();
   });
 
   it("点「开始」把待办推进到进行中；已完成的卡片是「重开」", async () => {
@@ -221,13 +222,14 @@ describe("筛选（纯本地）", () => {
     expect(container.textContent).toContain("买牛奶");
   });
 
-  it("筛完没有结果时给空状态与出口", async () => {
+  it("筛完没有结果时给空状态与出口（原型空态带「切到录入框」主按钮）", async () => {
     const user = userEvent.setup();
     renderPanel({ tasks: [task("t1", { task_status: "todo" })] });
 
     await user.click(screen.getByRole("button", { name: /^已完成/ }));
-    expect(screen.getByText("没有符合条件的待办")).toBeTruthy();
+    expect(screen.getByText("没有待办")).toBeTruthy();
     expect(screen.getByText(/在录入框切到「待办」记一条/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /切到录入框/ })).toBeTruthy();
   });
 
   it("隐私门禁锁定时整屏占位：不显示卡片与状态，且「解锁」是活出口（M3-5）", async () => {

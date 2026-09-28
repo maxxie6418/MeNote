@@ -25,11 +25,16 @@ afterEach(cleanup);
 function fakeWorkspace(): { workspace: NotesWorkspace; calls: string[] } {
   const calls: string[] = [];
   const workspace = {
+    // 返回新 id（"打开这一篇"的提示动作要用它，2026-09-28）
     createNote: async () => {
       calls.push("createNote");
+      return "NEW_NOTE_ID";
     },
     publishMemo: async () => {
       calls.push("publishMemo");
+    },
+    open: async (id: string) => {
+      calls.push(`open:${id}`);
     },
   } as unknown as NotesWorkspace;
   return { workspace, calls };
@@ -71,7 +76,9 @@ describe("从独立页回笔记区（fnbarWiring）", () => {
     note.props.onPublishNote("标题", "正文");
     expect(note.goNotes).toHaveBeenCalledTimes(1);
     expect(note.calls).toEqual(["createNote"]);
-    expect(note.toast).toHaveBeenCalledWith("已新建笔记", "success");
+    // 提示在 `createNote` 拿到新 id 之后才推（要给"打开这一篇"用），所以让微任务先跑
+    await Promise.resolve();
+    expect(note.toast).toHaveBeenCalledWith("已新建笔记", "success", expect.anything());
 
     const memo = wiring();
     memo.props.onPublishMemo("记一笔", undefined as never);
@@ -82,6 +89,46 @@ describe("从独立页回笔记区（fnbarWiring）", () => {
     task.props.onPublishTask("要做的事", undefined as never);
     expect(task.goNotes).toHaveBeenCalledTimes(1);
     expect(task.calls).toEqual(["publishMemo"]);
+  });
+
+  it("快捷输入发布后要**看得到结果**：新建笔记先让分栏浏览让位（进编辑界面）", () => {
+    const onBrowseChange = vi.fn();
+    const { props } = wiring({ onBrowseChange });
+
+    props.onNewNote();
+    expect(onBrowseChange).toHaveBeenCalledWith(null);
+
+    onBrowseChange.mockClear();
+    props.onPublishNote("标题", "正文");
+    expect(onBrowseChange).toHaveBeenCalledWith(null);
+  });
+
+  it("轻提示带「快速跳转」动作：笔记=打开这一篇、Memo=去 Memo、待办=去待办", async () => {
+    const note = wiring();
+    note.props.onPublishNote("标题", "正文");
+    // createNote 是异步的，提示在拿到 id 之后才推
+    await Promise.resolve();
+    const noteAction = note.toast.mock.calls.at(-1)?.[2] as { label: string; onClick: () => void };
+    expect(noteAction.label).toBe("打开这一篇");
+    noteAction.onClick();
+    expect(note.calls).toContain("open:NEW_NOTE_ID");
+
+    const memo = wiring();
+    memo.props.onPublishMemo("记一笔", undefined as never);
+    const memoAction = memo.toast.mock.calls.at(-1)?.[2] as { label: string; onClick: () => void };
+    expect(memoAction.label).toBe("去 Memo");
+    const onBrowseChange = vi.fn();
+    const memo2 = wiring({ onBrowseChange });
+    memo2.props.onPublishMemo("记一笔", undefined as never);
+    (memo2.toast.mock.calls.at(-1)?.[2] as { onClick: () => void }).onClick();
+    expect(onBrowseChange).toHaveBeenCalledWith("memo");
+
+    const task = wiring({ onBrowseChange });
+    task.props.onPublishTask("要做的事", undefined as never);
+    const taskAction = task.toast.mock.calls.at(-1)?.[2] as { label: string; onClick: () => void };
+    expect(taskAction.label).toBe("去待办");
+    taskAction.onClick();
+    expect(onBrowseChange).toHaveBeenCalledWith("task");
   });
 
   it("切分栏浏览（Memo / 待办 / 首页）：先回笔记区再切", () => {

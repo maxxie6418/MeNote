@@ -14,6 +14,7 @@ import type { LocalItem } from "../../../data/db";
 import type { TaskStatus } from "@menote/mdcore";
 import { groupTasks } from "../model";
 import { TaskRow } from "./TaskRow";
+import { Button } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
 
 export interface TaskListViewProps {
@@ -28,6 +29,8 @@ export interface TaskListViewProps {
   /** 「隐藏已完成」的当前状态（与筛选条开关同一份） */
   hideDone: boolean;
   onToggleHideDone: () => void;
+  /** 空状态里的「切到录入框」出口（原型空态有主按钮；面板已有这个回调） */
+  onAdd?: () => void;
 }
 
 export function TaskListView({
@@ -40,6 +43,7 @@ export function TaskListView({
   onClearMarker,
   hideDone,
   onToggleHideDone,
+  onAdd,
 }: TaskListViewProps) {
   const groups = groupTasks(tasks).filter((group) => group.tasks.length > 0);
 
@@ -49,10 +53,16 @@ export function TaskListView({
         <span className="empty-ico">
           <Icon name="check-square" size={20} />
         </span>
-        <p className="memo-empty__title">没有符合条件的待办</p>
+        <p className="memo-empty__title">没有待办</p>
         <p className="memo-empty__hint">
           在录入框切到「待办」记一条，或者放宽上面的筛选条件。
         </p>
+        {onAdd ? (
+          <Button size="sm" variant="secondary" onClick={onAdd}>
+            <Icon name="plus" size={13} />
+            切到录入框
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -70,7 +80,8 @@ export function TaskListView({
                 aria-hidden="true"
               />
               {group.label}
-              <span className="tasklist__count">{group.tasks.length}</span>
+              {/* 列表分组计数：**无底微标 + 带单位**（原型 `.tkgrp__n`；看板列头那套是胶囊、不带单位） */}
+              <span className="tasklist__n">{group.tasks.length} 条</span>
               {/* 分隔线（原型 `.tkgrp__rule`）：把分组头与右侧的收起按钮连成一条 */}
               <span className="tasklist__rule" aria-hidden="true" />
               {group.status === "done" ? (

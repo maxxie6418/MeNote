@@ -501,6 +501,11 @@ export default function App() {
             )}
             gate={privacy.gate}
             onNewNote={() => {
+              /*
+                首页的「新建笔记」也要**直接进编辑界面**（2026-09-28 用户反馈）：
+                此前只建+选中，分栏浏览仍停在首页，看起来像"点了没反应"。
+              */
+              setBrowse(null);
               void workspace.createNote();
             }}
             onFocusComposer={focusComposer}

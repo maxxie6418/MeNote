@@ -16,6 +16,7 @@ import type { LocalFolder } from "../data/db";
 import { isInVault } from "../features/privacy/vault";
 import type { VaultNodeProps } from "./fnbar/VaultNode";
 import type { FnBarProps } from "./fnbar/FnBar";
+import type { ToastAction } from "./ui/Toast";
 import type { NotesView } from "../features/notes/views";
 
 export interface NavPanelsInput {
@@ -59,9 +60,10 @@ export interface FnBarWiringInput {
   /** 去笔记区干活（从设置/回收站这类独立页回来）——所有"改笔记区状态"的动作都先走它 */
   goNotes: () => void;
   onViewChange: (view: NotesView) => void;
-  onBrowseChange: (next: FnBarProps["browseView"]) => void;
+  /** `null` = 回到笔记双栏（分栏浏览的首页 / Memo / 待办让位） */
+  onBrowseChange: (next: FnBarProps["browseView"] | null) => void;
   onComposerModeChange: FnBarProps["onComposerModeChange"];
-  toast: (message: string, tone: "success" | "warn" | "error") => void;
+  toast: (message: string, tone: "success" | "warn" | "error", action?: ToastAction) => void;
 }
 
 /**
@@ -81,35 +83,58 @@ export function fnbarWiring(input: FnBarWiringInput): FnBarProps {
   const noteTargetLabel = noteFolderId
     ? (workspace.folders.find((folder) => folder.id === noteFolderId)?.name ?? "根目录")
     : "根目录";
+
+  /**
+   * 切分栏浏览（首页 / Memo / 待办）：`null` = 回到笔记双栏。
+   * 三个发布动作都要先走它——**快捷输入发布后要能看到结果**（新建笔记进编辑界面、
+   * Memo 去 Memo、待办去待办），不能让人停在原来的屏上猜"刚才那条去哪了"。
+   */
+  const showBrowse = (next: FnBarProps["browseView"] | null): void => {
+    goNotes();
+    input.onBrowseChange(next);
+  };
+
   return {
     onNewNote: () => {
-      goNotes();
+      // 新建后**直接进它的编辑界面**：先让分栏浏览让位，否则停在首页/待办上根本看不到编辑器
+      showBrowse(null);
       void workspace.createNote();
     },
     onPublishNote: (title, body) => {
-      goNotes();
-      void workspace.createNote({ title, body });
-      toast("已新建笔记", "success");
+      showBrowse(null);
+      // 轻提示带"打开这一篇"（便利入口，不是必须动作——内容已经存好了，见 `ui/Toast.tsx` 的界定）
+      void workspace.createNote({ title, body }).then((id) => {
+        toast("已新建笔记", "success", {
+          label: "打开这一篇",
+          onClick: () => {
+            showBrowse(null);
+            void workspace.open(id);
+          },
+        });
+      });
     },
     onPublishMemo: (text, options) => {
       goNotes();
       // 乐观发布：条目先落本地并标"待上传"，由 outbox 后台上传
       void workspace.publishMemo(text, options);
-      toast("已记录", "success");
+      toast("已记录", "success", {
+        label: "去 Memo",
+        onClick: () => showBrowse("memo"),
+      });
     },
     onPublishTask: (text, options) => {
       goNotes();
       void workspace.publishMemo(text, { asTask: true, ...options });
-      toast("已加入待办", "success");
+      toast("已加入待办", "success", {
+        label: "去待办",
+        onClick: () => showBrowse("task"),
+      });
     },
     view: input.view,
     onViewChange: input.onViewChange,
     tags: input.tags,
     browseView: input.browseView,
-    onBrowseChange: (next) => {
-      goNotes();
-      input.onBrowseChange(next);
-    },
+    onBrowseChange: (next) => showBrowse(next ?? null),
     showHome: input.showHome,
     composerMode: input.composerMode,
     onComposerModeChange: input.onComposerModeChange,

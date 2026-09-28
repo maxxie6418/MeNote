@@ -61,7 +61,7 @@ const VAULT_CHILD = folder("v2", "私事", "v1", 1, { in_enc_space: 1 });
 
 /** `open` 收到的新 id 就是新建条目的 id（用 ref 拿，effect 里抓不到快照值） */
 interface CreationApi {
-  createNote: (options?: { title?: string; body?: string }) => Promise<void>;
+  createNote: (options?: { title?: string; body?: string }) => Promise<string>;
   opened: { current: string | null };
 }
 

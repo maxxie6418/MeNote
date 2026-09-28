@@ -1529,6 +1529,16 @@ button {
   font-weight: 650;
 }
 
+/* 正文里的列表缩进（原型 `.memo__body ul` / `li+li`）：浏览器默认 40px 太深 */
+.memo__body ul {
+  padding-left: 1.2em;
+  list-style: disc;
+}
+
+.memo__body li + li {
+  margin-top: 2px;
+}
+
 .memo__menu {
   /* 原型 `.memo__more`：默认淡出，悬停或键盘聚焦时出现 */
   margin-left: auto;
@@ -1707,6 +1717,38 @@ button {
   color: var(--muted);
   font-size: var(--fs-micro);
   margin-right: var(--sp-1);
+}
+
+/*
+  筛选条里的三个分段控件照原型（`.tkhead__bar .seg`）：**去掉盒式外壳**，按钮自身变成描边胶囊。
+  未选＝白底描边 / 选中＝主色浅底 + 主色字；宽度也不再 `flex: 1` 撑满（原型 `.seg{flex:none}`）——
+  此前三个灰底盒子把筛选条整条撑开，是"待办最不像原型"的一处。
+  **只作用于 `.taskfilter` 之内**：页头的视图切换（列表 / 看板）与录入框的模式档位不受影响。
+*/
+.taskfilter .segmented {
+  flex: none;
+  gap: var(--sp-1);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.taskfilter .segmented__item {
+  height: 21px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--text-2);
+  font-size: var(--fs-micro);
+}
+
+.taskfilter .segmented__item[aria-pressed="true"] {
+  background: var(--primary-soft);
+  border-color: var(--primary-line);
+  color: var(--primary-ink);
+  font-weight: 600;
 }
 
 /* 「隐藏已完成」开关（与已完成分组头的收起按钮共用同一份状态） */
@@ -1923,6 +1965,18 @@ button {
 }
 
 /*
+  列表分组头的计数（原型 `.tkgrp__n`）：**无底微标** + 文案带"条"。
+  看板列头用的是另一套 `.tasklist__count`（有底胶囊、不带单位，原型 `.tkkan__n`）——
+  两者共用过一个类名，v0.5.5 起分开（差异清单 §八 那条）。
+*/
+.tasklist__n {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+/*
   清单行（原型 `.tkrows` / `.tkrow` / `.tkcheck`）——v0.4.50 把清单从"卡片"改成"横向一行"。
   看板仍然用卡片（原型也是 `.tkcard`），两种形态各有其位。
 */
@@ -1953,9 +2007,9 @@ button {
   background: var(--panel-2);
 }
 
-/* 逾期：左侧一条红边（原型 `.tkrow--late`） */
+/* 逾期：左侧一条红刻线（原型 `.tkrow--late`，3px） */
 .taskrow[data-overdue="true"] {
-  box-shadow: inset 2.5px 0 0 var(--red);
+  box-shadow: inset 3px 0 0 var(--red);
 }
 
 /*
@@ -2058,8 +2112,21 @@ button {
   box-shadow: var(--shadow-1);
 }
 
-/* 逾期：左侧一条红边 + 边框转红（原型 `.tkcard--late`；`data-status` 由组件给出） */
-.taskcard[data-status="todo"][data-overdue="true"]::before {
+/* 已完成：整行浅底（原型 `.tkrow--done`；看板侧本来就有同款） */
+.taskrow[data-status="done"] {
+  background: var(--bg-soft);
+}
+
+/*
+  逾期：左侧一条红刻线 + 边框转红（原型 `.tkcard--late`）。
+  【2026-09-28 修复】此前多写了 `[data-status="todo"]`——于是**「进行中」列的逾期卡没有红边**
+  （原型只看"逾期"这一个条件，与列无关）；同时漏了原型的 `border-color: var(--red-line)`。
+*/
+.taskcard[data-overdue="true"] {
+  border-color: var(--red-line);
+}
+
+.taskcard[data-overdue="true"]::before {
   content: "";
   position: absolute;
   left: -1px;
@@ -2697,7 +2764,11 @@ button {
   gap: var(--sp-2);
 }
 
+/* 轻提示：文字 +（可选）一个"快速跳转"动作（2026-09-28；界定见 `app/ui/Toast.tsx`） */
 .toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius);
   background: var(--panel);
@@ -2705,6 +2776,26 @@ button {
   box-shadow: var(--shadow-2);
   font-size: var(--fs-small);
   max-width: 320px;
+}
+
+.toast__text {
+  min-width: 0;
+}
+
+.toast__action {
+  flex: none;
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--primary-line);
+  border-radius: var(--radius-pill);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toast__action:hover {
+  border-color: var(--primary);
 }
 
 .toast--warn {
@@ -3389,10 +3480,12 @@ button.chip--tag:hover {
    而**后出现的这份会赢**，于是前部那批「按原型对齐」的取值从未生效（详见前部说明与
    `test/css-cascade.test.ts`）。取值以后只在前部那一处给；本块只保留前部没有的规则。
    ============================================================ */
+/* 页标题（原型 `.pane-title`：`--fs-title` / 650；Memo 与待办两屏共用这一个类） */
 .memopanel__title {
   margin: 0;
-  font-size: var(--fs-body-lg);
-  font-weight: 600;
+  font-size: var(--fs-title);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .memopanel__head .btn {
@@ -3415,11 +3508,8 @@ button.chip--tag:hover {
   min-width: 0;
 }
 
-.timeline__day {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
+/* `.timeline__day` 的 gap 已删（原型 `.tl__day` 没有 gap；条目间距由 `.timeline__content` 的
+   上下内边距给）——2026-09-28 依原型取值清理。 */
 
 .memo__head {
   display: flex;

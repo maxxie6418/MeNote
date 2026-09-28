@@ -11,6 +11,7 @@ import type { LocalItem, MemoContent } from "../../../data/db";
 import { isMemoVisible, type PrivacyGate } from "@menote/shared";
 import { LockedPlaceholder } from "../../../app/ui/LockedPlaceholder";
 import { Button } from "../../../app/ui/Controls";
+import { InfoHint } from "../../../app/ui/InfoHint";
 import { Modal } from "../../../app/ui/Modal";
 import { Chip } from "../../../app/ui/Chip";
 import { Icon } from "../../../app/ui/Icon";
@@ -103,9 +104,13 @@ export function MemoPanel({
       <header className="memopanel__head">
         <h2 className="memopanel__title">Memo</h2>
         <span className="listpane__count">{visible.length} 条</span>
+        {/* 页头说明照原型收进 InfoHint（DESIGN.md §5.4-1：辅助文案不平铺） */}
+        <InfoHint label="Memo 说明">
+          按天分组倒序；置顶的 Memo 排在最前。清单 Memo 也会出现在这里，带「清单」标记。
+        </InfoHint>
         <Button size="sm" variant="secondary" onClick={onAdd} title="回到功能栏的录入框记一条">
           <Icon name="plus" size={13} />
-          添加
+          添加 Memo
         </Button>
       </header>
 
@@ -151,6 +156,7 @@ export function MemoPanel({
           onDelete={onDelete ? (itemId) => setPendingDelete(itemId) : undefined}
           onOpenConverted={onOpenConverted}
           onSelectTag={(next) => setTag(next)}
+          onAdd={onAdd}
           timeZone={timeZone}
         />
       </div>

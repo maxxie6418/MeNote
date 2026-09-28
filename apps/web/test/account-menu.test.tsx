@@ -21,6 +21,8 @@ function renderMenu(overrides: Partial<Parameters<typeof AccountQuickMenu>[0]> =
   const onLogout = vi.fn();
   const onThemeMode = vi.fn();
   const onFocusSearch = vi.fn();
+  const onLock = vi.fn();
+  const onOpenTrash = vi.fn();
   const { container } = render(
     <AccountQuickMenu
       user={{ username: "maxxie", role: "owner" }}
@@ -28,6 +30,8 @@ function renderMenu(overrides: Partial<Parameters<typeof AccountQuickMenu>[0]> =
       themeMode="light"
       onThemeMode={onThemeMode}
       onFocusSearch={onFocusSearch}
+      onLock={onLock}
+      onOpenTrash={onOpenTrash}
       onOpenSettings={onOpenSettings}
       onLogout={onLogout}
       {...overrides}
@@ -36,7 +40,7 @@ function renderMenu(overrides: Partial<Parameters<typeof AccountQuickMenu>[0]> =
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）：账号菜单是"图标 + 文字"混排，值得钉住
   assertLabelledControls(container, { buttons: 1 });
   assertSinglePrimaryAction(container);
-  return { onOpenSettings, onLogout, onThemeMode, onFocusSearch };
+  return { onOpenSettings, onLogout, onThemeMode, onFocusSearch, onLock, onOpenTrash };
 }
 
 async function openMenu() {
@@ -57,7 +61,7 @@ describe("账户快捷菜单", () => {
     expect(within(menu).getByRole("menuitem", { name: "退出登录" })).toBeTruthy();
   });
 
-  it("默认只显示主题切换与立即锁定；搜索不在菜单里", async () => {
+  it("默认只显示主题切换与立即锁定；搜索与回收站不在菜单里（默认关）", async () => {
     renderMenu();
     const { menu } = await openMenu();
 
@@ -93,13 +97,32 @@ describe("账户快捷菜单", () => {
     expect(screen.getByRole("menu", { name: "账户与设置" })).toBeTruthy();
   });
 
-  it("未实现的功能禁用并说明里程碑（立即锁定 M3）", async () => {
-    renderMenu();
-    const { menu } = await openMenu();
+  it("已交付的两项接线可用：立即锁定走回调、回收站去回收站页（2026-09-28 修复死件）", async () => {
+    const { onLock, onOpenTrash } = renderMenu({
+      settings: { ...DEFAULT_USER_SETTINGS, quick_menu: ["theme", "lock", "trash"] },
+    });
+    const { user, menu } = await openMenu();
 
     const lock = within(menu).getByRole("menuitem", { name: "立即锁定" }) as HTMLButtonElement;
-    expect(lock.disabled).toBe(true);
-    expect(lock.title).toContain("M3");
+    expect(lock.disabled).toBe(false);
+    await user.click(lock);
+    expect(onLock).toHaveBeenCalledTimes(1);
+
+    // 菜单在选中后收起，重新打开再点回收站
+    const { user: user2, menu: menu2 } = await openMenu();
+    await user2.click(within(menu2).getByRole("menuitem", { name: "回收站" }));
+    expect(onOpenTrash).toHaveBeenCalledTimes(1);
+  });
+
+  it("真正未交付的只剩「立即备份」：禁用并说明里程碑", async () => {
+    renderMenu({
+      settings: { ...DEFAULT_USER_SETTINGS, quick_menu: ["theme", "backup"] },
+    });
+    const { menu } = await openMenu();
+
+    const backup = within(menu).getByRole("menuitem", { name: "立即备份" }) as HTMLButtonElement;
+    expect(backup.disabled).toBe(true);
+    expect(backup.title).toContain("M5");
   });
 
   it("「设置」与「退出登录」都走回调", async () => {

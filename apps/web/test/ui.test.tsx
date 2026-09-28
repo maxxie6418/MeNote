@@ -67,6 +67,8 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
         themeMode="light"
         onThemeMode={vi.fn()}
         onFocusSearch={vi.fn()}
+        onLock={vi.fn()}
+        onOpenTrash={vi.fn()}
         onOpenSettings={vi.fn()}
         onLogout={vi.fn()}
       />,
@@ -109,6 +111,8 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
         themeMode="light"
         onThemeMode={vi.fn()}
         onFocusSearch={vi.fn()}
+        onLock={vi.fn()}
+        onOpenTrash={vi.fn()}
         onOpenSettings={onOpenSettings}
         onLogout={onLogout}
       />,

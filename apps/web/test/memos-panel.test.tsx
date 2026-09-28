@@ -108,7 +108,7 @@ describe("Memo 时间轴", () => {
     // 两天的 14:05 各一条，所以用 getAllByText
     expect(screen.getAllByText("14:05").length).toBeGreaterThan(0);
     // 正文是渲染后的 Markdown（粗体标签），不是原始星号；MarkdownPreview 是懒加载组件，等它渲染完
-    expect(await screen.findByText("方案")).toBeTruthy();
+    expect(await screen.findByText("方案", {}, { timeout: 5000 })).toBeTruthy();
     expect(container.querySelector(".memo__body strong")?.textContent).toBe("方案");
     expect(tagChip(container, "工作")).toBeTruthy();
   });

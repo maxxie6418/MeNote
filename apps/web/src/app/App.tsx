@@ -29,6 +29,7 @@ import { IconSprite } from "./ui/Icon";
 import { InsecureContextBanner } from "./ui/InsecureContextBanner";
 import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnvironment";
 import { ToastHost, pushToast } from "./ui/Toast";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { HomeView } from "./workarea/HomeView";
 import { NotesSlot } from "./NotesSlot";
@@ -131,6 +132,8 @@ export default function App() {
     config: userSettings.settings.privacy,
   });
   const [unlockOpen, setUnlockOpen] = useState(false);
+  /** 登出的二次确认（DESIGN.md §6.5）；菜单点了先弹确认，确认后才真退 */
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const requestUnlock = useCallback(() => setUnlockOpen(true), []);
 
   /** `onLoaded` 里要调 workspace 的方法，但 workspace 在下面才建：用 ref 顶一下 */
@@ -401,10 +404,12 @@ export default function App() {
             }}
             sync={sync}
             privacy={<PrivacySlot privacy={privacy} onRequestUnlock={requestUnlock} />}
+            /* 快捷菜单两个"死件"接线（2026-09-28）：M3 的立即锁定、M4 的回收站都早已交付 */
+            onLock={privacy.lockAll}
+            onOpenTrash={() => navigate({ name: "trash" })}
             onOpenSettings={() => navigate({ name: "settings", page: "general" })}
-            onLogout={() => {
-              void auth.logout().then(() => navigate({ name: "login" }));
-            }}
+            /* 登出是破坏性操作（DESIGN.md §6.5）：先确认，别一点就把会话清掉 */
+            onLogout={() => setConfirmLogout(true)}
           />
         }
         fnbar={
@@ -623,6 +628,21 @@ export default function App() {
           navigate({ name: "settings", page: "privacy" });
         }}
       />
+      {/* 登出的二次确认（DESIGN.md §6.5：破坏性操作必须确认并写明后果） */}
+      <ConfirmDialog
+        open={confirmLogout}
+        title="退出登录"
+        desc="本机会话会被清除，需要重新输入登录密码。"
+        confirmLabel="确认退出"
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={() => {
+          setConfirmLogout(false);
+          void auth.logout().then(() => navigate({ name: "login" }));
+        }}
+      >
+        {/* 可见的后果说明：本机缓存的明文内容不会被清掉（架构 §3.2 的既定边界），别让人误以为"退登就安全了" */}
+        <p>本机已缓存的内容不会被删除；隐私锁的解锁状态会一并失效。</p>
+      </ConfirmDialog>
       <ToastHost />
     </>
   );

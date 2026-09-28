@@ -42,7 +42,8 @@ export const QUICK_MENU_FEATURES: ReadonlyArray<{
   { id: "theme", label: "主题切换", defaultOn: true, pendingStep: null },
   { id: "lock", label: "立即锁定", defaultOn: true, pendingStep: null },
   { id: "search", label: "搜索", defaultOn: false, pendingStep: null },
-  { id: "trash", label: "回收站", defaultOn: false, pendingStep: "M4" },
+  // 2026-09-28：回收站（M4）已交付，接线完成 —— 这里曾写着 "M4"，菜单里也一直禁用
+  { id: "trash", label: "回收站", defaultOn: false, pendingStep: null },
   { id: "backup", label: "立即备份", defaultOn: false, pendingStep: "M5" },
 ];
 

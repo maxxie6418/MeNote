@@ -32,6 +32,10 @@ export interface TopbarProps {
   onThemeMode: (mode: ThemeMode) => void;
   /** 菜单里的「搜索」项：把焦点送到搜索框 */
   onFocusSearch: () => void;
+  /** 菜单里的「立即锁定」项（M3 已交付）：由 `App` 接到隐私锁组装层 */
+  onLock: () => void;
+  /** 菜单里的「回收站」项（M4 已交付）：由 `App` 接路由 */
+  onOpenTrash: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
   /**
@@ -51,6 +55,8 @@ export function Topbar({
   themeMode,
   onThemeMode,
   onFocusSearch,
+  onLock,
+  onOpenTrash,
   onOpenSettings,
   onLogout,
   privacy,
@@ -87,6 +93,8 @@ export function Topbar({
           themeMode={themeMode}
           onThemeMode={onThemeMode}
           onFocusSearch={onFocusSearch}
+          onLock={onLock}
+          onOpenTrash={onOpenTrash}
           onOpenSettings={onOpenSettings}
           onLogout={onLogout}
         />

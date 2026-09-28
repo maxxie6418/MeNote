@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { PRIVACY_MINUTES_OPTIONS, type PrivacySettings } from "@menote/shared";
 import { Button } from "../../../app/ui/Controls";
+import { ConfirmDialog } from "../../../app/ui/ConfirmDialog";
 import { PRIVACY_TIERS, TIER_LABELS, type PrivacyTier } from "../../privacy/model";
 
 /** 组装层里这块页面用到的部分（其余动作与本页无关） */
@@ -100,6 +101,9 @@ export function PrivacySettingsPage({ lock, settings, onPatchSettings }: Privacy
   const [resetRepeat, setResetRepeat] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [disableError, setDisableError] = useState<string | null>(null);
+  /** 两处破坏性操作的二次确认（关闭隐私锁 / 重置隐私密码；DESIGN.md §6.5） */
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   function patchPrivacy(partial: Partial<PrivacySettings>): void {
@@ -208,7 +212,8 @@ export function PrivacySettingsPage({ lock, settings, onPatchSettings }: Privacy
             ) : null}
           </div>
           {lock.enabled ? (
-            <Button size="sm" variant="danger" disabled={lock.busy} onClick={() => void submitDisable()}>
+            /* 关闭隐私锁是破坏性操作（DESIGN.md §6.5）：先确认，并写明"隐私内容会变回可见" */
+            <Button size="sm" variant="danger" disabled={lock.busy} onClick={() => setConfirmDisable(true)}>
               关闭隐私锁
             </Button>
           ) : enableOpen ? null : (
@@ -398,7 +403,8 @@ export function PrivacySettingsPage({ lock, settings, onPatchSettings }: Privacy
             <div className="setrow__label">
               <span className="setrow__desc">重置需要实例配置好备份凭据；没配好会明确报错</span>
             </div>
-            <Button size="sm" disabled={lock.busy} onClick={() => void submitReset()}>
+            {/* 重置隐私密码是破坏性操作（DESIGN.md §6.5）：先确认，并明说"旧备份解不开" */}
+            <Button size="sm" disabled={lock.busy} onClick={() => setConfirmReset(true)}>
               重置隐私密码
             </Button>
           </div>
@@ -416,6 +422,35 @@ export function PrivacySettingsPage({ lock, settings, onPatchSettings }: Privacy
           {note}
         </p>
       ) : null}
+
+      {/* 两处破坏性操作的确认（文案按 DESIGN.md §6.5：影响范围 + 能否恢复） */}
+      <ConfirmDialog
+        open={confirmDisable}
+        title="关闭隐私锁"
+        desc="关闭后，加密空间与单篇加密的内容会重新可见，单篇加密的标记也会取消。"
+        confirmLabel="确认关闭"
+        onClose={() => setConfirmDisable(false)}
+        onConfirm={() => {
+          setConfirmDisable(false);
+          void submitDisable();
+        }}
+      >
+        <p>已经加密的内容不会丢失，但不再受隐私锁保护；重新启用需要再设一次隐私密码。</p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmReset}
+        title="重置隐私密码"
+        desc="用一个新密码替换现在的隐私密码，旧密码立即失效。"
+        confirmLabel="确认重置"
+        onClose={() => setConfirmReset(false)}
+        onConfirm={() => {
+          setConfirmReset(false);
+          void submitReset();
+        }}
+      >
+        <p><strong>已经用旧密码加密的备份将解不开</strong>；本机内容不受影响。</p>
+      </ConfirmDialog>
     </>
   );
 }

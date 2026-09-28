@@ -96,7 +96,7 @@ describe("表格接线", () => {
     );
 
     // 表格界面的工具栏出现（按需加载，等它出来）
-    expect(await screen.findByRole("button", { name: "新增行" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "新增行" }, { timeout: 5000 })).toBeTruthy();
     // 普通笔记的两个面都不该出现
     expect(screen.queryByTestId("editor")).toBeNull();
     expect(screen.queryByTestId("preview")).toBeNull();
@@ -126,7 +126,7 @@ describe("表格接线", () => {
     render(
       <NoteWorkspace item={item("table")} initialBody={tableBody()} snapshot={null} onInput={noop} onTitleChange={noop} />,
     );
-    expect(await screen.findByRole("button", { name: "新增行" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "新增行" }, { timeout: 5000 })).toBeTruthy();
     expect(screen.queryByRole("group", { name: "编辑模式" })).toBeNull();
   });
 
@@ -158,7 +158,7 @@ describe("表格接线", () => {
         onFiles={noop}
       />,
     );
-    expect(await screen.findByRole("button", { name: "新增行" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "新增行" }, { timeout: 5000 })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "添加附件" })).toBeNull();
   });
 

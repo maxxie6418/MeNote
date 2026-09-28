@@ -118,6 +118,8 @@ describe("关闭隐私锁", () => {
 
     expect(screen.getByText("已启用（当前已锁定）")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "关闭隐私锁" }));
+    // 破坏性操作要二次确认（DESIGN.md §6.5）：入口之后还有一步
+    fireEvent.click(screen.getByRole("button", { name: "确认关闭" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("还有隐私内容");
@@ -128,6 +130,8 @@ describe("关闭隐私锁", () => {
     expect(screen.getByText("已启用（当前已解锁）")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "关闭隐私锁" }));
+    // 破坏性操作要二次确认（DESIGN.md §6.5）：入口之后还有一步
+    fireEvent.click(screen.getByRole("button", { name: "确认关闭" }));
     expect(await screen.findByRole("status")).toBeTruthy();
   });
 });
@@ -225,6 +229,8 @@ describe("改密与重置", () => {
     typeInto("重置为新的隐私密码", "重置后的");
     typeInto("再输入一次新密码（重置）", "重置后的");
     fireEvent.click(screen.getByRole("button", { name: "重置隐私密码" }));
+    // 破坏性操作要二次确认（DESIGN.md §6.5）：入口之后还有一步
+    fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
 
     const status = await screen.findByRole("status");
     expect(status.textContent).toContain("内容密钥没有变");
@@ -240,6 +246,8 @@ describe("改密与重置", () => {
     typeInto("重置为新的隐私密码", "重置后的");
     typeInto("再输入一次新密码（重置）", "重置后的");
     fireEvent.click(screen.getByRole("button", { name: "重置隐私密码" }));
+    // 破坏性操作要二次确认（DESIGN.md §6.5）：入口之后还有一步
+    fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("BACKUP_CRED_KEY");

@@ -23,6 +23,8 @@ export interface MemoTimelineProps {
   onSelectTag: (tag: string) => void;
   /** 空状态里的「切到录入框」出口（原型 `.empty` 有主按钮；面板已有这个回调） */
   onAdd?: () => void;
+  /** 刚被「随机漫步 / 那年今日 / 图册」定位到的那一条：加一处可见的着落点（原型 `.is-walked`） */
+  walkedId?: string | null;
   timeZone?: string;
 }
 
@@ -36,6 +38,7 @@ export function MemoTimeline({
   onOpenConverted,
   onSelectTag,
   onAdd,
+  walkedId = null,
   timeZone,
 }: MemoTimelineProps) {
   const days = groupMemosByDay(memos, timeZone);
@@ -83,7 +86,18 @@ export function MemoTimeline({
               <span className="timeline__node" aria-hidden="true" />
             </div>
             {day.memos.map((memo) => (
-              <article key={memo.id} className="timeline__row timeline__item">
+              <article
+                key={memo.id}
+                /*
+                  `is-walked`：被「随机漫步 / 那年今日 / 图册」定位到时给一处可见的着落点
+                  （原型同名类：整块主色浅底 + 圆点转主色）。2 秒后由面板摘掉。
+                */
+                className={
+                  memo.id === walkedId
+                    ? "timeline__row timeline__item is-walked"
+                    : "timeline__row timeline__item"
+                }
+              >
                 <div className="timeline__gutter">
                   <time className="timeline__time" dateTime={new Date(memo.memo_at ?? 0).toISOString()}>
                     {timeLabelInZone(memo.memo_at ?? 0, timeZone)}

@@ -388,7 +388,6 @@ export default function App() {
               sync,
               searchQuery: search.query,
               onSearchChange: search.setQuery,
-              // 搜索框在设置/回收站页上仍然可见：一开始输入就回笔记区，否则结果会被那两个分支挡住
               onStartSearch: goNotes,
               userSettings: userSettings.settings,
               themeMode: theme.mode,
@@ -396,11 +395,10 @@ export default function App() {
               onFocusSearch: () => {
                 document.getElementById("search-input")?.focus();
               },
-              // 快捷菜单两个"死件"接线（2026-09-28）：M3 的立即锁定、M4 的回收站都早已交付
+              // 快捷菜单两个"死件"接线（M3 的立即锁定、M4 的回收站都早已交付）
               onLock: privacy.lockAll,
               onOpenTrash: () => navigate({ name: "trash" }),
               onOpenSettings: () => navigate({ name: "settings", page: "general" }),
-              // 登出是破坏性操作（DESIGN.md §6.5）：先确认，别一点就把会话清掉
               onLogout: () => setConfirmLogout(true),
               privacy: <PrivacySlot privacy={privacy} onRequestUnlock={requestUnlock} />,
             })}
@@ -566,13 +564,10 @@ export default function App() {
             contents={workspace.memoContents}
             timeZone={userSettings.settings.timezone}
             gate={privacy.gate}
+            sidebar={userSettings.settings.memo_view.sidebar}
             onUnlock={requestUnlock}
-            onSave={(id, text) => {
-              void workspace.updateMemo(id, text);
-            }}
-            onTogglePinned={(id) => {
-              void workspace.togglePinned(id);
-            }}
+            onSave={(id, text) => void workspace.updateMemo(id, text)}
+            onTogglePinned={(id) => void workspace.togglePinned(id)}
             onConvert={(id) => {
               void convertMemoToNote(id).then(async (noteId) => {
                 // Q10：新笔记直接打开 —— 回到笔记视图并打开它

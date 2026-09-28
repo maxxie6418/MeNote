@@ -1624,6 +1624,557 @@ button {
   color: var(--muted);
 }
 
+/* —— Memo：页内二级侧栏与它的模块（B3 批；原型 `.subbar` / `.subblk` / `.stat3` / `.heat` / `.otd`）—— */
+
+/*
+  页头之下的两栏：**侧栏（`--subbar-w` 232px）+ 内容**。
+  侧栏自己滚；内容区是那一层唯一的滚动容器（DESIGN.md §2.7）。
+*/
+.memopanel__main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.memopanel__side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--subbar-w);
+  padding: var(--sp-4) var(--sp-3) 0;
+  border-right: 1px solid var(--line);
+  /* overflow-x:hidden 是兜底：overflow-y:auto 会把横向也算成 auto，内部溢出 1px 就多一条横滑条 */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* 把视图切换与「添加 Memo」推到页头右端 */
+.memopanel__spacer {
+  flex: 1;
+}
+
+/* 侧栏里的模块：块与块之间一条分隔线（原型 `.subblk + .subblk`） */
+.subblk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-4);
+}
+
+.subblk + .subblk {
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.subblk__t {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-1);
+  padding: 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* 标签筛选：纵向列表（原型 `.sublist` / `.subitem`），选中态带左侧主色刻线 */
+.sublist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subitem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  text-align: left;
+  transition: 0.16s;
+}
+
+.subitem:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.subitem[aria-pressed="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+/* 选中标记：左侧一道主色刻线，扫一眼就知道正看的是哪一批（不靠底色单独表意） */
+.subitem[aria-pressed="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--sp-2);
+  bottom: var(--sp-2);
+  width: 2.5px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+}
+
+.subitem .n {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.subitem[aria-pressed="true"] .n {
+  color: var(--primary-ink);
+}
+
+/* 侧栏里的日期分段控件铺满一栏（原型 `.subbar .seg`） */
+.memopanel__side .segmented {
+  width: 100%;
+}
+
+.memopanel__side .segmented__item {
+  flex: 1;
+  padding: 0 var(--sp-1);
+}
+
+/* 概述：三个数字并排（原型 `.stat3`），格间 1px 竖线，整体一个圆角容器 */
+.stat3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.stat3__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-1);
+}
+
+.stat3__cell + .stat3__cell {
+  border-left: 1px solid var(--line);
+}
+
+.stat3__n {
+  color: var(--text);
+  font-size: var(--fs-title);
+  font-weight: 650;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat3__l {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 热力图：12 周 × 7 天；格子随侧栏宽度自适应（1fr + aspect-ratio），不会撑出横滑条 */
+.heat__sum {
+  margin: 0 0 var(--sp-2);
+  padding: 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.heat {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  grid-template-columns: repeat(12, 1fr);
+  gap: 2px;
+  aspect-ratio: 12 / 7;
+  padding: 0 var(--sp-2);
+}
+
+/* 五档梯度：中间三档用 color-mix 从主色派生，不引裸色值 */
+.hm {
+  border-radius: 2px;
+  background: var(--panel-3);
+}
+
+.hm--1 {
+  background: color-mix(in srgb, var(--primary) 22%, var(--bg));
+}
+
+.hm--2 {
+  background: color-mix(in srgb, var(--primary) 45%, var(--bg));
+}
+
+.hm--3 {
+  background: color-mix(in srgb, var(--primary) 70%, var(--bg));
+}
+
+.hm--4 {
+  background: var(--primary);
+}
+
+.heat__lg {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+  padding: 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+.heat__lg .hm {
+  flex: none;
+  width: 10px;
+  height: 10px;
+}
+
+/* 侧栏里的动作行（随机漫步）与卡片（那年今日） */
+.subact {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  transition: 0.16s;
+}
+
+.subact:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.subact__l {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.subact__go {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.subact:hover .subact__go {
+  color: var(--primary-ink);
+}
+
+/* 随机漫步：不带小标题，按钮本体就是入口，所以给它按钮的样子而不是导航行 */
+.subact--solo {
+  padding: var(--sp-3) var(--sp-2);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.subact--solo:hover {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+
+.subact--solo .subact__go {
+  color: var(--primary-ink);
+}
+
+.otd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  width: 100%;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+  transition: 0.16s;
+}
+
+.otd:hover {
+  border-color: var(--primary-line);
+  background: var(--primary-soft);
+}
+
+.otd__hd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.otd__d {
+  color: var(--primary-ink);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.otd__n {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.otd__x {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* 「随机漫步 / 那年今日 / 图册」跳到的那一条：给一处可见的着落点（原型 `.is-walked`） */
+.timeline__item.is-walked .memo {
+  background: var(--primary-soft);
+}
+
+.timeline__item.is-walked .timeline__dot {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+/* —— Memo 瀑布流图册（原型 `.flow` / `.wf`）—— */
+.flow {
+  max-width: 920px; /* 与待办同一个内容上限；原型写的 840 未采纳，见设计稿 §六 */
+  margin: 0 auto;
+  column-count: 3;
+  column-gap: var(--sp-3);
+}
+
+@media (max-width: 1240px) {
+  .flow {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 700px) {
+  .flow {
+    column-count: 1;
+  }
+}
+
+.wf {
+  break-inside: avoid;
+  margin-bottom: var(--sp-3);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  transition: border-color 0.16s, box-shadow 0.16s;
+}
+
+.wf:hover {
+  border-color: var(--line-2);
+  box-shadow: var(--shadow-1);
+}
+
+.wf__open {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.wf__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  background: var(--ph-stripe);
+}
+
+.wf__img--portrait {
+  aspect-ratio: 2 / 3;
+}
+
+.wf__img--tall {
+  aspect-ratio: 4 / 5;
+}
+
+.wf__img--sq {
+  aspect-ratio: 1 / 1;
+}
+
+.wf__img--wide {
+  aspect-ratio: 16 / 10;
+}
+
+/* 信息条：默认沉在图片下沿之外，悬停 / 键盘聚焦时滑上来；触屏设备常驻（原型 `.wf__meta`） */
+.wf__meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-height: 90px;
+  padding: var(--sp-3);
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--topbar-bg) 82%, transparent) 16px
+  );
+  transform: translateY(101%);
+  transition: transform 0.16s;
+}
+
+.wf:hover .wf__meta,
+.wf:focus-within .wf__meta {
+  transform: translateY(0);
+}
+
+@media (hover: none) {
+  .wf__meta {
+    transform: none;
+  }
+}
+
+.wf__date {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
+.wf__cap {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/*
+  窄屏（≤1080px）：侧栏**整条横过来**放在页头下方——同一份控件换布局，
+  不新增第二套骨架（照原型 `@media (max-width:1080px)`；DESIGN.md 禁止项 #16/#17）。
+*/
+@media (max-width: 1080px) {
+  .memopanel__main {
+    flex-direction: column;
+  }
+
+  .memopanel__side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-4);
+    width: auto;
+    padding: var(--sp-2) var(--sp-5);
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .subblk {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .subblk + .subblk {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .subblk__t {
+    margin: 0;
+  }
+
+  .sublist {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--sp-1);
+  }
+
+  .subitem {
+    width: auto;
+    height: 21px;
+    padding: 0 var(--sp-2);
+    gap: var(--sp-1);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: var(--panel);
+    font-size: var(--fs-micro);
+  }
+
+  .subitem[aria-pressed="true"]::before {
+    display: none;
+  }
+
+  .subitem .n {
+    margin-left: var(--sp-1);
+  }
+
+  .memopanel__side .segmented {
+    width: auto;
+  }
+
+  .memopanel__side .segmented__item {
+    flex: none;
+  }
+
+  .stat3 {
+    grid-template-columns: repeat(3, auto);
+  }
+
+  .stat3__cell {
+    padding: 0 var(--sp-3);
+  }
+
+  .heat {
+    aspect-ratio: auto;
+    grid-template-columns: repeat(12, 12px);
+    grid-template-rows: repeat(7, 12px);
+  }
+
+  .heat,
+  .heat__lg {
+    padding: 0;
+  }
+
+  .heat__sum {
+    margin-bottom: var(--sp-2);
+    padding: 0;
+  }
+
+  .subact {
+    width: auto;
+    height: 21px;
+    padding: 0 var(--sp-2);
+    font-size: var(--fs-micro);
+  }
+
+  .subact--solo {
+    padding: 0 var(--sp-2);
+  }
+
+  .otd {
+    width: 220px;
+  }
+}
+
 /* —— 待办：面板与页头（原型 `.tkhead` / `.tkhead__main`）—— */
 .taskpanel {
   display: flex;
@@ -3559,14 +4110,10 @@ button.chip--tag:hover {
   margin-left: auto;
 }
 
-.memopanel__filters {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-5);
-  border-bottom: 1px solid var(--line);
-}
-
+/* `.memopanel__filters` 已删（2026-09-28 B3 批）：标签与日期筛选搬进页内二级侧栏
+   （`.memopanel__side` 的 `.subitem` / `.segmented`），页头下方那条横带不再存在。
+   **但 `.memopanel__tags` 留着**：搜索面板（`features/search/ui/SearchPanel.tsx`）也复用它，
+   删了那边就是裸类名（`style-coverage` 用例当场抓到过）。 */
 .memopanel__tags {
   display: flex;
   flex-wrap: wrap;

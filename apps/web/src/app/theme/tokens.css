@@ -71,6 +71,8 @@
   --fnbar-w: 294px;
   --list-w: 330px;
   --settings-nav-w: 184px;
+  /* Memo 页内二级侧栏宽（DESIGN.md §2.2；原型 `--subbar-w`，2026-09-28 落值） */
+  --subbar-w: 232px;
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;

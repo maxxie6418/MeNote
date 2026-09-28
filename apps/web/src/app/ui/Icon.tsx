@@ -30,7 +30,12 @@ export type IconName =
   | "lock"
   | "table"
   | "more"
-  | "close";
+  | "close"
+  /* Memo 屏（B3 批）用到的四个 */
+  | "list"
+  | "grid"
+  | "image"
+  | "bolt";
 
 export function IconSprite() {
   return (
@@ -122,6 +127,31 @@ export function IconSprite() {
       {/* 「关闭」（原型 `#i-x`）：用在待办详情浮层的关闭按钮上（侧滑详情与菜单一样要有明确出口） */}
       <symbol id="i-close" viewBox="0 0 16 16">
         <path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2" />
+      </symbol>
+      {/* —— Memo 屏（B3 批）—— */}
+      {/* 「时间轴 / 列表」（原型 `#i-list`） */}
+      <symbol id="i-list" viewBox="0 0 16 16">
+        <path d="M5.6 4.4h7.2M5.6 8h7.2M5.6 11.6h7.2" />
+        <circle cx="3.2" cy="4.4" r=".9" fill="currentColor" stroke="none" />
+        <circle cx="3.2" cy="8" r=".9" fill="currentColor" stroke="none" />
+        <circle cx="3.2" cy="11.6" r=".9" fill="currentColor" stroke="none" />
+      </symbol>
+      {/* 「瀑布流 / 图册」（原型 `#i-grid`） */}
+      <symbol id="i-grid" viewBox="0 0 16 16">
+        <rect x="2.6" y="2.6" width="4.6" height="4.6" rx="1" />
+        <rect x="8.8" y="2.6" width="4.6" height="4.6" rx="1" />
+        <rect x="2.6" y="8.8" width="4.6" height="4.6" rx="1" />
+        <rect x="8.8" y="8.8" width="4.6" height="4.6" rx="1" />
+      </symbol>
+      {/* 「图片」（原型 `#i-image`）：图册空态用 */}
+      <symbol id="i-image" viewBox="0 0 16 16">
+        <rect x="2.6" y="3.4" width="10.8" height="9.2" rx="1.4" />
+        <circle cx="6" cy="6.8" r="1.1" />
+        <path d="M3.2 11.6 6.6 9l2.2 1.8 1.8-1.4 2.2 2.2" />
+      </symbol>
+      {/* 「随机漫步」（原型 `#i-bolt`） */}
+      <symbol id="i-bolt" viewBox="0 0 16 16">
+        <path d="M8.8 1.8 4.4 8.8h3l-.8 5.4 4.6-7.2h-3z" />
       </symbol>
     </svg>
   );

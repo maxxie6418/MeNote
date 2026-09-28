@@ -96,6 +96,17 @@ function tagChip(container: HTMLElement, text: string): HTMLButtonElement {
   return matched;
 }
 
+/**
+ * 按文本取**侧栏**里的筛选项（标签筛选 2026-09-28 从页头横排搬进了侧栏，
+ * 类名也随之从 `.chip--tag` 变成 `.subitem`；卡片里的标签胶囊仍是 `.chip--tag`）。
+ */
+function sideItem(container: HTMLElement, text: string): HTMLButtonElement {
+  const items = [...container.querySelectorAll<HTMLButtonElement>(".subitem")];
+  const matched = items.find((item) => item.textContent?.includes(text));
+  if (!matched) throw new Error(`没找到侧栏筛选项：${text}`);
+  return matched;
+}
+
 describe("Memo 时间轴", () => {
   it("按天分组、显示正文、时间与标签", async () => {
     const { container } = renderPanel();
@@ -130,10 +141,10 @@ describe("筛选", () => {
     const user = userEvent.setup();
     const { container } = renderPanel();
 
-    await user.click(tagChip(container, "工作"));
+    await user.click(sideItem(container, "工作"));
     expect(container.querySelectorAll(".memo")).toHaveLength(1);
 
-    await user.click(tagChip(container, "全部"));
+    await user.click(sideItem(container, "全部"));
     expect(container.querySelectorAll(".memo")).toHaveLength(2);
   });
 

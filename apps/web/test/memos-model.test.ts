@@ -9,8 +9,13 @@ import {
   EMPTY_FILTER,
   filterMemos,
   groupMemosByDay,
+  heatmap12w,
+  onThisDay,
+  orderedSidebarModules,
+  pickRandomMemo,
   sortMemos,
   startOfDayInZone,
+  summarizeMemos,
   timeLabelInZone,
   type MemoLike,
 } from "../src/features/memos/model";
@@ -153,5 +158,150 @@ describe("Memo 转笔记（Q10）", () => {
 
   it("首行为空时给默认标题", () => {
     expect(buildNoteFromMemo("   \n内容", []).title).toBe("未命名笔记");
+  });
+});
+
+// ——————————————— 侧栏的派生值（B3 批） ———————————————
+
+describe("侧栏模块的顺序与隐藏（用户配置只做这两件事）", () => {
+  it("没配置时就是清单的默认顺序", () => {
+    expect(orderedSidebarModules(undefined)).toEqual([
+      "stats",
+      "heatmap",
+      "random",
+      "onThisDay",
+      "date",
+      "tags",
+    ]);
+  });
+
+  it("order 里写到的排前面，没写到的按默认顺序补在后面", () => {
+    expect(orderedSidebarModules({ order: ["tags", "stats"] })).toEqual([
+      "tags",
+      "stats",
+      "heatmap",
+      "random",
+      "onThisDay",
+      "date",
+    ]);
+  });
+
+  it("hidden 的去掉；hidden 与 order 同时给时 hidden 赢", () => {
+    expect(orderedSidebarModules({ hidden: ["heatmap", "random"] })).not.toContain("heatmap");
+    expect(orderedSidebarModules({ order: ["tags"], hidden: ["tags"] })[0]).toBe("stats");
+  });
+
+  it("不认识 / 已下线的 id 直接忽略（这是契约能向上兼容的关键）", () => {
+    expect(
+      orderedSidebarModules({ order: ["未来模块", "tags"], hidden: ["另一个未来模块"] }),
+    ).toEqual(["tags", "stats", "heatmap", "random", "onThisDay", "date"]);
+  });
+});
+
+describe("概述三数（原型 .stat3）", () => {
+  it("总条数 / 本月新增 / 记录天数；memo_at 为空的条目不算", () => {
+    const summary = summarizeMemos(
+      [
+        memo("a", T), // 9-26
+        memo("b", Date.UTC(2026, 8, 1, 3, 0)), // 9-01（同月）
+        memo("c", Date.UTC(2026, 7, 20, 3, 0)), // 8-20（上个月）
+        memo("d", null), // 没有时刻：不进任何一档
+      ],
+      T,
+    );
+    expect(summary).toEqual({ total: 3, thisMonth: 2, activeDays: 3 });
+  });
+
+  it("「本月」按设置时区的日历月算，不是本机时区", () => {
+    // UTC 8-31 16:30 = 北京时间 9-1 00:30 → 算进 9 月
+    const edge = Date.UTC(2026, 7, 31, 16, 30);
+    expect(summarizeMemos([memo("edge", edge)], T).thisMonth).toBe(1);
+    expect(summarizeMemos([memo("edge", edge)], T, "UTC").thisMonth).toBe(0);
+  });
+});
+
+describe("热力图（原型 .heat：12 周 × 7 天，一列一周）", () => {
+  it("84 格；一列一周（第一格是周一），最后一列是本周", () => {
+    const map = heatmap12w([], T);
+    expect(map.cells).toHaveLength(84);
+    // 第一格必须是周一（`grid-auto-flow: column` 依赖这个顺序）
+    expect(new Date(`${map.cells[0]?.dayKey}T00:00:00Z`).getUTCDay()).toBe(1);
+    // 2026-09-26 是周六 → 本周第 6 行（索引 11*7+5 = 82）是今天，83 是周日
+    expect(map.cells[82]?.dayKey).toBe("2026-09-26");
+    expect(map.cells[83]?.dayKey).toBe("2026-09-27");
+  });
+
+  it("分 5 档：0 / 1 / 2–3 / 4–5 / 6+，并给出总条数与文案", () => {
+    const sameDay = (count: number, dayOffset = 0) =>
+      Array.from({ length: count }, (_, index) => memo(`m${dayOffset}-${index}`, T - dayOffset * 86_400_000));
+
+    const map = heatmap12w(
+      [...sameDay(1, 0), ...sameDay(3, 1), ...sameDay(4, 2), ...sameDay(6, 3)],
+      T,
+    );
+    const levelAt = (offset: number) => map.cells[82 - offset]?.level;
+
+    expect(levelAt(0)).toBe(1);
+    expect(levelAt(1)).toBe(2);
+    expect(levelAt(2)).toBe(3);
+    expect(levelAt(3)).toBe(4);
+    expect(levelAt(4)).toBe(0);
+    expect(map.total).toBe(1 + 3 + 4 + 6);
+    expect(map.label).toBe("近 12 周 · 共 14 条");
+  });
+
+  it("12 周之外的老记录不进热力图（但也不影响概述）", () => {
+    const map = heatmap12w([memo("old", T - 200 * 86_400_000)], T);
+    expect(map.total).toBe(0);
+    expect(summarizeMemos([memo("old", T - 200 * 86_400_000)], T).total).toBe(1);
+  });
+});
+
+describe("那年今日（原型 .otd）", () => {
+  it("没有往年记录时返回 null（不渲染空壳）", () => {
+    expect(onThisDay([memo("this-year", T)], T)).toBeNull();
+  });
+
+  it("排除今年：今年同月日的记录不算", () => {
+    const lastYear = Date.UTC(2025, 8, 26, 6, 0);
+    const result = onThisDay([memo("this-year", T), memo("last-year", lastYear)], T);
+    expect(result?.dayKey).toBe("2025-09-26");
+    expect(result?.count).toBe(1);
+  });
+
+  it("前后等距时取更早的那一天", () => {
+    const earlier = Date.UTC(2025, 8, 25, 6, 0);
+    const later = Date.UTC(2025, 8, 27, 6, 0);
+    expect(onThisDay([memo("later", later), memo("earlier", earlier)], T)?.dayKey).toBe(
+      "2025-09-25",
+    );
+  });
+
+  it("同月日跨年时取最近的那一年，并给那一天最早的时刻与条数", () => {
+    const older = Date.UTC(2024, 8, 26, 1, 0);
+    // 注意用 UTC 表达时也要落在**北京时间的 9-26**（UTC 16:00 之后就是次日了）
+    const newer = Date.UTC(2025, 8, 26, 1, 0);
+    const alsoNewer = Date.UTC(2025, 8, 26, 4, 0);
+    const result = onThisDay(
+      [memo("old", older), memo("new", newer), memo("new-late", alsoNewer)],
+      T,
+    );
+
+    expect(result?.dayKey).toBe("2025-09-26");
+    expect(result?.count).toBe(2);
+    expect(result?.at).toBe(newer); // 最早的时刻，用来定位
+  });
+});
+
+describe("随机漫步（原型 .subact--solo）", () => {
+  it("空列表返回 null；随机源可注入（测试不靠真随机）", () => {
+    expect(pickRandomMemo([])).toBeNull();
+    const items = ["a", "b", "c"];
+    expect(pickRandomMemo(items, () => 0)).toBe("a");
+    expect(pickRandomMemo(items, () => 0.5)).toBe("b");
+  });
+
+  it("随机源给到边界值 1 也不会越界", () => {
+    expect(pickRandomMemo(["a", "b"], () => 1)).toBe("b");
   });
 });

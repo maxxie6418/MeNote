@@ -2,11 +2,11 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.5 |
-| 文档状态 | 生效（用户确认 2026-09-26：设计稿生效、KDF/密钥清单、两环境、`app_meta`、登出不清除缓存、Valibot、wiki 同步项 a–f 均获批准） |
+| 文档版本 | v1.6 |
+| 文档状态 | 生效（用户确认 2026-09-26：设计稿生效、KDF/密钥清单、两环境、`app_meta`、登出不清除缓存、Valibot、wiki 同步项 a–f 均获批准。2026-09-28：机密清单按"只有一个 `AUTH_PEPPER`"对齐） |
 | 目的和适用范围 | 解掉 M1 的第四个阻塞项：KDF 算法与参数、`SESSION_SECRET` 到底存不存在、环境数量、M1 最小设置入口的落点等口径未定。给出 M01 全部接口与安全机制的实现口径 |
 | 权威级别 | 模块规则（认证与安全）。规则以 `wiki/Menote-设计文档-v7.4.md` §5.2–§5.4 与 `wiki/Menote-项目架构-v1.md` §13 为准；本文只补齐它们没写死、或互相矛盾的部分 |
-| 最后更新日期 | 2026-09-26 |
+| 最后更新日期 | 2026-09-28 |
 
 修改记录：
 
@@ -18,6 +18,7 @@
 | v1.3 | v0.1.10 | 2026-09-26 | dev 链路实测回写：§4.1 记录 17 项断言结果（Cookie 属性、CSRF 两路、注册登录、隔离），并如实标注"真实浏览器 Cookie 存储仍未验、留到 M1-11"与 miniflare 的 `Request.cf` 告警 | deepseek-v4.1-flash |
 | v1.4 | v0.1.11 | 2026-09-26 | 修掉会导致锁死账号的落地缺陷：注册与改密改用**与 prelogin 同源的确定盐**（§3.3 记录理由与附带防枚举收益）；§3 接口表补公开接口 `GET /api/auth/registration-state` | deepseek-v4.1-flash |
 | v1.5 | v0.1.12 | 2026-09-26 | 修正机密声明方式：`wrangler.jsonc` 的 `secrets.required` 是 **deploy 硬门禁**（首次部署必失败），改为运行时 `config-guard.ts` fail-closed；§6 表与 `wiki/guides/local-dev.md` §8 同步更正 | deepseek-v4.1-flash |
+| v1.6 | v0.5.14 | 2026-09-28 | **实例机密收敛为一个**（用户 2026-09-28 确认）：§一 结论 2 与 §6 的机密清单改为"只有 `AUTH_PEPPER`"；原 `BACKUP_CRED_KEY` 行标注作废并指向架构 §7.2 / §12.4 的域分离派生（`SHA-256(AUTH_PEPPER 字节 ‖ "menote-backup-wrap-v1")`）。本文只是把过时条目对齐，规则本体仍以架构为准 | deepseek-v4.1-flash |
 
 ---
 
@@ -26,7 +27,7 @@
 | # | 结论 | 处理的问题 |
 |---|---|---|
 | 1 | KDF = **PBKDF2-SHA-256、600,000 次迭代、16 字节盐、32 字节输出**，全部在浏览器 WebCrypto 执行；服务端只做一次 HMAC 比对。**Argon2id 不用**（CSP 已删 `wasm-unsafe-eval`，v7.4 里 `auth_kdf` 的 argon2id 举例作废） | §2 |
-| 2 | **取消 `SESSION_SECRET`**。会话令牌是 32 字节随机数、库里只存 SHA-256，没有任何服务端密钥参与；工程化文档与架构 §15.5 里的这个占位删掉。M1 唯一的机密是 **`AUTH_PEPPER`**；`BACKUP_CRED_KEY` 到 M5 才引入 | §6 |
+| 2 | **取消 `SESSION_SECRET`**。会话令牌是 32 字节随机数、库里只存 SHA-256，没有任何服务端密钥参与；工程化文档与架构 §15.5 里的这个占位删掉。**实例唯一机密是 `AUTH_PEPPER`**（2026-09-28 起：原 `BACKUP_CRED_KEY` 已删除，备份包裹键由 `AUTH_PEPPER` 域分离派生，见架构 §7.2 / §12.4 v1.14） | §6 |
 | 3 | 环境只做 **本地 + 生产** 两套；架构 §15.3 的"测试环境"推迟到 M6 性能实测前再建（它不参与一键部署） | §7 |
 | 4 | M1 自带**最小设置入口**：设置壳按 DESIGN 的两栏分页做（左列 184px 分类导航 + 右侧内容），M1 只落地「账户与安全」与「实例管理（仅 owner）」两项，其余 8 个分类在 M2/M6 补内容——**不另做一套骨架** | §5.3 |
 | 5 | 注册开关状态放 `app_meta`（`registration_open` / `registration_close_at` 键），**M1 不新建 `site_settings` 表**。注意：功能拆解 M18-01 说实例级设置存 `site_settings`，与需求 §18.2 的 DDL 不一致——两份 wiki 定稿冲突，已列入 §8 待点头项 | §3.3 |
@@ -194,7 +195,7 @@ UPDATE sessions
 | `.dev.vars.example` | ✅ 新建，但**需先改 `.gitignore`** | 内容形如 `AUTH_PEPPER=<32 字节 base64>`，附生成命令。**实测冲突**：`git check-ignore -v .dev.vars.example` → `.gitignore:16:.dev.vars*`，该文件当前永远无法提交，而架构 §15.5 要求随仓库提供它以支持一键部署。需把 `.gitignore` 第 16 行改为 `.dev.vars` / `.dev.vars.*` 并加 `!.dev.vars.example`（属根配置改动，列入 §8 待点头项） |
 | `wrangler.jsonc` 的 `secrets.required` | ❌ **不要加（v1.5 修正）** | 该字段确实存在于 `wrangler@4.141.0` 的配置 schema，但**它是 deploy 的硬门禁**：机密未设置时 `wrangler deploy` 直接失败（`✘ [ERROR] The following required secrets have not been set: AUTH_PEPPER`）。首次部署时 Worker 尚不存在、无法先设机密 → 一键部署/Workers Builds 被永久堵死（M1-10 实测踩到，v0.1.12 修复）。改由 `apps/worker/src/middleware/config-guard.ts` 在运行时检查：缺 `AUTH_PEPPER` 时 `/api/auth/*`、`/api/admin/*` 返回 503 并说明缺什么，且**不会**用空密钥算 HMAC |
 | `SESSION_SECRET` | ❌ **取消** | 无用途（§1 结论 2）。`wiki/guides/local-dev.md` §8 与架构 §15.5 的例子需同步删除 |
-| `BACKUP_CRED_KEY` | ⏳ M5 | 备份内容密钥 K 的包裹键 |
+| ~~`BACKUP_CRED_KEY`~~ | — | **已并入 `AUTH_PEPPER` 派生**（用户 2026-09-28 确认）：备份包裹键 = `SHA-256(AUTH_PEPPER 字节 ‖ "menote-backup-wrap-v1")`；实例只需配置一个机密。详见架构 §7.2 / §12.4（v1.14） |
 
 **Cookie 与响应头**：前端静态资源的安全头由 `apps/web/public/_headers` 下发（M0 已有），但 **Worker 的 `/api/*` 响应不带这些头**。M1 在 `index.ts` 挂一个极薄的响应头中间件补 `X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`（CSP 对 JSON 响应意义不大，可不加）。
 

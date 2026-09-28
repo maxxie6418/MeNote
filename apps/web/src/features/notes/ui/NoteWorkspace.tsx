@@ -13,6 +13,7 @@ import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
+import { TitleInput } from "./TitleInput";
 import { TableDegradeNotice } from "../../tables/ui/TableDegradeNotice";
 import { useTableDoc } from "../../tables/useTableDoc";
 import { renderTableDocument } from "@menote/mdcore";
@@ -218,11 +219,16 @@ export function NoteWorkspace({
       ) : null}
 
       <div className="docpane__head">
-        <input
+        {/*
+          标题走 `TitleInput`（本地即时回显 + 防抖提交）：此前它直接受控在"本地库那份标题"上，
+          每个键都触发一次全量 refresh，异步回灌会把刚敲的字按回去（808 条实测丢 9/10 个字）。
+          `key` 用条目 id：切换条目时换一个输入框实例，不把上一篇的本地文案带过去。
+        */}
+        <TitleInput
+          key={item.id}
           className="docpane__title-input"
-          aria-label="标题"
           value={item.title ?? ""}
-          onChange={(event) => onTitleChange(event.target.value)}
+          onCommit={onTitleChange}
         />
 
         {/*

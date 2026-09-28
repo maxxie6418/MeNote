@@ -145,7 +145,7 @@ export function MemoItem({
           </div>
         </div>
       ) : (
-        <div className="memo__body markdown-body">
+        <div className="memo__body">
           <Suspense fallback={<p>{content}</p>}>
             <MarkdownPreview source={content} />
           </Suspense>

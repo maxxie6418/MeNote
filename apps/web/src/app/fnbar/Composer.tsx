@@ -53,6 +53,7 @@ function ModeExtras({
   onTaskDue,
   taskPriority,
   onTaskPriority,
+  noteTargetLabel,
 }: {
   mode: ComposerMode;
   showTaskPrompt: boolean;
@@ -62,6 +63,8 @@ function ModeExtras({
   onTaskDue: (value: string) => void;
   taskPriority: TaskPriority;
   onTaskPriority: (value: TaskPriority) => void;
+  /** 「笔记」档新建会落到哪里（当前选中的笔记本名；没有笔记本上下文时是「根目录」） */
+  noteTargetLabel: string;
 }) {
   if (mode === "task") {
     // 真实控件：截止用原生 date（可键盘输入、有系统选择器），优先级用盒式分段控件
@@ -91,8 +94,12 @@ function ModeExtras({
     return (
       <>
         <Chip variant="compact">首行作标题</Chip>
-        <Chip variant="compact" title="M2 只支持根目录，移动条目属 M2-3">
-          根目录
+        {/*
+          落点提示：**当前选中的笔记本**（2026-09-28 起新建跟随当前笔记本；
+          最近编辑 / 收藏 / 标签这些视图没有笔记本上下文，才落根目录）。
+        */}
+        <Chip variant="compact" title={`新建的笔记会落在这里：${noteTargetLabel}`}>
+          {noteTargetLabel}
         </Chip>
         {/* 按需求 §8.7：输入框没有加密开关，这里刻意不放加密胶囊 */}
       </>
@@ -141,6 +148,11 @@ export interface ComposerProps {
    */
   mode?: ComposerMode;
   onModeChange?: (mode: ComposerMode) => void;
+  /**
+   * 「笔记」档的落点提示（当前笔记本名；不传 = 「根目录」）。
+   * 落点本身由 `createNote` 按当前视图决定，这里只做展示，不参与写入。
+   */
+  noteTargetLabel?: string;
 }
 
 const TASK_PRIORITY_OPTIONS: ReadonlyArray<{ value: TaskPriority; label: string }> =
@@ -152,6 +164,7 @@ export function Composer({
   onPublishTask,
   mode: controlledMode,
   onModeChange,
+  noteTargetLabel = "根目录",
 }: ComposerProps) {
   const [innerMode, setInnerMode] = useState<ComposerMode>("memo");
   // 受控/非受控都支持：外部给了 mode 就用外部的，否则自己管（既有用法不受影响）
@@ -226,6 +239,7 @@ export function Composer({
           onTaskDue={setTaskDue}
           taskPriority={taskPriority}
           onTaskPriority={setTaskPriority}
+          noteTargetLabel={noteTargetLabel}
         />
       </div>
 

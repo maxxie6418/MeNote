@@ -76,6 +76,11 @@ export interface NotesWorkspace {
   loading: boolean;
   view: NotesView;
   viewTitle: string;
+  /**
+   * 当前视图的层级路径（仅「笔记本」视图且选中文件夹时非空；根视图为空数组）。
+   * 列表头用它显示父级面包屑（`工作 › 本周`）。
+   */
+  viewPath: string[];
   setView: (view: NotesView) => void;
   tags: Array<{ tag: string; count: number }>;
   selectedId: string | null;
@@ -494,19 +499,42 @@ export function useNotesWorkspace(
     [conflictCopy, notifyLocalWrite, refresh],
   );
 
+  /**
+   * 改标题（元数据补丁，走 outbox）。
+   *
+   * **2026-09-28 性能修复**：此前这里每次都 `await refresh()`（6 张表 + 全量正文摘要 +
+   * 搜索索引重扫），而输入框受控在 `allItems` 里那份标题上 —— 一次按键 = 一次全库扫描 +
+   * 一次异步回灌，晚到的按键被旧值按回去。实测（808 条、60ms/字）**10 个字只剩 1 个**，
+   * 并伴随 294ms 主线程长任务。
+   *
+   * 现在改成**轻提交**：写库 + 入队 + **就地更新列表里那一行**（标题与 `pending`），
+   * 不再跑全量 `refresh()`。提交节奏由 `TitleInput` 的防抖控制（空闲 400ms / 失焦 / 卸载）。
+   * 口径不变：仍是 `patch_meta`（离线优先、幂等），服务端推送时从本地行重建补丁。
+   */
   const changeTitle = useCallback(
     async (title: string) => {
       const selectedId = selectedIdRef.current;
       if (!selectedId) return;
       const item = await getLocalItem(selectedId);
       if (!item) return;
+      // 防抖后可能重复提交同一个值：没有变化就不写库、不入队（省一次 outbox 往返）
+      if ((item.title ?? "") === title) return;
 
       await db.items.update(selectedId, { title });
       await enqueueMetaPatch(selectedId, item.meta_rev, Date.now());
-      await refresh();
+      /*
+        就地更新那一行：字段与"下一次 refresh 会读到的"保持一致——
+        `enqueueMetaPatch` 会把条目标成 `pending: "patch_meta"`，列表行据此显示"待上传"，
+        所以这里必须一起带上，否则状态会与库里的真实状态不一致。
+      */
+      setAllItems((previous) =>
+        previous.map((row) =>
+          row.id === selectedId ? { ...row, title, pending: "patch_meta" } : row,
+        ),
+      );
       notifyLocalWrite();
     },
-    [notifyLocalWrite, refresh],
+    [notifyLocalWrite],
   );
 
   const items = useMemo(() => filterByView(allItems, view, gate), [allItems, view, gate]);
@@ -520,13 +548,34 @@ export function useNotesWorkspace(
   const docLoading = openingId !== null;
   const docEpoch = docVersion?.epoch ?? 0;
 
-  /** 选中文件夹时用文件夹名当列表标题（`viewTitle` 是纯函数，不认识文件夹数据） */
+  /** 列表头标题（`viewTitle` 是纯函数，不认识文件夹数据） */
   const title = useMemo(() => {
     if (view.kind === "notebook" && view.folderId) {
       const folder = folders.find((row) => row.id === view.folderId);
       if (folder) return folder.name;
     }
     return viewTitle(view);
+  }, [folders, view]);
+
+  /**
+   * 当前视图的**层级路径**（2026-09-28 加入：用户要求"界面上要能看出层级结构"）。
+   *
+   * 只有「笔记本」视图且选中了文件夹时才有路径：根视图是空数组，第 2 层是 `["父夹", "子夹"]`。
+   * 列表头据此显示父级面包屑（`工作 › 本周`），与左侧树的缩进/折叠互为印证。
+   * 深度上限就是 `MAX_FOLDER_DEPTH`，循环再带一个 guard，防脏数据（父链成环）时死循环。
+   */
+  const viewPath = useMemo(() => {
+    if (view.kind !== "notebook" || !view.folderId) return [];
+    const path: string[] = [];
+    let current = folders.find((row) => row.id === view.folderId);
+    let guard = 0;
+    while (current && guard <= MAX_FOLDER_DEPTH) {
+      path.unshift(current.name);
+      const parentId: string | null = current.parent_id;
+      current = parentId ? folders.find((row) => row.id === parentId) : undefined;
+      guard += 1;
+    }
+    return path;
   }, [folders, view]);
 
   /**
@@ -593,6 +642,7 @@ export function useNotesWorkspace(
       loading,
       view,
       viewTitle: title,
+      viewPath,
       setView,
       tags,
       selectedId,
@@ -689,6 +739,7 @@ export function useNotesWorkspace(
       toggleStarred,
       updateMemo,
       view,
+      viewPath,
       vaultScope,
     ],
   );

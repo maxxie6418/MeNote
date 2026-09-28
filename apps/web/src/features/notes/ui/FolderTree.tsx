@@ -6,10 +6,14 @@
  *    合法动作，所以根本不出现）；
  * 2. 节点上带条目计数，一眼看出每个文件夹里有多少条。
  *
+ * 2026-09-28（用户要求"界面上要能看出层级结构"）：父节点加**折叠三角**、子层加**引导线**——
+ * 层级不再只靠 16px 缩进表达。折叠状态只在本组件内（纯展示状态，不进数据）。
+ *
  * 每个节点带"更多"菜单：重命名 / 移动到… / 新建子文件夹（仅第 1 层）。菜单项禁用时都带原因。
  * 放在 `features/notes/`（不是 `app/fnbar/`）：功能栏只是容器，由 `App` 把本组件作为插槽传进去，
  * 这样 `app/` 不反向依赖具体 feature（架构 §2.3.3 的依赖方向）。
  */
+import { useState } from "react";
 import type { LocalFolder } from "../../../data/db";
 import { Icon } from "../../../app/ui/Icon";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
@@ -57,6 +61,21 @@ export function FolderTree({
   vault,
   onDelete,
 }: FolderTreeProps) {
+  /**
+   * 折叠起来的文件夹 id（2026-09-28 加入：用户要求"界面上要能看出层级结构"）。
+   *
+   * 默认**全展开**（不改变既有观感，只是多了一个可收起的入口）；状态留在本组件内——
+   * 它纯粹是"这一屏怎么摆"，不属于数据，也不该进本地库或设置。
+   */
+  const [collapsed, setCollapsed] = useState<readonly string[]>([]);
+  const toggle = (folderId: string): void => {
+    setCollapsed((current) =>
+      current.includes(folderId)
+        ? current.filter((id) => id !== folderId)
+        : [...current, folderId],
+    );
+  };
+
   const roots = folders.filter((folder) => folder.parent_id === null);
   const childrenOf = (parentId: string): LocalFolder[] =>
     folders
@@ -77,16 +96,28 @@ export function FolderTree({
 
   return (
     <ul className="tree">
-      {roots.map((folder) => (
-        <li key={folder.id}>
-          <FolderNode {...nodeProps(folder)} />
-          <div className="tree__children">
-            {childrenOf(folder.id).map((child) => (
-              <FolderNode key={child.id} {...nodeProps(child)} />
-            ))}
-          </div>
-        </li>
-      ))}
+      {roots.map((folder) => {
+        const children = childrenOf(folder.id);
+        const isCollapsed = collapsed.includes(folder.id);
+        return (
+          <li key={folder.id}>
+            {/* 有子夹的父节点才出现折叠三角（没子夹就不给一个点了没反应的入口） */}
+            <FolderNode
+              {...nodeProps(folder)}
+              collapsible={children.length > 0}
+              collapsed={isCollapsed}
+              onToggleCollapse={() => toggle(folder.id)}
+            />
+            {children.length > 0 && !isCollapsed ? (
+              <div className="tree__children">
+                {children.map((child) => (
+                  <FolderNode key={child.id} {...nodeProps(child)} />
+                ))}
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -101,6 +132,10 @@ interface FolderNodeProps {
   onCreateChild: (folder: LocalFolder) => void;
   vault?: FolderTreeProps["vault"];
   onDelete?: (folder: LocalFolder) => void;
+  /** 有子文件夹时才给：折叠 / 展开这一支 */
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 function FolderNode({
@@ -113,13 +148,32 @@ function FolderNode({
   onCreateChild,
   vault,
   onDelete,
+  collapsible = false,
+  collapsed = false,
+  onToggleCollapse,
 }: FolderNodeProps) {
   // 第 2 层不出现"新建子文件夹"入口（那个位置永远没有合法动作）
   const canCreateChild = canCreateChildFolder(folder);
   const inVault = vault?.isInVault(folder) ?? false;
 
   return (
-    <div className="tree-row__wrap">
+    <div className="tree-row__wrap" data-has-children={collapsible ? "true" : undefined}>
+      {/*
+        折叠按钮是**行按钮的兄弟**（不是嵌套在里面——嵌套 button 是非法结构）。
+        它靠 `.tree-row` 左侧留出的内边距取得位置，点它不会选中这一支。
+      */}
+      {collapsible ? (
+        <button
+          type="button"
+          className="tree-row__toggle"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "展开" : "收起"}「${folder.name}」里的子文件夹`}
+          title={collapsed ? "展开" : "收起"}
+          onClick={onToggleCollapse}
+        >
+          <Icon name="chevron-down" size={13} />
+        </button>
+      ) : null}
       <button
         type="button"
         className="tree-row"

@@ -18,6 +18,8 @@ export interface NoteListProps {
   items: LocalItem[];
   /** 列表头标题（随视图变化：全部笔记 / 最近编辑 / 收藏 / #标签） */
   title: string;
+  /** 当前视图的层级路径（笔记本视图才有；见 `ItemListHead`） */
+  path?: readonly string[];
   selectedId: string | null;
   loading: boolean;
   /** 行内摘要（已缓存正文的第一行，可缺省） */
@@ -95,6 +97,7 @@ function emptyCopy(title: string): { title: string; hint: string } {
 export function NoteListView({
   items,
   title,
+  path = [],
   selectedId,
   loading,
   summaries = {},
@@ -123,7 +126,7 @@ export function NoteListView({
           </button>
         </div>
       ) : null}
-      <ItemListHead title={title} count={items.length} />
+      <ItemListHead title={title} count={items.length} path={path} />
 
       <div className="listpane__scroll">
         {loading ? (

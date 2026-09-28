@@ -374,6 +374,13 @@ button {
   font-weight: 600;
 }
 
+/* 列表头的父级面包屑（`工作 › 本周`）：比标题轻一档，层级靠位置而不是颜色单独表达 */
+.listpane__path {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 400;
+}
+
 .listpane__count {
   font-size: var(--fs-micro);
   color: var(--muted);
@@ -562,12 +569,6 @@ button {
   border-left: 1px solid var(--line);
 }
 
-.doc-body {
-  max-width: 740px; /* DESIGN.md §2.3：Markdown 正文宽度上限 */
-  margin: 0 auto;
-  padding: var(--sp-5) var(--sp-6) 80px;
-}
-
 [data-editor] {
   min-height: 100%;
 }
@@ -582,11 +583,25 @@ button {
   font-size: var(--fs-body);
 }
 
+/*
+  Markdown 排版类：**只管排版**（行高、标题边距、代码块等）。
+
+  【2026-09-28 修复】此前它同时带着"阅读区"那套 `max-width:740px; margin:0 auto;
+  padding:var(--sp-5) var(--sp-6) 80px`，于是**任何复用它的地方都会带上阅读区留白**——
+  Memo 时间轴最惨：`.memo__body` 与 `MarkdownPreview` 各带一次这个类，两层 padding 叠加，
+  单行 Memo 卡片被撑到 275px（原型 `.memo` 是 97px，我们实测把这两条规则压掉后回落到 52px）。
+  现在把这套宽度与内边距收进 `.docpane__body .markdown-body`（正文区专属），
+  `.markdown-body` 在任何地方都可以安全复用。
+*/
 .markdown-body {
+  line-height: 1.75;
+}
+
+/* 正文阅读区的宽度与内边距（DESIGN.md §2.3：Markdown 正文宽度上限 740px） */
+.docpane__body .markdown-body {
   max-width: 740px;
   margin: 0 auto;
   padding: var(--sp-5) var(--sp-6) 80px;
-  line-height: 1.75;
 }
 
 .markdown-body h1,
@@ -1256,9 +1271,32 @@ button {
 
 .timeline {
   /* 原型 `.tl`：日期组之间是宽松档的上限 sp-6（旧块给的是 sp-5，且它写在文件末尾、会赢） */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-6);
+  /*
+    原型 `.page--memo{--cap:740px}` + `.wrap{max-width:var(--cap);margin:0 auto}`：
+    Memo 时间轴**不是满宽**，与正文阅读区同一个 740px 上限并居中。
+    此前漏了这一条，时间轴铺到 1096px（实测），与原型差异明显。
+  */
+  max-width: 740px;
+  margin: 0 auto;
+}
+
+/*
+  **时间主干**（原型 `.tl::before`）：一条 1px 细线竖在 104px 处，日期节点与条目圆点都落在它上面。
+  【2026-09-28 修复】此前整条主干从未实现——节点与圆点是悬空的（`::before` 计算值 `content: none`），
+  这是用户反馈"memo 与原型页差异较大"里最直观的一条。
+*/
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 104px;
+  top: var(--sp-2);
+  bottom: var(--sp-2);
+  width: 1px;
+  background: var(--line);
 }
 
 .timeline__day {
@@ -1466,7 +1504,14 @@ button {
 
 /* 页头：一条收齐（标题 · 说明 · 概览 · 视图切换 · 添加待办），原型 `.tkhead` */
 .tkhead {
-  display: flex;
+  /*
+    **不要写 `display:flex`**：原型的 `.tkhead` 是普通块（`position:relative;flex:none`），
+    里面的 `.tkhead__main` 因此占满整行，`.tkhead__spacer` 才能把「视图切换 + 添加待办」
+    推到页头右端。此前这里写了 `display:flex`，`.tkhead__main` 被压成内容宽
+    （实测 604px / 页头 1146px），那组控件停在页头中间——用户反馈的"待办界面显示异常"之一。
+    【2026-09-28 修复】
+  */
+  position: relative;
   flex: none;
   border-bottom: 1px solid var(--line);
 }
@@ -1503,9 +1548,16 @@ button {
   padding: var(--sp-5);
 }
 
-/* 看板：把**滚动容器**收到主操作区的 80% 并居中（原型 `body[data-taskview="kanban"] .page__scroll`）
-   —— 看板三列与筛选条一起跟着对齐，不各算一套宽度。 */
+/*
+  看板：把**滚动容器**收到主操作区的 80% 并居中（原型 `body[data-taskview="kanban"] .page__scroll`）
+  —— 看板三列与筛选条一起跟着对齐，不各算一套宽度。
+
+  【2026-09-28 修复】`flex: none` **必须写**：`.taskpanel__body` 是 `.taskpanel__wrap`（flex 行）
+  里的 `flex: 1` 子项，只写 `width: 80%` 会被 flex 布局的 `flex-basis: 0` 吃掉，宽度声明**根本不生效**
+  （实测改前仍是 1146px 满宽、看板 1106px，原型是 877px）。原型那一行正是 `flex:none;width:80%;margin:0 auto`。
+*/
 .taskpanel--board .taskpanel__body {
+  flex: none;
   width: 80%;
   margin: 0 auto;
 }
@@ -2749,8 +2801,42 @@ button.chip--tag:hover {
   padding: 0;
 }
 
+/* 第 2 层：引导线 + 缩进，让层级一眼看得出（2026-09-28；此前只有 16px 缩进） */
 .tree__children {
-  padding-left: var(--sp-4);
+  margin-left: var(--sp-2);
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--line);
+}
+
+/*
+  折叠三角（只有"有子夹"的父节点才渲染）：绝对定位在行的左端，
+  所以 `.tree-row` 要给这一列留出内边距——否则它会压在文件夹图标上。
+*/
+.tree-row__wrap[data-has-children] .tree-row {
+  padding-left: 20px;
+}
+
+.tree-row__toggle {
+  position: absolute;
+  top: 50%;
+  left: 1px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+.tree-row__toggle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* 收起时三角转向（与「已完成」分组头的收起按钮同一套观感） */
+.tree-row__toggle[aria-expanded="false"] .ic {
+  transform: rotate(-90deg);
 }
 
 .tree-row {
@@ -3250,6 +3336,10 @@ button.chip--tag:hover {
   font-size: var(--fs-body);
 }
 
+/*
+  首尾段落不吃外边距（`.memo__body` 去掉重复的 `markdown-body` 类名之后，
+  预览自己的那层 `.markdown-body` 就是它的直接子元素——选择器不必改）。
+*/
 .memo__body > .markdown-body > :first-child {
   margin-top: 0;
 }

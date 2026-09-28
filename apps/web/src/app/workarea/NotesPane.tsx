@@ -173,6 +173,7 @@ export function NotesPane({
         <NoteList
           items={workspace.items}
           title={workspace.viewTitle}
+          path={workspace.viewPath}
           selectedId={workspace.selectedId}
           loading={workspace.loading}
           summaries={workspace.summaries}

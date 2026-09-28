@@ -64,6 +64,32 @@ describe("级联覆盖（同选择器同属性不许被后置规则改值）", (
     expect(effectiveValue(rules, ".taskpanel__body", "padding")).toBe("var(--sp-5)");
   });
 
+  /**
+   * 2026-09-28 的三条显示修复（用户反馈"memo 与待办显示异常、与原型差异大"）。
+   * 同样只在前部那一处给取值，这里把"最终生效值"钉住：
+   * - `.markdown-body` 是**纯排版类**，阅读区那套宽度与内边距只属于正文区（`.docpane__body`）
+   *   ——否则 Memo 卡片里的两层 `.markdown-body` 会把单行卡片撑到 275px（原型 97px）；
+   * - 时间轴要有**主干线**与 740px 上限（原型 `.tl::before` / `.page--memo{--cap:740px}`）；
+   * - `.tkhead` 不能是 flex（否则右侧控件挤在页头中间）；
+   * - 看板下滚动容器必须 `flex:none`（否则 `width:80%` 在 flex 行里根本不生效）。
+   */
+  it("memo / 待办那三条显示修复的取值被钉住", () => {
+    expect(effectiveValue(rules, ".markdown-body", "max-width")).toBe("");
+    expect(effectiveValue(rules, ".markdown-body", "padding")).toBe("");
+    expect(effectiveValue(rules, ".docpane__body .markdown-body", "max-width")).toBe("740px");
+    expect(effectiveValue(rules, ".docpane__body .markdown-body", "padding")).toBe(
+      "var(--sp-5) var(--sp-6) 80px",
+    );
+    expect(effectiveValue(rules, ".timeline", "max-width")).toBe("740px");
+    expect(effectiveValue(rules, ".timeline::before", "content")).toBe('""');
+    expect(effectiveValue(rules, ".timeline::before", "left")).toBe("104px");
+    expect(effectiveValue(rules, ".timeline::before", "width")).toBe("1px");
+    expect(effectiveValue(rules, ".timeline::before", "background")).toBe("var(--line)");
+    expect(effectiveValue(rules, ".tkhead", "display")).toBe("");
+    expect(effectiveValue(rules, ".taskpanel--board .taskpanel__body", "flex")).toBe("none");
+    expect(effectiveValue(rules, ".tree__children", "border-left")).toBe("1px solid var(--line)");
+  });
+
   /*
     自证：扫描器必须"抓得到坏的、放得过好的"。
     第一版扫描器在**解析 @media 内层规则**时把媒体的 `}` 也当成自己的收尾，条件上下文随即丢失，

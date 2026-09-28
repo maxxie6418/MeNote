@@ -46,6 +46,8 @@ export interface FnBarProps {
   /** 录入框模式受控（M2-8 首页的「记录 Memo / 新建待办」要切档） */
   composerMode?: ComposerMode;
   onComposerModeChange?: (mode: ComposerMode) => void;
+  /** 「笔记」档的落点提示（当前笔记本名；缺省「根目录」）——见 `Composer.noteTargetLabel` */
+  noteTargetLabel?: string;
 }
 
 export function FnBar({
@@ -63,6 +65,7 @@ export function FnBar({
   showHome = true,
   composerMode,
   onComposerModeChange,
+  noteTargetLabel,
 }: FnBarProps) {
   return (
     <aside className="fnbar">
@@ -77,6 +80,7 @@ export function FnBar({
           onPublishTask={onPublishTask}
           mode={composerMode}
           onModeChange={onComposerModeChange}
+          noteTargetLabel={noteTargetLabel}
         />
       </div>
 

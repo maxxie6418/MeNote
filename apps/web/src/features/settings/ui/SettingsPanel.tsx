@@ -55,6 +55,11 @@ const EDITOR_MODE_OPTIONS: ReadonlyArray<{ id: EditorMode; label: string; desc: 
   { id: "split", label: "双栏", desc: "左编辑右预览，默认" },
   { id: "edit", label: "仅编辑", desc: "只显示编辑区" },
   { id: "preview", label: "仅预览", desc: "只显示预览区" },
+  {
+    id: "live",
+    label: "即时渲染",
+    desc: "正文直接呈现渲染样式，光标所在行显示 Markdown 源码（M5 首期：文本级元素）",
+  },
 ];
 
 /**
@@ -278,15 +283,7 @@ export function SettingsPanel({
                     {option.label}
                   </button>
                 ))}
-                {/* 第四档「即时渲染」细则【后续定】，M2 置灰并说明原因（DESIGN.md §6.1） */}
-                <button
-                  type="button"
-                  className="radioset__item"
-                  disabled
-                  title="「即时渲染」的细则还没定，M2 先不提供"
-                >
-                  即时渲染
-                </button>
+                {/* 四档都可用：第四档「即时渲染」2026-09-28 落地，取代原先"置灰并说明原因"的占位 */}
               </div>
             </div>
           </section>

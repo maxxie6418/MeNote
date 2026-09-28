@@ -9,10 +9,11 @@
  * 切换条目时由父组件用 `key={itemId}` 重新挂载，避免两篇文档互相污染。
  */
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { markdown } from "@codemirror/lang-markdown";
-import { Compartment, EditorState } from "@codemirror/state";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view";
 import { useEffect, useRef, useState } from "react";
+import { livePreview } from "./live-preview";
 
 /** 交给外部的编辑器句柄：读、在光标处插入、按标记替换 */
 export interface EditorHandle {
@@ -27,6 +28,13 @@ export interface EditorProps {
   onChange: (value: string) => void;
   /** 只读（预览模式或锁定态） */
   readOnly?: boolean;
+  /**
+   * **即时渲染**（M5 首期，2026-09-28）：正文直接呈现渲染样式、光标所在行显示源码。
+   *
+   * 走 `Compartment` 重配置（与只读开关同一套做法）——所以"仅编辑 ↔ 即时渲染"切换
+   * **不重建文档**（架构 §3.3 的既定要求），撤销历史与光标位置都保住。
+   */
+  live?: boolean;
   /** 挂载后把句柄交给外部（状态栏计量、附件占位替换都用它） */
   onReady?: (handle: EditorHandle) => void;
   /**
@@ -53,6 +61,7 @@ export function Editor({
   initialValue,
   onChange,
   readOnly = false,
+  live = false,
   onReady,
   onFiles,
   className,
@@ -64,6 +73,8 @@ export function Editor({
   const onReadyRef = useRef(onReady);
   const onFilesRef = useRef(onFiles);
   const [readOnlyCompartment] = useState(() => new Compartment());
+  /** 即时渲染 / 行号那一档扩展（见 `EditorProps.live`） */
+  const [viewModeCompartment] = useState(() => new Compartment());
   /** 拖入时的落点提示（界面稿 §7.1：**可见的**虚线描边，而不只是改光标） */
   const [dragging, setDragging] = useState(false);
 
@@ -86,12 +97,19 @@ export function Editor({
       state: EditorState.create({
         doc: initialValue,
         extensions: [
-          lineNumbers(),
           history(),
-          markdown(),
+          /*
+            base 用 `markdownLanguage`（= commonmark + GFM）：`markdown()` 的**默认 base 是纯
+            CommonMark**，那样 `| a | b |` 不是表格、`- [ ]` 不是任务清单、`~~x~~` 不是删除线
+            （`[x]` 甚至会被解析成链接）。即时渲染要覆盖这些，编辑/分屏两档也用同一棵树，
+            免得"同一个文档在不同模式下解析结果不一样"。
+          */
+          markdown({ base: markdownLanguage }),
           highlightActiveLine(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.lineWrapping,
+          // 即时渲染下不显示行号（渲染视图里行号只是噪声）；两档都由这一个 Compartment 管
+          viewModeCompartment.of(viewModeExtensions(live)),
           readOnlyCompartment.of(EditorState.readOnly.of(readOnly)),
           /**
            * 粘贴/拖入文件：**先 `preventDefault`**，否则浏览器会把图片当成
@@ -144,6 +162,17 @@ export function Editor({
     });
   }, [readOnly, readOnlyCompartment]);
 
+  /*
+    即时渲染开关同理：**重配置而不重建文档**。
+    这一条不能省——"仅编辑 ↔ 即时渲染"在 React 树里的位置相同，不会重新挂载编辑器，
+    少了它就会"点了模式按钮没反应"。
+  */
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: viewModeCompartment.reconfigure(viewModeExtensions(live)),
+    });
+  }, [live, viewModeCompartment]);
+
   return (
     <div
       className={[className, dragging ? "editor--drop" : null].filter(Boolean).join(" ")}
@@ -155,6 +184,16 @@ export function Editor({
       <div ref={hostRef} data-editor aria-label={ariaLabel} />
     </div>
   );
+}
+
+/**
+ * "查看档位"那一组扩展：即时渲染（`livePreview`）或普通编辑（行号）。
+ *
+ * 两者**互斥**：渲染视图里行号是噪声；而即时渲染藏掉标记之后，行号会给"这一行是源码还是渲染结果"
+ * 添乱。它单独成函数是为了让创建时与重配置时**用的是同一份**，不会两边写岔。
+ */
+function viewModeExtensions(live: boolean): Extension {
+  return live ? [livePreview()] : [lineNumbers()];
 }
 
 /** 句柄：读 / 插入 / 按标记替换——三者都直接落在 `EditorView` 上，不持有全局状态 */

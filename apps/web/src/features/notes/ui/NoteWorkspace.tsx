@@ -35,12 +35,14 @@ const MarkdownPreview = lazy(async () => {
   return { default: mod.MarkdownPreview };
 });
 
-export type DocMode = "split" | "edit" | "preview";
+export type DocMode = "split" | "edit" | "preview" | "live";
 
 const MODE_LABEL: Record<DocMode, string> = {
   split: "分屏",
   edit: "仅编辑",
   preview: "仅预览",
+  // M5 首期（2026-09-28）：即时渲染——正文呈现渲染样式，光标所在行显示源码
+  live: "即时渲染",
 };
 
 export interface NoteWorkspaceProps {
@@ -433,7 +435,11 @@ export function NoteWorkspace({
                 <MarkdownPreview source={previewSource} attachments={attachmentsMeta} />
               </div>
             </div>
-          ) : mode === "edit" ? (
+          ) : mode === "edit" || mode === "live" ? (
+            /*
+              「仅编辑」与「即时渲染」共用这一个位置（都是单栏编辑器），差别只在 `live` 这个开关
+              ——它在 `Editor` 里走 `Compartment` 重配置，所以两档互切**不重建文档**。
+            */
             <div className="doc-split__pane">
               <Editor
                 key={item.id}
@@ -441,6 +447,7 @@ export function NoteWorkspace({
                 onChange={handleInput}
                 onReady={onEditorReady}
                 onFiles={onFiles}
+                live={mode === "live"}
                 ariaLabel="正文"
               />
             </div>

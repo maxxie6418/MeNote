@@ -105,8 +105,12 @@ describe("锁定态的单篇", () => {
       encryption: { encrypted: true, unlocked: true },
     });
     expect(screen.queryByText("这一篇已加密")).toBeNull();
-    // 编辑器是动态 import 的，等它挂上
-    expect(await screen.findByLabelText("正文")).toBeTruthy();
+    /*
+      编辑器是动态 import 的，等它挂上。
+      **给足超时**：RTL 默认 1s，而全量并行跑时这个分包（CodeMirror + 编辑器）会明显变慢——
+      2026-09-28 实测在全量套件里偶发超时、单文件跑 444ms 就过；加大到 5s 消掉这个假失败。
+    */
+    expect(await screen.findByLabelText("正文", {}, { timeout: 5000 })).toBeTruthy();
     expect(screen.getByText("已加密 · 本次已解锁")).toBeTruthy();
   });
 

@@ -17,10 +17,13 @@ export const StartViewSchema = v.picklist(["home", "recent", "starred"]);
 export type StartView = v.InferOutput<typeof StartViewSchema>;
 
 /**
- * 默认编辑模式（M04-03）。第四档「即时渲染」细则【后续定】，M2 只落前三档，
- * 第四档在界面上置灰并说明——所以这里也不进契约。
+ * 默认编辑模式（M04-03）。四档：双栏（默认）/ 仅编辑 / 仅预览 / **即时渲染**。
+ *
+ * 「即时渲染」于 2026-09-28 落地（wiki 设计文档 §7.1 的既定需求；首期覆盖范围见
+ * `docs/modules/Menote-即时渲染-设计-v1.md`）。加这一档**只扩取值、不动字段**：
+ * 旧客户端只发前三档仍然合法；前端与 Worker 同一次部署上线，不存在新旧值卡壳。
  */
-export const EditorModeSchema = v.picklist(["split", "edit", "preview"]);
+export const EditorModeSchema = v.picklist(["split", "edit", "preview", "live"]);
 export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
 
 /** 账户快捷菜单的可配置功能项（M18-03：第一版 5 个候选） */

@@ -500,7 +500,7 @@ describe("设置壳", () => {
     expect(onPatchSettings).toHaveBeenCalledWith({ task_view: { filter_form: "floating" } });
   });
 
-  it("编辑器页：三档可选，第四档「即时渲染」置灰并说明原因", async () => {
+  it("编辑器页：四档都可选，第四档「即时渲染」不再是置灰占位（2026-09-28 落地）", async () => {
     const user = userEvent.setup();
     const onPatchSettings = vi.fn();
 
@@ -509,9 +509,10 @@ describe("设置壳", () => {
     await user.click(screen.getByRole("button", { name: "仅预览" }));
     expect(onPatchSettings).toHaveBeenCalledWith({ editor_mode: "preview" });
 
-    const instant = screen.getByRole("button", { name: "即时渲染" }) as HTMLButtonElement;
-    expect(instant.disabled).toBe(true);
-    expect(instant.title).toContain("M2");
+    const live = screen.getByRole("button", { name: "即时渲染" }) as HTMLButtonElement;
+    expect(live.disabled).toBe(false);
+    await user.click(live);
+    expect(onPatchSettings).toHaveBeenCalledWith({ editor_mode: "live" });
   });
 
   it("member 看不到实例管理；切换注册开关会回调", async () => {

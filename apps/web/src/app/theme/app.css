@@ -584,6 +584,120 @@ button {
 }
 
 /*
+  —— 即时渲染（live preview）——
+  逻辑在 `app/editor/live-preview.ts`：基于 Lezer 语法树的装饰，光标所在行显示源码。
+
+  取值纪律：**只用现有令牌**——字号取 6 档刻度（h1 20 / h2 17 / h3 14 / h4 13 / h5 12 / h6 11），
+  颜色取 `--text-2` / `--muted` / `--primary-ink` / `--panel-2` / `--line*` / `--bg-soft`，
+  不新增令牌、不写裸色值与裸 px 字号。h5/h6 比正文小是刻意的（与 Obsidian 一致）。
+*/
+.cm-live-h1 {
+  font-size: var(--fs-display);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.cm-live-h2 {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.cm-live-h3 {
+  font-size: var(--fs-body-lg);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.cm-live-h4 {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.cm-live-h5 {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.cm-live-h6 {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* 强调三件套：与预览（`markdown-body strong` / `em` / `del`）同口径 */
+.cm-live-strong {
+  font-weight: 650;
+}
+
+.cm-live-em {
+  font-style: italic;
+}
+
+.cm-live-strike {
+  text-decoration: line-through;
+  text-decoration-color: var(--line-2);
+}
+
+/* 行内代码：底色 + 等宽（与预览 `.markdown-body code` 同一套取值） */
+.cm-live-code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+}
+
+/* 链接：地址藏起来（它是内部标识/长 URL），文字走 `--primary-ink`（橙色不能直接当浅色主题文字色） */
+.cm-live-link {
+  color: var(--primary-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--primary-line);
+}
+
+/* 引用：左侧一条竖线 + 次一级文字色（`>` 已在非活动行隐藏） */
+.cm-live-quote {
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--line-2);
+  color: var(--text-2);
+}
+
+/* 代码块：只上底色，围栏与语言保持源码可见（首期不做语言高亮） */
+.cm-live-codeblock {
+  background: var(--bg-soft);
+}
+
+/* 分隔线：`---` 藏掉之后由这一条上边框画出来 */
+.cm-live-hr {
+  border-top: 1px solid var(--line);
+}
+
+.cm-live-bullet {
+  padding-right: 2px;
+  color: var(--muted);
+}
+
+/*
+  图片占位块（首期不做内联图片）：虚线框 + 次一级文字色。
+  文案只带 alt（上传中的附件 alt 就是「上传中：文件名」），**不显示地址里的 sha256**。
+*/
+.cm-live-image {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--sp-2);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-family: var(--sans);
+}
+
+/*
   Markdown 排版类：**只管排版**（行高、标题边距、代码块等）。
 
   【2026-09-28 修复】此前它同时带着"阅读区"那套 `max-width:740px; margin:0 auto;

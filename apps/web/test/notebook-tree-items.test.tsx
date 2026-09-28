@@ -156,8 +156,8 @@ describe("笔记本树的空态与入口", () => {
         folders={[]}
         counts={{}}
         onCreateFolder={vi.fn(async () => undefined)}
-        onRenameFolder={NOOP}
-        onMoveFolder={NOOP}
+        onRenameFolder={async () => undefined}
+        onMoveFolder={async () => undefined}
       />,
     );
 
@@ -175,8 +175,8 @@ describe("笔记本树的空态与入口", () => {
         folders={TREE}
         counts={{}}
         onCreateFolder={async () => undefined}
-        onRenameFolder={NOOP}
-        onMoveFolder={NOOP}
+        onRenameFolder={async () => undefined}
+        onMoveFolder={async () => undefined}
       />,
     );
 

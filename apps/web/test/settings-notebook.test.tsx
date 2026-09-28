@@ -24,6 +24,13 @@ function renderPanel(overrides: Partial<Parameters<typeof SettingsPanel>[0]> = {
       userSettings={DEFAULT_USER_SETTINGS}
       onPatchSettings={onPatchSettings}
       onNavigate={vi.fn()}
+      /* 必填的接线（用例不碰它们，给最小可用值；2026-09-28 补：本文件此前漏了这几项，
+         `pnpm typecheck` 在 HEAD 上因此是红的——B4 批顺手修掉） */
+      registrationOpen={false}
+      registrationCloseAt={0}
+      onChangeRegistration={async () => undefined}
+      onChangePassword={async () => undefined}
+      onLogout={vi.fn()}
       {...overrides}
     />,
   );

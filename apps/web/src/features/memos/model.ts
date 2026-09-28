@@ -11,6 +11,7 @@
  */
 
 import { buildDocument, splitFirstLineAsTitle } from "@menote/mdcore";
+import { MEMO_SIDEBAR_MODULES } from "@menote/shared";
 
 /** 设置项的默认时区（M2-7 设置页接入后从用户设置读） */
 export const DEFAULT_TIME_ZONE = "Asia/Shanghai";
@@ -125,6 +126,55 @@ export interface MemoFilter {
 }
 
 export const EMPTY_FILTER: MemoFilter = { tag: null, range: "all" };
+
+// ——————————————— 侧栏的派生值（B3 批；全部纯函数，便于单测） ———————————————
+
+/**
+ * 侧栏模块的**可见顺序**（用户自定义：只做隐藏与调位置）。
+ *
+ * 三条纪律（与契约注释一一对应，见 `MemoSidebarSettingsSchema`）：
+ * 1. 显式 `order` 里**只认已知 id**，未知/已下线的直接忽略（不报错）；
+ * 2. `order` 里没出现的模块，按 `MEMO_SIDEBAR_MODULES` 的默认顺序补在后面；
+ * 3. `hidden` 里的去掉；`hidden` 里的未知 id 同样只是忽略。
+ */
+export function orderedSidebarModules(
+  sidebar: { order?: readonly string[]; hidden?: readonly string[] } | undefined,
+  all: readonly string[] = MEMO_SIDEBAR_MODULES,
+): string[] {
+  const hidden = new Set(sidebar?.hidden ?? []);
+  const explicit = (sidebar?.order ?? []).filter((id) => all.includes(id));
+  const rest = all.filter((id) => !explicit.includes(id));
+  return [...explicit, ...rest].filter((id) => !hidden.has(id));
+}
+
+/** 概述（原型 `.stat3`）：总条数 / 本月新增 / 记录天数 */
+export function summarizeMemos(
+  memos: readonly MemoLike[],
+  now: number,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): { total: number; thisMonth: number; activeDays: number } {
+  const month = dayKeyInZone(now, timeZone).slice(0, 7);
+  const days = new Set<string>();
+  let thisMonth = 0;
+  let total = 0;
+
+  for (const memo of memos) {
+    if (memo.memo_at === null) continue;
+    total += 1;
+    const key = dayKeyInZone(memo.memo_at, timeZone);
+    days.add(key);
+    if (key.startsWith(month)) thisMonth += 1;
+  }
+
+  return { total, thisMonth, activeDays: days.size };
+}
+
+/** 随机漫步（原型 `.subact--solo`）：从**当前筛选后**的 Memo 里随机挑一条 */
+export function pickRandomMemo<T>(memos: readonly T[], random: () => number = Math.random): T | null {
+  if (memos.length === 0) return null;
+  const index = Math.min(memos.length - 1, Math.max(0, Math.floor(random() * memos.length)));
+  return memos[index] ?? null;
+}
 
 /**
  * 标签 + 日期范围筛选。

@@ -152,6 +152,47 @@ export const DEFAULT_TASK_VIEW_SETTINGS: TaskViewSettings = {
   filter_form: "capsules",
 };
 
+/**
+ * Memo 侧栏的模块清单——**唯一真源**：契约的 `v.picklist`（下面的 schema）与渲染层的注册表
+ * 都从它推导，加一块模块只在这里加一个 id + 在 `features/memos/sidebar/` 注册一项，
+ * 漏写一处会编译不过（与 `QUICK_MENU_FEATURES` / `TASK_FILTER_FORMS` 同一个做法）。
+ *
+ * 顺序即**默认顺序**：概述 → 热力图 → 随机漫步 → 那年今日 → 日期 → 标签。
+ */
+export const MEMO_SIDEBAR_MODULES = [
+  "stats",
+  "heatmap",
+  "random",
+  "onThisDay",
+  "date",
+  "tags",
+] as const;
+
+export const MemoSidebarModuleIdSchema = v.picklist(MEMO_SIDEBAR_MODULES);
+export type MemoSidebarModuleId = v.InferOutput<typeof MemoSidebarModuleIdSchema>;
+
+/**
+ * Memo 侧栏的用户自定义（v0.5.10）：**只做隐藏与调位置**，不做用户级增删模块。
+ *
+ * 两条刻意的设计（用户 2026-09-28 口径：以后要能配置，复杂了就只做隐藏与位置）：
+ * 1. `order` 里没出现的模块按 `MEMO_SIDEBAR_MODULES` 的默认顺序补在后面；
+ * 2. **`order` / `hidden` 存的是字符串数组，不是 `v.picklist`** —— 这样"旧客户端读到新模块的 id
+ *    再保存"不会因为校验不过而把它丢掉（服务端 schema 也不会 422）；不认识/已下线的 id
+ *    由**渲染层忽略**。这是"配置能向上兼容"的关键，别改成 picklist。
+ */
+export const MemoSidebarSettingsSchema = v.object({
+  order: v.optional(v.array(v.string())),
+  hidden: v.optional(v.array(v.string())),
+});
+export type MemoSidebarSettings = v.InferOutput<typeof MemoSidebarSettingsSchema>;
+
+export const MemoViewSettingsSchema = v.object({
+  sidebar: v.optional(MemoSidebarSettingsSchema, {}),
+});
+export type MemoViewSettings = v.InferOutput<typeof MemoViewSettingsSchema>;
+
+export const DEFAULT_MEMO_VIEW_SETTINGS: MemoViewSettings = { sidebar: {} };
+
 export const UserSettingsSchema = v.object({
   start_view: StartViewSchema,
   timezone: v.string(),
@@ -175,6 +216,11 @@ export const UserSettingsSchema = v.object({
    * 服务端读旧 JSON 时由 schema 补默认值（**不需要迁移**：设置是整份 JSON）。
    */
   task_view: v.optional(TaskViewSettingsSchema, DEFAULT_TASK_VIEW_SETTINGS),
+  /**
+   * Memo 视图的偏好（v0.5.10）：侧栏模块的顺序与隐藏。同样 **optional + 默认值**
+   * （旧客户端 PUT 设置不带该字段不会被 422）。语义与可演进纪律见 `MemoSidebarSettingsSchema`。
+   */
+  memo_view: v.optional(MemoViewSettingsSchema, DEFAULT_MEMO_VIEW_SETTINGS),
 });
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
@@ -188,6 +234,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   privacy: DEFAULT_PRIVACY_SETTINGS,
   version_trash: DEFAULT_VERSION_TRASH_SETTINGS,
   task_view: DEFAULT_TASK_VIEW_SETTINGS,
+  memo_view: DEFAULT_MEMO_VIEW_SETTINGS,
 };
 
 /** `GET /api/settings` 与同步响应里的设置载荷 */

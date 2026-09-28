@@ -263,35 +263,48 @@ button {
   margin-top: 6px;
 }
 
-/* 采用盒式分段控件（与浏览三段的下划线页签刻意区分，DESIGN.md §2.5-4） */
+/* 采用盒式分段控件（与浏览三段的下划线页签刻意区分，DESIGN.md §2.5-4）
+   取值照原型 `.seg`（2026-09-28 补齐）：**浅灰外壳 + 选中为白底浮起块**、按钮 25px / `--fs-body`、
+   选中图标转主色。此前我们写的是"白底 + 灰选中 + 11px 小字"，与原型明显不同——页头的
+   视图切换因此看着"还是老样式"（取值层漏改，不是结构没做）。 */
 .segmented {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  gap: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   padding: 2px;
-  background: var(--bg);
+  background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
 
 .segmented__item {
-  flex: 1;
-  height: 23px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--sp-1);
+  height: 25px;
+  padding: 0 var(--sp-3);
   border-radius: var(--radius-sm);
-  font-size: var(--fs-micro);
   color: var(--muted);
+  font-size: var(--fs-body);
   white-space: nowrap;
+  transition: background 0.16s, color 0.16s;
+}
+
+.segmented__item:hover {
+  color: var(--text-2);
 }
 
 .segmented__item[aria-pressed="true"] {
-  background: var(--panel-3);
+  background: var(--panel);
   color: var(--text);
   font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+
+/* 选中的那一档图标转主色（原型 `.seg button[aria-pressed="true"] svg`） */
+.segmented__item[aria-pressed="true"] .ic {
+  color: var(--primary);
 }
 
 .nav {
@@ -3153,10 +3166,27 @@ button.chip--tag:hover {
   opacity: 0.55;
 }
 
-/* 录入框的模式行：分段控件占满余下宽度（原型 .mode-tabs{flex:1;min-width:0}） */
+/* 录入框的模式行：分段控件占满余下宽度（原型 .mode-tabs{flex:1;min-width:0}）
+   按钮取值也照原型 `.seg--incomposer`：更矮更紧凑（23px / sp-2 / `--fs-small`）。 */
 .segmented--compact {
   flex: 1;
   min-width: 0;
+}
+
+.segmented--compact .segmented__item {
+  height: 23px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-small);
+}
+
+/* 页头右侧那一组视图切换（原型 `.seg--view`）：定宽 + 按钮平分，切 Memo/待办时位置不跳 */
+.tkhead__main .segmented {
+  flex: none;
+  min-width: 176px;
+}
+
+.tkhead__main .segmented__item {
+  flex: 1;
 }
 
 /* —— 加密空间：贴底固定，不随导航滚动（DESIGN.md §2.2；M2 只做外观与占位） —— */

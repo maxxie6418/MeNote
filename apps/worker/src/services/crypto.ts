@@ -4,12 +4,17 @@
  * 服务端在这里只做三件事：
  * 1. 存取材料（`user_crypto` 一行，四个端点）；
  * 2. **校验材料形状**（BLOB 长度、KDF 白名单），不合格一律 `invalid`——防住"客户端写坏后再也解不开"；
- * 3. "重置隐私密码"时用 `BACKUP_CRED_KEY` 解出内容密钥 K 交给浏览器（这是服务端**唯一**碰密钥的地方）。
+ * 3. "重置隐私密码"时用**从根机密派生的备份包裹键**解出内容密钥 K 交给浏览器
+ *    （这是服务端**唯一**碰密钥的地方）。
  *
  * 服务端**不参与**日常的密码校验：解锁是浏览器本地对照 `verifier`，服务端连明文密码都见不到。
+ *
+ * 【2026-09-28】实例机密从两个收敛成一个：备份包裹键不再单独配 `BACKUP_CRED_KEY`，
+ * 而是 `SHA-256(AUTH_PEPPER ‖ "menote-backup-wrap-v1")` **域分离派生**（见 shared 的
+ * `backupWrapKeyInput`）。所以"缺 BACKUP_CRED_KEY 就 503"这个状态**不存在了**。
  */
 import {
-  BACKUP_CRED_KEY_SECRET,
+  backupWrapKeyInput,
   CRYPTO_IV_BYTES,
   CRYPTO_KEY_BYTES,
   CRYPTO_SALT_BYTES,
@@ -124,13 +129,7 @@ export async function putCryptoMaterials(
 
   let backupWrap = input.materials.k_wrapped_backup;
   if (input.k !== undefined) {
-    const secret = env[BACKUP_CRED_KEY_SECRET];
-    if (!secret) {
-      throw new DomainError(
-        "retry_later",
-        "实例未配置 BACKUP_CRED_KEY 机密，无法启用隐私锁（请联系实例管理员）",
-      );
-    }
+    const pepper = requirePepper(env);
     let contentKey: Uint8Array<ArrayBuffer>;
     try {
       contentKey = cryptoBlobFromBase64Url(input.k);
@@ -140,7 +139,7 @@ export async function putCryptoMaterials(
     if (contentKey.length !== CRYPTO_KEY_BYTES) {
       throw new DomainError("invalid", "内容密钥长度不合法");
     }
-    backupWrap = await wrapContentKeyWithBackupSecret(secret, contentKey);
+    backupWrap = await wrapContentKey(pepper, contentKey);
   } else if (backupWrap === undefined) {
     throw new DomainError(
       "invalid",
@@ -197,27 +196,42 @@ export async function deleteCryptoMaterials(db: D1Database, userId: string): Pro
   return { enabled: false, materials: null, rev: 0, updated_at: 0 };
 }
 
-/** `BACKUP_CRED_KEY` 是任意字符串机密，用 SHA-256 归一成 32 字节 AES-GCM 密钥 */
-async function deriveBackupCredKey(
-  secret: string,
+/**
+ * 取根机密 `AUTH_PEPPER`；缺了**明确报错**，绝不拿空串去派生。
+ *
+ * 这是唯一剩下的"缺机密"分支，而且与 `config-guard` 同一条理由：用空密钥算出来的东西
+ * 看起来能用、实则不安全（会静默降级成一个谁都能复算的包裹键）。
+ * 正常情况下走不到这里——缺 `AUTH_PEPPER` 时注册/登录已经 503，用户根本进不来。
+ */
+function requirePepper(env: EnvBindings): string {
+  const pepper = env.AUTH_PEPPER;
+  if (typeof pepper !== "string" || pepper.length === 0) {
+    throw new DomainError(
+      "retry_later",
+      "服务未完成配置：缺少 AUTH_PEPPER，请在部署设置中添加后重试",
+    );
+  }
+  return pepper;
+}
+
+/** 备份包裹键 = `SHA-256(AUTH_PEPPER ‖ 用途后缀)`，收敛成 32 字节 AES-GCM 密钥 */
+async function deriveBackupWrapKey(
+  pepper: string,
   usages: Array<"decrypt" | "encrypt"> = ["decrypt"],
 ): Promise<CryptoKey> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  const digest = await crypto.subtle.digest("SHA-256", backupWrapKeyInput(pepper));
   return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, usages);
 }
 
 /**
- * 用备份凭据把内容密钥 K 包起来（**只在首次启用时走这条路**）。
+ * 用派生的备份包裹键把内容密钥 K 包起来（**只在首次启用时走这条路**）。
  *
- * 为什么服务端要做这一步：`BACKUP_CRED_KEY` 是 Worker 机密，浏览器拿不到也不该拿到；
+ * 为什么服务端要做这一步：根机密是 Worker 机密，浏览器拿不到也不该拿到；
  * 而"重置隐私密码"要求服务端能解出 K。所以启用时浏览器把 K 交给服务端包一次
  * （内容本来就是明文存储，服务端知道 K 不改变保护边界，见《隐私锁设计》§1 的 P1/P3）。
  */
-async function wrapContentKeyWithBackupSecret(
-  secret: string,
-  contentKey: Uint8Array<ArrayBuffer>,
-): Promise<string> {
-  const wrapKey = await deriveBackupCredKey(secret, ["encrypt"]);
+async function wrapContentKey(pepper: string, contentKey: Uint8Array<ArrayBuffer>): Promise<string> {
+  const wrapKey = await deriveBackupWrapKey(pepper, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(CRYPTO_IV_BYTES));
   const sealed = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, wrapKey, contentKey),
@@ -232,28 +246,22 @@ async function wrapContentKeyWithBackupSecret(
 }
 
 /**
- * `POST /api/crypto/reset`：忘记隐私密码时用备份凭据解出内容密钥 K。
+ * `POST /api/crypto/reset`：忘记隐私密码时用**派生的备份包裹键**解出内容密钥 K。
  *
- * 缺机密时**只让这一条路失败**（503 + 明确文案），不拦其它端点——否则一个没配的机密
- * 会让整个隐私锁功能全灭，用户还看不到原因。
+ * 【2026-09-28】原先这里会因"没配 `BACKUP_CRED_KEY`"而 503；现在只配一个根机密
+ * `AUTH_PEPPER`，那个失败模式随之消失（缺根机密则在 `requirePepper` 处明确报错）。
  */
 export async function resetContentKey(
   env: EnvBindings,
   db: D1Database,
   userId: string,
 ): Promise<CryptoResetResponse> {
-  const secret = env[BACKUP_CRED_KEY_SECRET];
-  if (!secret) {
-    throw new DomainError(
-      "retry_later",
-      "实例未配置 BACKUP_CRED_KEY 机密，重置隐私密码暂不可用（其它功能不受影响）",
-    );
-  }
+  const pepper = requirePepper(env);
 
   const row = await db.prepare(SQL_SELECT_USER_CRYPTO).bind(userId).first<CryptoRow>();
   if (!row) throw new DomainError("not_found", "尚未启用隐私锁");
 
-  const wrapKey = await deriveBackupCredKey(secret);
+  const wrapKey = await deriveBackupWrapKey(pepper);
   const blob = unpackCryptoBlob(new Uint8Array(row.k_wrapped_backup));
   const payload = new Uint8Array(blob.ciphertext.length + blob.tag.length);
   payload.set(blob.ciphertext, 0);
@@ -267,8 +275,8 @@ export async function resetContentKey(
       payload,
     );
   } catch {
-    // 只有"机密换过"会走到这里；不要把细节回给客户端（可能被用来探测机密）
-    throw new DomainError("invalid", "无法解开内容密钥：实例的 BACKUP_CRED_KEY 可能已更换");
+    // 只有"根机密换过"会走到这里；不要把细节回给客户端（可能被用来探测机密）
+    throw new DomainError("invalid", "无法解开内容密钥：实例的根机密可能已更换");
   }
 
   return { k: cryptoBlobToBase64Url(new Uint8Array(plain)) };

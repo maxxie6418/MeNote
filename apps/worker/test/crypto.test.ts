@@ -3,8 +3,11 @@
  * 隐私锁门禁材料（M3-3）：`GET / PUT / POST reset / DELETE /api/crypto`。
  *
  * 测的是"服务端这一侧的责任"：存取、**材料形状校验**（宁可不存也不存坏）、
- * 首次启用时用 `BACKUP_CRED_KEY` 包出第二份包裹、有关闭前置校验、
+ * 首次启用时用**从根机密派生的备份包裹键**包出第二份包裹、有关闭前置校验、
  * 以及"重置密码"用它解出 K。服务端不校验隐私密码本身——那是浏览器用 verifier 做的事。
+ *
+ * 【2026-09-28】实例机密收敛成一个：只有 `AUTH_PEPPER` 时上面这些必须全部可用；
+ * 缺 `AUTH_PEPPER` 时明确报错（不拿空串派生），这两条都有用例钉住。
  */
 import {
   CRYPTO_KEY_BYTES,
@@ -20,7 +23,7 @@ import {
 } from "@menote/shared";
 import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { resetContentKey } from "../src/services/crypto";
+import { putCryptoMaterials, resetContentKey } from "../src/services/crypto";
 import type { EnvBindings } from "../src/types";
 import { freshDatabase } from "./helpers";
 
@@ -113,7 +116,7 @@ describe("GET /api/crypto", () => {
 });
 
 describe("PUT /api/crypto（启用 / 改密）", () => {
-  it("首次启用：浏览器给明文 K，服务端用 BACKUP_CRED_KEY 包出第二份包裹", async () => {
+  it("首次启用：浏览器给明文 K，服务端用派生出的备份包裹键包出第二份包裹", async () => {
     const k = new Uint8Array(CRYPTO_KEY_BYTES).fill(21);
     const { status, state } = await putCrypto(alice.cookie, {
       materials: fakeMaterials(),
@@ -274,19 +277,48 @@ describe("POST /api/crypto/reset（忘记隐私密码）", () => {
     expect(res.status).toBe(404);
   });
 
-  it("缺 BACKUP_CRED_KEY 机密时：启用被拒（503）、且其它端点照常", async () => {
-    const withoutSecret = { DB: env.DB } as unknown as EnvBindings;
+  it("只配一个根机密：只有 AUTH_PEPPER 时，启用能包出备份包裹、重置能解出 K", async () => {
+    // 故意只给 AUTH_PEPPER（EnvBindings 里已经没有别的机密了）
+    const onlyPepper = { DB: env.DB, AUTH_PEPPER: env.AUTH_PEPPER } as EnvBindings;
+    const k = new Uint8Array(CRYPTO_KEY_BYTES).fill(41);
+
+    const state = await putCryptoMaterials(
+      onlyPepper,
+      env.DB,
+      alice.id,
+      { materials: fakeMaterials(), k: base64UrlEncode(k) },
+      1,
+    );
+    expect(state.enabled).toBe(true);
+
+    const reset = await resetContentKey(onlyPepper, env.DB, alice.id);
+    expect(reset.k).toBe(base64UrlEncode(k));
+  });
+
+  it("缺 AUTH_PEPPER 时明确报错：不拿空串派生、也不用空密钥包裹", async () => {
+    const withoutPepper = { DB: env.DB } as EnvBindings;
+    const k = new Uint8Array(CRYPTO_KEY_BYTES).fill(42);
 
     await expect(
-      resetContentKey(withoutSecret, env.DB, alice.id),
+      putCryptoMaterials(
+        withoutPepper,
+        env.DB,
+        alice.id,
+        { materials: fakeMaterials(), k: base64UrlEncode(k) },
+        1,
+      ),
     ).rejects.toMatchObject({ code: "retry_later" });
 
-    // 未配置机密时连启用也做不了（服务端包不出第二份包裹）——但 GET 照常
+    await expect(resetContentKey(withoutPepper, env.DB, alice.id)).rejects.toMatchObject({
+      code: "retry_later",
+    });
+
+    // 读取端点不受影响（与 config-guard 的分工一致：只拦真正需要机密的那几条路）
     const read = await SELF.fetch(`${ORIGIN}/api/crypto`, { headers: { Cookie: alice.cookie } });
     expect(read.status).toBe(200);
   });
 
-  it("备份包裹解不开（机密换过）时 422，不泄漏细节", async () => {
+  it("备份包裹解不开（根机密换过）时 422，不泄漏细节", async () => {
     // 直接用客户端伪造的备份包裹启用（不是服务端包的），reset 必然解不开
     await env.DB.prepare(
       `INSERT INTO user_crypto (user_id, kdf, kdf_iterations, kdf_salt, verifier, k_wrapped_pw, k_wrapped_backup, rev, created_at, updated_at)
@@ -308,6 +340,6 @@ describe("POST /api/crypto/reset（忘记隐私密码）", () => {
     });
     expect(res.status).toBe(422);
     const body = (await res.json()) as { message: string };
-    expect(body.message).toContain("BACKUP_CRED_KEY");
+    expect(body.message).toContain("根机密");
   });
 });

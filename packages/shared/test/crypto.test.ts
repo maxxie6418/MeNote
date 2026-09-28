@@ -3,6 +3,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  BACKUP_WRAP_CONTEXT,
+  backupWrapKeyInput,
   CRYPTO_BLOB_HEADER_BYTES,
   CRYPTO_BLOB_VERSION,
   CRYPTO_IV_BYTES,
@@ -16,6 +18,7 @@ import {
   CryptoStateSchema,
   cryptoBlobFromBase64Url,
   cryptoBlobToBase64Url,
+  derivedKeyInput,
   packCryptoBlob,
   unpackCryptoBlob,
 } from "../src/crypto";
@@ -111,5 +114,31 @@ describe("schema", () => {
     expect(
       v.safeParse(CryptoStateSchema, { ...state, enabled: true, materials: MATERIALS }).success,
     ).toBe(true);
+  });
+});
+
+describe("根机密的域分离派生（2026-09-28 起实例只配一个机密）", () => {
+  const decoder = new TextDecoder();
+
+  it("备份包裹键的派生输入 = 根机密 ＋ 用途后缀；同输入稳定", () => {
+    expect(decoder.decode(backupWrapKeyInput("pepper-abc"))).toBe(`pepper-abc${BACKUP_WRAP_CONTEXT}`);
+    // 同样的输入必须字节一致（否则每次重启都换钥匙，已存的包裹全解不开）
+    expect(Array.from(backupWrapKeyInput("pepper-abc"))).toEqual(
+      Array.from(backupWrapKeyInput("pepper-abc")),
+    );
+  });
+
+  it("同一根机密 + 不同用途 → 不同派生输入（域分离，不是复用同一把钥匙）", () => {
+    const forBackup = derivedKeyInput("pepper-abc", BACKUP_WRAP_CONTEXT);
+    const forSomethingElse = derivedKeyInput("pepper-abc", "menote-share-token-v1");
+    expect(decoder.decode(forBackup)).not.toBe(decoder.decode(forSomethingElse));
+    // 也**不等于**"直接拿根机密当钥匙"——后缀必须真的参与派生
+    expect(decoder.decode(forBackup)).not.toBe("pepper-abc");
+  });
+
+  it("不同根机密 → 不同派生输入", () => {
+    expect(decoder.decode(backupWrapKeyInput("pepper-a"))).not.toBe(
+      decoder.decode(backupWrapKeyInput("pepper-b")),
+    );
   });
 });

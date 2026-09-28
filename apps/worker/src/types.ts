@@ -20,16 +20,12 @@ export interface EnvBindings extends StorageEnv {
   /**
    * 服务端机密（架构 §13.2）：`auth_verifier = HMAC-SHA256(AUTH_PEPPER, 登录密钥)` 与
    * prelogin 假盐派生都用它。本地放 `.dev.vars`，生产在部署页填写。
+   *
+   * 【2026-09-28】它同时是**唯一的根机密**：隐私锁内容密钥 K 的"备份包裹键"由它
+   * **域分离派生**（`SHA-256(AUTH_PEPPER ‖ "menote-backup-wrap-v1")`，见 `@menote/shared`
+   * 的 `backupWrapKeyInput`）。原先单独的 `BACKUP_CRED_KEY` 机密已删除——自托管只配一个。
    */
   AUTH_PEPPER: string;
-  /**
-   * 备份凭据机密（架构 §7.2 / §12.4）：包裹内容密钥 K 的第二把钥匙——「重置隐私密码」时
-   * 服务端用它解出 K（Cron 备份加密在 M5 也会用）。
-   *
-   * **可选**：没配时只让 `POST /api/crypto/reset` 返回明确错误、不拦其它端点
-   * （否则一个没配的机密会让整个隐私锁功能全灭）。派生：`SHA-256(机密字节)` → 32 字节 AES-GCM 密钥。
-   */
-  BACKUP_CRED_KEY?: string;
 }
 
 /** 已通过会话鉴权的用户（挂到 Hono 的 context 上） */

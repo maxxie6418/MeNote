@@ -48,8 +48,40 @@ export const CRYPTO_VERIFIER_BYTES =
   new TextEncoder().encode(CRYPTO_VERIFIER_PLAINTEXT).length +
   CRYPTO_TAG_BYTES;
 
-/** Worker 机密名（架构 §7.2 / §12.4）：包裹 K 的备份凭据，自 M3 起需要 */
-export const BACKUP_CRED_KEY_SECRET = "BACKUP_CRED_KEY";
+/**
+ * 备份包裹键的**用途后缀**（域分离）。2026-09-28 起实例只配**一个**根机密 `AUTH_PEPPER`，
+ * 备份包裹键由它派生：`SHA-256(AUTH_PEPPER 字节 ‖ 本后缀)`。
+ *
+ * 为什么要后缀：同一把根机密要供**多个用途**（登录校验走 `HMAC(AUTH_PEPPER, …)`、
+ * 分享令牌签名将来也由它派生），加用途后缀才能保证**各用途的钥匙互不可推**——
+ * 这不是"把同一个字节串当两把钥匙用"，而是从一个根机密做域分离派生。
+ * 后缀里带版本号：将来换派生算法就改它（代价是老包裹解不开，属可预期的一次性迁移）。
+ */
+export const BACKUP_WRAP_CONTEXT = "menote-backup-wrap-v1";
+
+/**
+ * 备份包裹键的**派生输入**：`根机密 ＋ 用途后缀`。
+ *
+ * 只给"输入"、不在这里做 SHA-256：`packages/shared` 的定位是**纯契约**（不做加密与派生，
+ * 见文件头），实际的摘要与导入密钥在 worker 的 `services/crypto.ts` 里做一次。
+ * 但**用途后缀必须定义在这里**——它是"同一根机密派生出多把钥匙"这件事的唯一定义处，
+ * 将来 M5 的备份导出若要复算同一把键，拿到的也是同一份规则。
+ */
+export function backupWrapKeyInput(pepper: string): Uint8Array {
+  return derivedKeyInput(pepper, BACKUP_WRAP_CONTEXT);
+}
+
+/**
+ * 通用形态：`根机密 ＋ 用途后缀` 的字节串。
+ *
+ * 暴露出来是为了让"**域分离**"这条性质可被单测直接钉住（同机密 + 不同用途 → 不同输入），
+ * 也给将来的第二个用途（如分享令牌签名）一个现成入口——**不要**各自手拼字符串。
+ * 返回类型不写成 `Uint8Array<ArrayBuffer>`：`TextEncoder.encode` 给的是 `ArrayBufferLike`
+ * 支撑的视图，而下游（`crypto.subtle.digest`）接受它，硬转反而要多一次无谓复制。
+ */
+export function derivedKeyInput(secret: string, context: string): Uint8Array {
+  return new TextEncoder().encode(`${secret}${context}`);
+}
 
 /** 拆开的密文块 */
 export interface CryptoBlob {
@@ -146,9 +178,9 @@ export type CryptoMaterialsInput = v.InferOutput<typeof CryptoMaterialsInputSche
 /**
  * `PUT /api/crypto` 的请求体。
  *
- * `k` 只在**首次启用**时提供：浏览器没有（也不该有）`BACKUP_CRED_KEY`，
- * 所以第二份包裹（供 Worker/重置使用的 `k_wrapped_backup`）由**服务端**用它包出来。
- * 改密 / 重置时浏览器手里已有旧的备份包裹，原样带回来即可，不必再传 K。
+ * `k` 只在**首次启用**时提供：浏览器没有（也不该有）根机密 `AUTH_PEPPER`，
+ * 所以第二份包裹（供 Worker/重置使用的 `k_wrapped_backup`）由**服务端**用它派生出的
+ * 备份包裹键包出来。改密 / 重置时浏览器手里已有旧的备份包裹，原样带回来即可，不必再传 K。
  */
 export const CryptoWriteSchema = v.object({
   materials: CryptoMaterialsInputSchema,

@@ -11,10 +11,10 @@ export default defineConfig({
       },
       // 测试专用机密：不是真实密钥（生产在部署页填写，本地放 .dev.vars）。
       // 只在这里注入，避免把机密塞进 wrangler.jsonc 的 vars。
+      // 2026-09-28 起实例只配**一个**根机密：备份包裹键由它域分离派生，不再有 BACKUP_CRED_KEY。
       miniflare: {
         bindings: {
           AUTH_PEPPER: "test-pepper-not-a-real-secret",
-          BACKUP_CRED_KEY: "test-backup-cred-not-a-real-secret",
         },
         /**
          * 附件桶（M4-4）：**只在测试里**给 miniflare 加一个同名桶绑定。

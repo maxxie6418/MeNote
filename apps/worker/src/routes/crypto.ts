@@ -4,7 +4,7 @@
  * 四个端点，都需要会话（不是公开接口）：
  * | `GET /api/crypto`        | 取材料（未启用时 `enabled: false`） |
  * | `PUT /api/crypto`        | 启用 / 改密 / 重置后整体覆盖 |
- * | `POST /api/crypto/reset` | 忘记密码：服务端用 `BACKUP_CRED_KEY` 解出 K |
+ * | `POST /api/crypto/reset` | 忘记密码：服务端用**从根机密派生的备份包裹键**解出 K |
  * | `DELETE /api/crypto`     | 关闭隐私锁（有隐私内容时拒绝） |
  *
  * 响应一律 `no-store`：这是门禁材料，任何中间缓存都不该留。

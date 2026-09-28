@@ -193,6 +193,20 @@ export type MemoViewSettings = v.InferOutput<typeof MemoViewSettingsSchema>;
 
 export const DEFAULT_MEMO_VIEW_SETTINGS: MemoViewSettings = { sidebar: {} };
 
+/**
+ * 笔记本视图的偏好（B2 批）：**左侧笔记本树里是否列出条目**（笔记 / 表格）。
+ *
+ * 默认 **`false`**（用户 2026-09-28 拍板：默认贴原型形态——树里只列文件夹；
+ * 想在树里看到"文件"，去设置 › 通用 里打开）。
+ * 同样是 **optional + 默认值**：旧客户端 PUT 设置不带该字段不会被 422。
+ */
+export const NotebookSettingsSchema = v.object({
+  show_items: v.optional(v.boolean(), false),
+});
+export type NotebookSettings = v.InferOutput<typeof NotebookSettingsSchema>;
+
+export const DEFAULT_NOTEBOOK_SETTINGS: NotebookSettings = { show_items: false };
+
 export const UserSettingsSchema = v.object({
   start_view: StartViewSchema,
   timezone: v.string(),
@@ -221,6 +235,11 @@ export const UserSettingsSchema = v.object({
    * （旧客户端 PUT 设置不带该字段不会被 422）。语义与可演进纪律见 `MemoSidebarSettingsSchema`。
    */
   memo_view: v.optional(MemoViewSettingsSchema, DEFAULT_MEMO_VIEW_SETTINGS),
+  /**
+   * 笔记本视图的偏好（B2 批）：左侧树里是否列出条目。同样 **optional + 默认值**
+   * （旧客户端 PUT 设置不带该字段不会被 422）；默认 `false`，见 `NotebookSettingsSchema`。
+   */
+  notebook: v.optional(NotebookSettingsSchema, DEFAULT_NOTEBOOK_SETTINGS),
 });
 export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 
@@ -235,6 +254,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   version_trash: DEFAULT_VERSION_TRASH_SETTINGS,
   task_view: DEFAULT_TASK_VIEW_SETTINGS,
   memo_view: DEFAULT_MEMO_VIEW_SETTINGS,
+  notebook: DEFAULT_NOTEBOOK_SETTINGS,
 };
 
 /** `GET /api/settings` 与同步响应里的设置载荷 */

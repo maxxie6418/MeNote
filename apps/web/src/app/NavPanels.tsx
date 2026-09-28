@@ -36,6 +36,13 @@ export interface NavPanelsInput {
   onVaultMissing: () => void;
   /** 切到某个空间内文件夹（`null` = 空间根） */
   onOpenVaultFolder: (folderId: string | null) => void;
+  /**
+   * **左侧笔记本树里是否列出条目**（B2 批；来自设置 `notebook.show_items`，默认 `false`）。
+   * 注意：**只作用于笔记本树**——加密空间那棵树永远不列条目（锁定时列标题就等于泄露内容）。
+   */
+  showItems: boolean;
+  /** 点树里的条目：打开它（`App` 负责先让分栏浏览让位） */
+  onOpenItem: (itemId: string) => void;
 }
 
 /** 空间视图里当前选中的子夹（空间根算 `null`） */
@@ -172,6 +179,10 @@ export function navPanels(input: NavPanelsInput): {
           workspace.moveFolderOutOfVault(folder.id, { onProgress }),
       }}
       onDeleteFolder={input.onDeleteFolder}
+      /* 树里列条目（B2 批）：开关来自设置（默认关），条目来自 workspace 那张稳定的索引表 */
+      showItems={input.showItems}
+      itemsByFolder={workspace.itemsByFolder}
+      onOpenItem={input.onOpenItem}
     />
   );
 

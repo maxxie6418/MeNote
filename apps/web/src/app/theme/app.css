@@ -5010,3 +5010,123 @@ button.chip--tag:hover {
   word-break: break-word;
   white-space: pre-wrap;
 }
+
+/* ============================================================
+   笔记本：列表列的文件夹分组 + 树里列条目（B2 批，2026-09-28）
+
+   取值复用既有语言，**不新增视觉语言**（DESIGN.md）：
+   - 组头 = "灰色组名 + 计数微标"，与待办分组头（`.tasklist__gl` / `.tasklist__n`）同一口径；
+   - 组头与树行的折叠三角共用"收起时转 -90°"那套观感；
+   - 文件夹图标取 `--amber`（原型 `.folder-ic` 就是 amber，两主题各自核对过的令牌）。
+   ============================================================ */
+
+.notelist__group + .notelist__group {
+  margin-top: var(--sp-2);
+}
+
+/* 子夹分组缩进一档 + 一条引导线（与笔记本树 `.tree__children` 同一手法） */
+.notelist__group.is-sub {
+  margin-left: var(--sp-3);
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--line);
+}
+
+.notelist__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  font-size: var(--fs-micro);
+}
+
+.notelist__collapse {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+.notelist__collapse:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.notelist__collapse[aria-expanded="false"] .ic {
+  transform: rotate(-90deg);
+}
+
+.notelist__folder {
+  display: grid;
+  place-items: center;
+  color: var(--amber);
+}
+
+.notelist__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notelist__n {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.notelist__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 树里列出的条目：只有类型图标 + 标题，比文件夹行再浅一档 */
+.tree-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--sp-1) var(--sp-4);
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  text-align: left;
+}
+
+.tree-item:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.tree-item--more {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* 文件夹图标单独上色（不波及同一行里的锁角标等其它图标） */
+.tree-row__folder {
+  display: grid;
+  place-items: center;
+  color: var(--amber);
+}
+
+/* 笔记本树的空态：没有文件夹时的说明 + 可见的新建入口 */
+.tree-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-2) var(--sp-2) var(--sp-3);
+  color: var(--muted);
+  font-size: var(--fs-small);
+}

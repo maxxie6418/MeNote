@@ -34,10 +34,12 @@ import {
   collectTags,
   DEFAULT_VIEW,
   filterByView,
+  viewPathOf,
   viewTitle,
   type NotesView,
 } from "./views";
 import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
+import { indexItemsByFolder } from "./groups";
 import { useNoteCreation } from "./useNoteCreation";
 import { useVaultScope } from "./useVaultScope";
 import { useItemPatchActions } from "./useItemPatchActions";
@@ -81,6 +83,8 @@ export interface NotesWorkspace {
    * 列表头用它显示父级面包屑（`工作 › 本周`）。
    */
   viewPath: string[];
+  /** 按文件夹分好组的条目（B2 批；左侧树"显示条目"用，根目录条目不在此表） */
+  itemsByFolder: Record<string, LocalItem[]>;
   setView: (view: NotesView) => void;
   tags: Array<{ tag: string; count: number }>;
   selectedId: string | null;
@@ -548,6 +552,12 @@ export function useNotesWorkspace(
   const docLoading = openingId !== null;
   const docEpoch = docVersion?.epoch ?? 0;
 
+  /**
+   * **按文件夹分好组的条目**（B2 批）：左侧笔记本树"显示条目"用。算法在 `groups.ts` 的纯函数里
+   * （那里有单测）；`useMemo` 保证身份稳定——它会进 `FolderTree` 的 props，新建对象就会让整棵树重渲染。
+   */
+  const itemsByFolder = useMemo(() => indexItemsByFolder(allItems), [allItems]);
+
   /** 列表头标题（`viewTitle` 是纯函数，不认识文件夹数据） */
   const title = useMemo(() => {
     if (view.kind === "notebook" && view.folderId) {
@@ -557,26 +567,8 @@ export function useNotesWorkspace(
     return viewTitle(view);
   }, [folders, view]);
 
-  /**
-   * 当前视图的**层级路径**（2026-09-28 加入：用户要求"界面上要能看出层级结构"）。
-   *
-   * 只有「笔记本」视图且选中了文件夹时才有路径：根视图是空数组，第 2 层是 `["父夹", "子夹"]`。
-   * 列表头据此显示父级面包屑（`工作 › 本周`），与左侧树的缩进/折叠互为印证。
-   * 深度上限就是 `MAX_FOLDER_DEPTH`，循环再带一个 guard，防脏数据（父链成环）时死循环。
-   */
-  const viewPath = useMemo(() => {
-    if (view.kind !== "notebook" || !view.folderId) return [];
-    const path: string[] = [];
-    let current = folders.find((row) => row.id === view.folderId);
-    let guard = 0;
-    while (current && guard <= MAX_FOLDER_DEPTH) {
-      path.unshift(current.name);
-      const parentId: string | null = current.parent_id;
-      current = parentId ? folders.find((row) => row.id === parentId) : undefined;
-      guard += 1;
-    }
-    return path;
-  }, [folders, view]);
+  /** 层级路径（`工作 › 本周`）：算法在 `views.ts` 的纯函数 `viewPathOf` 里，有单测 */
+  const viewPath = useMemo(() => viewPathOf(view, folders), [folders, view]);
 
   /**
    * Memo 的发布与编辑（M2-5 / Q19）：**拆到 `features/memos/useMemoWrite.ts`**——
@@ -643,6 +635,7 @@ export function useNotesWorkspace(
       view,
       viewTitle: title,
       viewPath,
+      itemsByFolder,
       setView,
       tags,
       selectedId,
@@ -740,6 +733,7 @@ export function useNotesWorkspace(
       updateMemo,
       view,
       viewPath,
+      itemsByFolder,
       vaultScope,
     ],
   );

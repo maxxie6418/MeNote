@@ -301,6 +301,35 @@ export function SettingsPanel({
                   ))}
                 </div>
               </div>
+
+              {/*
+                笔记本树里是否列出条目（B2 批；用户 2026-09-28 拍板做成设置项、**默认关**）。
+                说明按三分法：字段级一句留在 `setrow__desc`，"树里默认只有文件夹"这类口径进 ⓘ。
+              */}
+              <div className="setrow">
+                <div className="setrow__label">
+                  <span className="setrow__name">笔记本树里显示条目</span>
+                  <span className="setrow__desc">打开后，左侧每个文件夹下会列出里面的笔记与表格</span>
+                </div>
+                <span className="setrow__control">
+                  <InfoHint label="笔记本树显示条目的口径">
+                    默认只列出文件夹（贴原型）；打开后每个文件夹最多列 50 条，超出给「还有 N 条…」，
+                    点它会把中间列切到那个文件夹。加密空间那一支**永远不列条目**。
+                  </InfoHint>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="toggle"
+                    aria-checked={userSettings.notebook.show_items}
+                    aria-label="笔记本树里显示条目"
+                    onClick={() =>
+                      onPatchSettings({
+                        notebook: { show_items: !userSettings.notebook.show_items },
+                      })
+                    }
+                  />
+                </span>
+              </div>
             </section>
 
             <CardQuickMenu

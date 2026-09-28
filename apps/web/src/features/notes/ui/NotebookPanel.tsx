@@ -57,6 +57,13 @@ export interface NotebookPanelProps {
    * 删除文件夹（M4-12）：**只报事件**，确认框与实时计数在这里给（同一个面板能看到 folders/counts）。
    */
   onDeleteFolder?: (folder: LocalFolder) => void | Promise<void>;
+  /**
+   * **树里列出条目**（B2 批；用户 2026-09-28 拍板做成设置项、默认关）：开关、按文件夹分好组的
+   * 条目、点开条目的动作。三项一起给才会列条目（见 `FolderTree`；**加密空间那棵树永远不给**）。
+   */
+  showItems?: boolean;
+  itemsByFolder?: Readonly<Record<string, LocalItem[]>>;
+  onOpenItem?: (itemId: string) => void;
 }
 
 export function NotebookPanel({
@@ -69,6 +76,9 @@ export function NotebookPanel({
   onMoveFolder,
   vault,
   onDeleteFolder,
+  showItems = false,
+  itemsByFolder,
+  onOpenItem,
 }: NotebookPanelProps) {
   const [creatingIn, setCreatingIn] = useState<{ parentId: string | null } | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -181,6 +191,21 @@ export function NotebookPanel({
         </div>
       ) : null}
 
+      {/*
+        空态（B2 批）：此前"没建过文件夹"时这里是**一片空白**——只有 `+` 一个入口，
+        用户反馈的"笔记本里没有文件夹和文件树"最直接的原因就是它。
+        现在给一行说明 + 一个可见的「新建文件夹」入口（`+` 仍然在）。
+      */}
+      {folders.length === 0 ? (
+        <div className="tree-empty">
+          <span>还没有文件夹</span>
+          <Button variant="secondary" size="sm" onClick={() => beginCreate(null)}>
+            <Icon name="plus" size={13} />
+            新建文件夹
+          </Button>
+        </div>
+      ) : null}
+
       <FolderTree
         folders={folders}
         selectedId={selectedFolderId}
@@ -190,6 +215,9 @@ export function NotebookPanel({
         onMove={(folder) => setMoving({ folder, targets: folderMoveTargets(folders, folder.id) })}
         onCreateChild={(folder) => beginCreate(folder)}
         onDelete={onDeleteFolder ? (folder) => setDeleting(folder) : undefined}
+        showItems={showItems}
+        itemsByFolder={itemsByFolder}
+        onOpenItem={onOpenItem}
         vault={
           vault
             ? {

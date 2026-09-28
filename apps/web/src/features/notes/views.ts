@@ -12,6 +12,7 @@
  * `@menote/shared` 的 `privacy.ts`，这里只调用。
  */
 import { canShowInList, type PrivacyGate } from "@menote/shared";
+import { MAX_FOLDER_DEPTH } from "./folders";
 export interface ViewableItem {
   id: string;
   type: "note" | "table" | "memo";
@@ -98,4 +99,34 @@ export function collectTags(
 }
 
 // ——————————————————————————— 文件夹相关的视图筛选 ———————————————————————————
+
+/** 路径要用到的文件夹字段（避免把整个 LocalFolder 拖进来） */
+export interface FolderPathLike {
+  id: string;
+  name: string;
+  parent_id: string | null;
+}
+
+/**
+ * 当前视图的**层级路径**（2026-09-28：用户要求"界面上要能看出层级结构"）。
+ *
+ * 只有「笔记本」视图且选中了文件夹时才有路径：根视图与其它视图都是空数组，
+ * 第 2 层是 `["父夹", "子夹"]`。列表头据此显示父级面包屑（`工作 › 本周`），
+ * 与左侧树的缩进/折叠互为印证。
+ *
+ * 循环带一个 guard（`MAX_FOLDER_DEPTH`）：脏数据（父链成环）时也不许死循环。
+ */
+export function viewPathOf(view: NotesView, folders: readonly FolderPathLike[]): string[] {
+  if (view.kind !== "notebook" || !view.folderId) return [];
+  const path: string[] = [];
+  let current: FolderPathLike | undefined = folders.find((row) => row.id === view.folderId);
+  let guard = 0;
+  while (current && guard <= MAX_FOLDER_DEPTH) {
+    path.unshift(current.name);
+    const parentId: string | null = current.parent_id;
+    current = parentId ? folders.find((row) => row.id === parentId) : undefined;
+    guard += 1;
+  }
+  return path;
+}
 

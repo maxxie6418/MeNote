@@ -15,6 +15,7 @@ import { restoreNotice } from "../../features/trash/model";
 import type { NotesWorkspace } from "../../features/notes/useNotesWorkspace";
 import type { DocMode } from "../../features/notes/ui/NoteWorkspace";
 import { NoteList } from "../../features/notes/ui/NoteList";
+import { groupNotesByFolder } from "../../features/notes/groups";
 import { NoteWorkspace } from "../../features/notes/ui/NoteWorkspace";
 import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPanel";
 import { useVersions } from "../../features/versions/useVersions";
@@ -89,6 +90,25 @@ export function NotesPane({
     workspace.allItems.find((item) => item.id === pendingDelete)?.title ??
     workspace.selected?.title ??
     "这条内容";
+
+  /** 当前选中的笔记本（`null` = 全部笔记 / 非笔记本视图）；分组与"隐藏顶层组头"都用它 */
+  const selectedNotebookId =
+    workspace.view.kind === "notebook" ? (workspace.view.folderId ?? null) : null;
+
+  /*
+    按文件夹分组（B2 批）：只在「笔记本」视图算（最近编辑 / 收藏 / 标签 / 搜索保持扁平——
+    那几个视图没有笔记本上下文）。**必须 `useMemo`**：`groups` 的身份进 `NoteList` 的 props
+    浅比较，每次渲染新建数组就等于把整张列表的 `memo` 废掉（2026-09-27 性能修复盯的就是这个）。
+  */
+  const noteGroups = useMemo(() => {
+    if (workspace.view.kind !== "notebook") return undefined;
+    const rootFolderId = workspace.view.folderId ?? null;
+    return groupNotesByFolder(
+      workspace.items,
+      workspace.folders,
+      rootFolderId ? { rootFolderId } : {},
+    );
+  }, [workspace.view, workspace.items, workspace.folders]);
 
   /*
     传给列表的动作**必须身份稳定**：`NotesPane` 每次渲染都重跑（编辑器每敲一个字都会经
@@ -174,6 +194,8 @@ export function NotesPane({
           items={workspace.items}
           title={workspace.viewTitle}
           path={workspace.viewPath}
+          groups={noteGroups}
+          hideGroupRootHeader={selectedNotebookId !== null}
           selectedId={workspace.selectedId}
           loading={workspace.loading}
           summaries={workspace.summaries}

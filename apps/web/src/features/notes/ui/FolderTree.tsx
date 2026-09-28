@@ -14,7 +14,7 @@
  * 这样 `app/` 不反向依赖具体 feature（架构 §2.3.3 的依赖方向）。
  */
 import { useState } from "react";
-import type { LocalFolder } from "../../../data/db";
+import type { LocalFolder, LocalItem } from "../../../data/db";
 import { Icon } from "../../../app/ui/Icon";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { canCreateChildFolder } from "../folders";
@@ -48,7 +48,20 @@ export interface FolderTreeProps {
    * 不给这个回调时菜单里不出现「删除」——未接线的视图不显示假按钮。
    */
   onDelete?: (folder: LocalFolder) => void;
+  /**
+   * **树里列出条目**（B2 批；用户 2026-09-28 拍板做成设置项、默认关）。
+   *
+   * 三个 props 必须**一起给**才会列条目：开关、按文件夹分好组的条目、点开条目的动作。
+   * **加密空间那棵树永远不给**——锁定时列标题就等于泄露内容，而且那是"空间内有什么"的信息，
+   * 只在空间视图里看（隐私锁设计 §6.2）。
+   */
+  showItems?: boolean;
+  itemsByFolder?: Readonly<Record<string, LocalItem[]>>;
+  onOpenItem?: (itemId: string) => void;
 }
+
+/** 每个文件夹下最多列这么多条，超出给「还有 N 条…」（避免 2000 篇把树撑爆） */
+export const TREE_ITEMS_LIMIT = 50;
 
 export function FolderTree({
   folders,
@@ -60,6 +73,9 @@ export function FolderTree({
   onCreateChild,
   vault,
   onDelete,
+  showItems = false,
+  itemsByFolder,
+  onOpenItem,
 }: FolderTreeProps) {
   /**
    * 折叠起来的文件夹 id（2026-09-28 加入：用户要求"界面上要能看出层级结构"）。
@@ -92,6 +108,9 @@ export function FolderTree({
     onCreateChild,
     vault,
     onDelete,
+    showItems,
+    items: itemsByFolder?.[folder.id] ?? [],
+    onOpenItem,
   });
 
   return (
@@ -136,6 +155,10 @@ interface FolderNodeProps {
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** 树里列条目（B2 批）：开关 + 这一夹直接包含的条目 + 点开动作 */
+  showItems?: boolean;
+  items?: LocalItem[];
+  onOpenItem?: (itemId: string) => void;
 }
 
 function FolderNode({
@@ -151,6 +174,9 @@ function FolderNode({
   collapsible = false,
   collapsed = false,
   onToggleCollapse,
+  showItems = false,
+  items = [],
+  onOpenItem,
 }: FolderNodeProps) {
   // 第 2 层不出现"新建子文件夹"入口（那个位置永远没有合法动作）
   const canCreateChild = canCreateChildFolder(folder);
@@ -180,9 +206,10 @@ function FolderNode({
         aria-current={active}
         onClick={() => onSelect(folder.id)}
       >
-        <Icon name="folder" size={13} />
-        <span className="nav-item__label">{folder.name}</span>
-        {/* 空间内的文件夹带小锁角标（设计 §9.2-②：解锁后空间内文件夹仍然一眼可辨） */}
+        <span className="tree-row__folder">
+          <Icon name="folder" size={13} />
+        </span>
+        <span className="nav-item__label">{folder.name}</span>        {/* 空间内的文件夹带小锁角标（设计 §9.2-②：解锁后空间内文件夹仍然一眼可辨） */}
         {inVault ? (
           <span className="itemrow__mark" title="这个文件夹在加密空间里">
             <Icon name="lock" size={13} />
@@ -191,6 +218,36 @@ function FolderNode({
         {folder.pending ? <span className="nav-item__count">待上传</span> : null}
         <span className="nav-item__count">{count}</span>
       </button>
+
+      {/*
+        树里列条目（B2 批；默认关，由设置 › 通用 打开）。
+        每夹最多 `TREE_ITEMS_LIMIT` 条，超出给一行「还有 N 条…」→ **切到那个文件夹**
+        （把中间列当全量视图看，树只做"认路"）。
+      */}
+      {showItems && onOpenItem && items.length > 0 ? (
+        <ul className="tree-items">
+          {items.slice(0, TREE_ITEMS_LIMIT).map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                className="tree-item"
+                onClick={() => onOpenItem(item.id)}
+                title={item.title ?? "未命名"}
+              >
+                <Icon name={item.type === "table" ? "table" : "note"} size={13} />
+                <span className="nav-item__label">{item.title ?? "未命名"}</span>
+              </button>
+            </li>
+          ))}
+          {items.length > TREE_ITEMS_LIMIT ? (
+            <li>
+              <button type="button" className="tree-item tree-item--more" onClick={() => onSelect(folder.id)}>
+                还有 {items.length - TREE_ITEMS_LIMIT} 条…
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
 
       <div className="tree-row__menu">
         <DropdownMenu

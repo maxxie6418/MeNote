@@ -12,6 +12,8 @@ import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
 import { ItemListHead } from "../../../app/workarea/ItemListHead";
+import type { NoteGroup } from "../groups";
+import { NoteGroupView } from "./NoteGroup";
 import { NoteRow } from "./NoteRow";
 
 export interface NoteListProps {
@@ -20,6 +22,13 @@ export interface NoteListProps {
   title: string;
   /** 当前视图的层级路径（笔记本视图才有；见 `ItemListHead`） */
   path?: readonly string[];
+  /**
+   * **按文件夹分组**（B2 批）：只有「笔记本」视图才传（由 `NotesPane` 用 `groupNotesByFolder` 算好）。
+   * 不传或空数组 = 现有扁平列表（最近编辑 / 收藏 / 标签 / 搜索都走这条）。
+   */
+  groups?: ReadonlyArray<NoteGroup<LocalItem>>;
+  /** 分组时是否隐藏**顶层**那一组的组头（选中某个笔记本时用：列表头已经写着名字与路径） */
+  hideGroupRootHeader?: boolean;
   selectedId: string | null;
   loading: boolean;
   /** 行内摘要（已缓存正文的第一行，可缺省） */
@@ -98,6 +107,8 @@ export function NoteListView({
   items,
   title,
   path = [],
+  groups,
+  hideGroupRootHeader = false,
   selectedId,
   loading,
   summaries = {},
@@ -115,6 +126,29 @@ export function NoteListView({
   const empty = emptyCopy(title);
   /** 这一篇在本次浏览器会话里是否已解密（单篇门禁与隐私锁态无关，故单独问） */
   const isUnlocked = (itemId: string): boolean => unlockedItemIds?.has(itemId) ?? false;
+
+  /**
+   * 行的渲染**只有这一份**：分组视图与扁平视图共用（`NoteGroupView` 拿到的是这个函数）。
+   * 每次渲染新建这个函数是安全的——`NoteRow` 的 `memo` 比的是**行自己的 props**
+   * （item / selected / summary / 回调），不含这个函数。
+   */
+  const renderRows = (rows: LocalItem[]) =>
+    rows.map((item) => (
+      <NoteRow
+        key={item.id}
+        item={item}
+        selected={item.id === selectedId}
+        summary={summaries[item.id]}
+        unlocked={isUnlocked(item.id)}
+        folders={folders}
+        vault={vault}
+        onSelect={onSelect}
+        onMove={onMove}
+        onTogglePinned={onTogglePinned}
+        onToggleStarred={onToggleStarred}
+        onDelete={onDelete}
+      />
+    ));
 
   return (
     <section className="listpane" aria-label="笔记列表">
@@ -148,25 +182,20 @@ export function NoteListView({
               }
             />
           </div>
-        ) : (
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {items.map((item) => (
-              <NoteRow
-                key={item.id}
-                item={item}
-                selected={item.id === selectedId}
-                summary={summaries[item.id]}
-                unlocked={isUnlocked(item.id)}
-                folders={folders}
-                vault={vault}
-                onSelect={onSelect}
-                onMove={onMove}
-                onTogglePinned={onTogglePinned}
-                onToggleStarred={onToggleStarred}
-                onDelete={onDelete}
+        ) : groups && groups.length > 0 ? (
+          /* 分组视图（笔记本视图）：组头 + 组内行 + 子夹二级组 */
+          <div className="notelist">
+            {groups.map((group, index) => (
+              <NoteGroupView
+                key={group.folderId ?? `group-${index}`}
+                group={group}
+                renderRows={renderRows}
+                hideHeader={hideGroupRootHeader && index === 0}
               />
             ))}
-          </ul>
+          </div>
+        ) : (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>{renderRows(items)}</ul>
         )}
       </div>
     </section>

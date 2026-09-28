@@ -205,6 +205,9 @@ export default function App() {
       }
     },
     onVaultMissing: () => pushToast("加密空间还没同步下来，请稍后重试", "error"),
+    // 树里列条目（B2 批）：开关来自设置；点条目＝让分栏浏览让位再打开它
+    showItems: userSettings.settings.notebook.show_items,
+    onOpenItem: (itemId) => { setBrowse(null); void workspace.open(itemId); },
     onOpenVaultFolder: (folderId) => {
       setBrowse(null);
       workspace.setView({ kind: "notebook", folderId: folderId ?? workspace.vault.id });

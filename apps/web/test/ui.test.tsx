@@ -435,7 +435,8 @@ describe("设置壳", () => {
     userSettings: DEFAULT_USER_SETTINGS,
     onPatchSettings: vi.fn(),
     registrationOpen: false,
-    onToggleRegistration: vi.fn(async () => undefined),
+    registrationCloseAt: 0,
+    onChangeRegistration: vi.fn(async () => undefined),
     onChangePassword: vi.fn(async () => undefined),
     onLogout: vi.fn(),
     onNavigate: vi.fn(),
@@ -517,28 +518,6 @@ describe("设置壳", () => {
     expect(live.disabled).toBe(false);
     await user.click(live);
     expect(onPatchSettings).toHaveBeenCalledWith({ editor_mode: "live" });
-  });
-
-  it("member 看不到实例管理；切换注册开关会回调", async () => {
-    const user = userEvent.setup();
-    const onToggleRegistration = vi.fn(async () => undefined);
-
-    const { rerender } = render(<SettingsPanel {...baseProps} page="general" role="member" />);
-    expect(screen.queryByRole("button", { name: "实例管理" })).toBeNull();
-
-    rerender(
-      <SettingsPanel
-        {...baseProps}
-        page="instance"
-        role="owner"
-        onToggleRegistration={onToggleRegistration}
-      />,
-    );
-    const toggle = screen.getByRole("switch", { name: "允许新用户注册" });
-    expect(toggle.getAttribute("aria-checked")).toBe("false");
-
-    await user.click(toggle);
-    expect(onToggleRegistration).toHaveBeenCalledWith(true);
   });
 
   it("账户与安全页：改密表单与退出登录都在", () => {

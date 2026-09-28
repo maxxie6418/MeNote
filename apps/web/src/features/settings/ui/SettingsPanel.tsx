@@ -8,10 +8,12 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import type { EditorMode, StartView, TaskFilterForm, UserSettings } from "@menote/shared";
 import { TASK_FILTER_FORMS } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
+import { InfoHint } from "../../../app/ui/InfoHint";
 import type { ThemeMode } from "../../../app/theme/useTheme";
 import { SETTINGS_PAGES, type SettingsPageId } from "../../../app/router";
 import { APP_VERSION, PROJECT_REPO_URL } from "../../../app/about";
 import { CardQuickMenu } from "./CardQuickMenu";
+import { InstancePage } from "./InstancePage";
 
 const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   general: { title: "通用", summary: "启动视图、时区、主题与快捷菜单" },
@@ -109,7 +111,13 @@ export interface SettingsPanelProps {
   userSettings: UserSettings;
   onPatchSettings: (partial: Partial<UserSettings>) => void;
   registrationOpen: boolean;
-  onToggleRegistration: (open: boolean) => Promise<void>;
+  /** 注册到期时间戳；`0` = 不自动到期（见 `InstancePage`） */
+  registrationCloseAt: number;
+  /**
+   * 改注册开关。`closeAt = 0` 表示不自动关闭——**清空日期必须显式传 0**：
+   * 省略字段服务端会当成"不更新"，清不掉原来的到期时间。
+   */
+  onChangeRegistration: (open: boolean, closeAt: number) => Promise<void>;
   onChangePassword: (current: string, next: string) => Promise<void>;
   onLogout: () => void;
   /**
@@ -142,7 +150,8 @@ export function SettingsPanel({
   userSettings,
   onPatchSettings,
   registrationOpen,
-  onToggleRegistration,
+  registrationCloseAt,
+  onChangeRegistration,
   onChangePassword,
   onLogout,
   privacyPage,
@@ -211,7 +220,10 @@ export function SettingsPanel({
               <div className="setrow">
                 <div className="setrow__label">
                   <span className="setrow__name">主题</span>
-                  <span className="setrow__desc">切换只改主题属性，不整页重渲染</span>
+                  {/* 实现口径（不改 DOM、不整页重渲染）收进 InfoHint（DESIGN.md §5.4-1） */}
+                  <InfoHint label="主题说明">
+                    切换只改 `data-theme` 属性与令牌，不重建页面；主题是**设备级**偏好，不跟随账号同步。
+                  </InfoHint>
                 </div>
                 <div className="radioset" role="group" aria-label="主题">
                   {THEME_OPTIONS.map((option) => (
@@ -356,9 +368,11 @@ export function SettingsPanel({
               <div className="setrow">
                 <div className="setrow__label">
                   <span className="setrow__name">已登录设备</span>
-                  <span className="setrow__desc">
-                    设备列表与"踢出其他设备"将在后续里程碑提供；当前改密码会使其他设备的会话立即失效。
-                  </span>
+                  {/* 里程碑与背景收进 InfoHint；**"还没有这个功能"这件事保持可见**（右侧「后续」） */}
+                  <InfoHint label="登录设备说明">
+                    设备列表与"踢出其他设备"将在后续里程碑提供。在那之前，改登录密码会让其他设备的
+                    会话立即失效——这是当前唯一能远程断开别的设备的办法。
+                  </InfoHint>
                 </div>
                 <span className="setrow__desc">后续</span>
               </div>
@@ -367,32 +381,13 @@ export function SettingsPanel({
         ) : null}
 
         {page === "instance" ? (
-          <section className="setcard" aria-label="实例管理">
-            <h3 className="setcard__title">注册开关</h3>
-            <div className="setrow">
-              <div className="setrow__label">
-                <span className="setrow__name">允许新用户注册</span>
-                <span className="setrow__desc">
-                  关闭后登录页不再显示注册入口；已登录用户不受影响
-                </span>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                className="toggle"
-                aria-checked={registrationOpen}
-                aria-label="允许新用户注册"
-                onClick={() => void onToggleRegistration(!registrationOpen)}
-              />
-            </div>
-            <div className="setrow">
-              <div className="setrow__label">
-                <span className="setrow__name">成员账户管理</span>
-                <span className="setrow__desc">将在 M6 提供</span>
-              </div>
-              <span className="setrow__desc">M6</span>
-            </div>
-          </section>
+          /* 内容抽到 `InstancePage.tsx`：一是这里接近行数预算，二是"注册开关 + 到期"自成一块 */
+          <InstancePage
+            key={`${registrationOpen}-${registrationCloseAt}`}
+            registrationOpen={registrationOpen}
+            registrationCloseAt={registrationCloseAt}
+            onChangeRegistration={onChangeRegistration}
+          />
         ) : null}
 
         {page === "about" ? (
@@ -401,7 +396,6 @@ export function SettingsPanel({
             <div className="setrow">
               <div className="setrow__label">
                 <span className="setrow__name">版本</span>
-                <span className="setrow__desc">当前部署的版本号</span>
               </div>
               <span className="setrow__desc">v{APP_VERSION}</span>
             </div>

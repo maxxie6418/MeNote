@@ -58,10 +58,16 @@ export function SettingsView({
       .catch(() => setRegistration(null));
   }, [page, role]);
 
-  const toggleRegistration = useCallback(async (open: boolean) => {
-    const next = await adminApi.setRegistration(open);
+  /**
+   * 改注册开关（`功能拆解` M19-02：开关含**到期自动关闭**）。
+   * `closeAt = 0` 表示不自动到期——清空日期时必须显式传 0：接口按 `closeAt === undefined`
+   * 判断"这次不更新 close_at"，传 undefined 会清不掉原来的到期时间。
+   */
+  const changeRegistration = useCallback(async (open: boolean, closeAt: number) => {
+    const next = await adminApi.setRegistration(open, closeAt);
     setRegistration(next);
-    pushToast(open ? "已开放注册" : "已关闭注册", "success");
+    if (!open) pushToast("已关闭注册", "success");
+    else pushToast(closeAt > 0 ? "已开放注册（到期自动关闭）" : "已开放注册", "success");
   }, []);
 
   return (
@@ -74,7 +80,8 @@ export function SettingsView({
       userSettings={userSettings}
       onPatchSettings={onPatchSettings}
       registrationOpen={registration?.open ?? false}
-      onToggleRegistration={toggleRegistration}
+      registrationCloseAt={registration?.close_at ?? 0}
+      onChangeRegistration={changeRegistration}
       onChangePassword={async (current, next) => {
         pushToast(await onChangeLoginPassword(current, next), "success");
       }}

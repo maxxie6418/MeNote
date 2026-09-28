@@ -47,7 +47,13 @@ describe("卡片与回收站入口", () => {
 
     // 即时生效：没有「保存」这类按钮
     expect(screen.queryByRole("button", { name: /保存/ })).toBeNull();
-    expect(screen.getByText("修改即时生效并同步到其他设备。")).toBeTruthy();
+    /*
+      2026-09-28：这句是**口径说明**（"即时生效并同步"），按 DESIGN.md §5.4-1 收进卡头 ⓘ。
+      断言跟着改成"口径仍在、可读，但不再平铺"——比原来更严格（同时钉住了"不占版面"这件事）。
+    */
+    expect(screen.queryByText("修改即时生效并同步到其他设备。")).toBeNull();
+    expect(screen.getByRole("button", { name: "版本与回收站说明" })).toBeTruthy();
+    expect(screen.getByRole("tooltip").textContent).toContain("即时生效并同步到其他设备");
   });
 
   it("条目数为 0 时照常可点（进去看空状态）", async () => {

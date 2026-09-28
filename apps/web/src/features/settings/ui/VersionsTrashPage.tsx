@@ -21,6 +21,7 @@ import {
   type VersionTrashSettings,
 } from "@menote/shared";
 import { Button } from "../../../app/ui/Controls";
+import { InfoHint } from "../../../app/ui/InfoHint";
 
 export interface VersionsTrashPageProps {
   settings: VersionTrashSettings;
@@ -62,12 +63,18 @@ export function VersionsTrashPage({
   return (
     <>
       <section className="setcard" aria-label="版本与回收站">
-        <h3 className="setcard__title">版本与回收站</h3>
+        <h3 className="setcard__title">
+          版本与回收站
+          {/* 口径说明收 InfoHint；**实时计数与校验错误保持平铺可见**（DESIGN.md §5.4-2） */}
+          <InfoHint label="版本与回收站说明">
+            改动即时生效并同步到其他设备，没有「保存」按钮。版本在每次自动封存或手动保存时产生，
+            超出策略后自动稀疏化；回收站里的内容到期由每日维护永久删除。
+          </InfoHint>
+        </h3>
 
         <div className="setrow">
           <div className="setrow__label">
             <span className="setrow__name">回收站</span>
-            <span className="setrow__desc">删除的内容在这里保留，到期后自动永久删除</span>
           </div>
           <div className="setrow__control">
             <span className="nav-item__count" role="status">
@@ -104,12 +111,14 @@ export function VersionsTrashPage({
           </div>
         </div>
 
-        {/* 保留密度是**定稿规则**（设计 §4.3），M4 只读展示——不给假的"可改"入口 */}
+        {/* 保留密度是**定稿规则**（设计 §4.3），M4 只读展示——不给假的"可改"入口。
+            「为什么不能改」必须**可见**（DESIGN.md §6.1：禁用不能只靠悬停），所以去掉原来的 `title`，
+            把它并进可见文案。 */}
         <div className="setrow">
           <div className="setrow__label">
             <span className="setrow__name">保留密度</span>
-            <span className="setrow__desc" title="这是既定规则，暂不开放修改">
-              {VERSION_KEEP_DENSITY_HINT}
+            <span className="setrow__desc">
+              既定规则，暂不开放修改：{VERSION_KEEP_DENSITY_HINT}
             </span>
           </div>
         </div>
@@ -190,6 +199,7 @@ export function VersionsTrashPage({
         <div className="setrow">
           <div className="setrow__label">
             <span className="setrow__name">回收站保留天数</span>
+            {/* 破坏性后果（永久删除）保持可见，不进 InfoHint */}
             <span className="setrow__desc">到期由每日维护永久删除</span>
           </div>
           <div className="setrow__control">
@@ -209,8 +219,6 @@ export function VersionsTrashPage({
             <span className="setrow__unit">天</span>
           </div>
         </div>
-
-        <p className="hint-line">修改即时生效并同步到其他设备。</p>
       </section>
     </>
   );

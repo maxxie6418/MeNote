@@ -8,6 +8,7 @@
  * 让用户先配好，到那个里程碑就自然生效；比"现在禁用、以后再来配"更省事。
  */
 import { QUICK_MENU_FEATURES, type QuickMenuFeature } from "@menote/shared";
+import { InfoHint } from "../../../app/ui/InfoHint";
 
 export interface CardQuickMenuProps {
   selected: readonly QuickMenuFeature[];
@@ -25,15 +26,20 @@ export function CardQuickMenu({ selected, onChange }: CardQuickMenuProps) {
 
   return (
     <section className="setcard" aria-label="账户快捷菜单">
-      <h3 className="setcard__title">账户快捷菜单</h3>
-      <p className="setrow__desc">
-        点头像弹出菜单里显示哪些功能；「设置」与「退出登录」固定在底部，不在此列。
-      </p>
+      <h3 className="setcard__title">
+        账户快捷菜单
+        {/* 口径说明收 InfoHint（DESIGN.md §5.4-1）；每一行自己的状态仍逐行可见 */}
+        <InfoHint label="账户快捷菜单说明">
+          点头像弹出的菜单里显示哪些功能，勾选即时生效；「设置」与「退出登录」固定在底部、不在此列。
+          带里程碑标记的项可以现在就配好，到那个里程碑会自然生效。
+        </InfoHint>
+      </h3>
       {QUICK_MENU_FEATURES.map((feature) => (
         <div className="setrow" key={feature.id}>
           <div className="setrow__label">
             <span className="setrow__name">{feature.label}</span>
             {feature.pendingStep ? (
+              /* 未实现的原因**保持可见**（DESIGN.md §6.1：禁用要说明原因，且不能只靠悬停） */
               <span className="setrow__desc">将在 {feature.pendingStep} 生效</span>
             ) : null}
           </div>

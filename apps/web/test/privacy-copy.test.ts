@@ -47,9 +47,18 @@ describe("文案红线", () => {
     expect(hits, `以下文件出现了红线文案：\n${hits.join("\n")}`).toEqual([]);
   });
 
-  it("正面口径必须如实写明保护边界", () => {
-    const settings = SOURCES["../src/features/settings/ui/PrivacySettingsPage.tsx"];
-    expect(settings, "设置页源码没扫到（路径变了就改这里）").toBeTruthy();
+  it("正面口径必须如实写明保护边界（扫描面＝隐私锁页及其子组件）", () => {
+    /*
+      2026-09-28：隐私锁页按 M3 界面稿拆成六卡后，"内容密钥不变"这句随「隐私密码」卡
+      移到了 `ui/privacy/PrivacyPasswordCard.tsx`。断言的本意是"**设置页这一屏**必须写出这两件事"，
+      所以扫描面改为整个设置页目录（页面 + 子组件）——比只扫一个文件更严，也不会因为再拆文件而误红。
+    */
+    const files = Object.entries(SOURCES).filter(([path]) =>
+      path.startsWith("../src/features/settings/ui/"),
+    );
+    expect(files.length, "设置页目录没扫到（路径变了就改这里）").toBeGreaterThan(2);
+
+    const settings = files.map(([, text]) => text).join("\n");
     // 隐私密码不上传、内容密钥不变这两件事必须写出来（设计 §6.12、§9.3）
     expect(settings).toContain("不会上传");
     expect(settings).toContain("内容密钥不变");

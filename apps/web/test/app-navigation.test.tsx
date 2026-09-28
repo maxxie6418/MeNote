@@ -166,7 +166,8 @@ describe("设置页的可见出口", () => {
     userSettings: { ...DEFAULT_USER_SETTINGS, quick_menu: [] },
     onPatchSettings: vi.fn(),
     registrationOpen: false,
-    onToggleRegistration: vi.fn(),
+    registrationCloseAt: 0,
+    onChangeRegistration: vi.fn(async () => undefined),
     onChangePassword: vi.fn(async () => undefined),
     onLogout: vi.fn(),
   };

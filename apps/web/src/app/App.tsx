@@ -457,6 +457,9 @@ export default function App() {
                 lock={{ ...privacy, lockState: privacy.runtime.lockState }}
                 settings={userSettings.settings.privacy}
                 onPatchSettings={patchSettings}
+                /* 离线信号用**既有的同步状态**（引擎在 navigator.onLine === false 时报 offline），
+                   不新造全局状态；代价是它最多滞后一次同步尝试 */
+                offline={syncStatus === "offline"}
               />
             }
             versionsPage={

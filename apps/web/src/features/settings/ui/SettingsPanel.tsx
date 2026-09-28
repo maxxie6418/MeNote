@@ -33,17 +33,37 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
  */
 const NAV_ORDER: readonly SettingsPageId[] = SETTINGS_PAGES;
 
-/** 常用时区（第一版给常见几档 + 当前值；完整时区表等有需要再补） */
-const TIMEZONE_OPTIONS = [
-  "Asia/Shanghai",
-  "Asia/Tokyo",
-  "Asia/Singapore",
-  "Europe/London",
-  "Europe/Berlin",
-  "America/New_York",
-  "America/Los_Angeles",
-  "UTC",
-];
+/**
+ * 时区候选（2026-09-28 补全）：**运行时取完整时区表**，不再只给常见几档。
+ *
+ * `Intl.supportedValuesOf("timeZone")` 是标准 API（Node 18+/各主流浏览器均支持）；
+ * 老引擎上取不到时退回"当前值 + 常见几档"，并把当前值放最前——不让设置项因为平台差异变成空的。
+ * 控件仍是原生 `<select>`：400+ 项的**可搜索下拉**是另一个组件（见设置页稿 §八-3），本轮不引。
+ */
+/** 运行时能取到哪些时区；老引擎取不到就返回空数组（由调用方退回常见几档） */
+function supportedTimezones(): string[] {
+  try {
+    return Intl.supportedValuesOf?.("timeZone") ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export function timezoneOptions(current: string): string[] {
+  const all = supportedTimezones();
+  const fallback = [
+    "Asia/Shanghai",
+    "Asia/Tokyo",
+    "Asia/Singapore",
+    "Europe/London",
+    "Europe/Berlin",
+    "America/New_York",
+    "America/Los_Angeles",
+    "UTC",
+  ];
+  const list = [...new Set([current, ...(all.length > 0 ? all : fallback)])];
+  return list.sort((a, b) => a.localeCompare(b, "en"));
+}
 
 const START_VIEW_OPTIONS: ReadonlyArray<{ id: StartView; label: string }> = [
   { id: "home", label: "首页" },
@@ -140,11 +160,27 @@ export function SettingsPanel({
             <button
               key={candidate}
               type="button"
-              className="nav-item"
+              /*
+                分类导航用**语义化的 `.set-nav-item`**（`components.md` §7.5 登记过），
+                不再借用功能栏那套 `.nav-item`——两者是同一种"可点行"但归属不同屏，
+                共用一个类名会让改功能栏的样式时误伤设置页（2026-09-28）。
+              */
+              className="set-nav-item"
+              data-set={candidate}
               aria-current={candidate === page}
               onClick={() => onNavigate(candidate)}
             >
               {PAGE_META[candidate].title}
+              {/*
+                owner 专属分类带徽标（功能拆解 M18-01）。徽标**对读屏隐藏**：
+                这个分类本来就只对 owner 渲染，徽标是重复信息；留着它会把可访问名污染成
+                「实例管理owner」（用例与读屏都会受影响）。
+              */}
+              {candidate === "instance" ? (
+                <span className="badge" aria-hidden="true">
+                  owner
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -224,7 +260,7 @@ export function SettingsPanel({
                   value={userSettings.timezone}
                   onChange={(event) => onPatchSettings({ timezone: event.target.value })}
                 >
-                  {[...new Set([userSettings.timezone, ...TIMEZONE_OPTIONS])].map((zone) => (
+                  {timezoneOptions(userSettings.timezone).map((zone) => (
                     <option key={zone} value={zone}>
                       {zone}
                     </option>

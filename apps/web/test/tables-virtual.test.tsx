@@ -65,7 +65,8 @@ afterEach(() => {
 });
 
 describe("大表窗口化", () => {
-  it("1000 行只渲染可见段 + 上下占位行", () => {
+  // 1000 行 + 真实测量：全量并行跑时逼近 vitest 默认 5s，给它显式的余量（2026-09-28）
+  it("1000 行只渲染可见段 + 上下占位行", { timeout: 20_000 }, () => {
     renderEditor(bigDoc(1000));
 
     const rendered = document.querySelectorAll(".tablegrid__tr");
@@ -83,7 +84,7 @@ describe("大表窗口化", () => {
     expect(Number.parseInt(bottomPad.style.height, 10)).toBe((1000 - expected) * DEFAULT_ROW_HEIGHT);
   });
 
-  it("滚动后窗口跟着动：顶部出现占位行，且渲染的是那一段", () => {
+  it("滚动后窗口跟着动：顶部出现占位行，且渲染的是那一段", { timeout: 20_000 }, () => {
     renderEditor(bigDoc(1000));
     const container = document.querySelector(".tablegrid__scroll") as HTMLDivElement;
 

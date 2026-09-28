@@ -3253,6 +3253,43 @@ button.chip--tag:hover {
   border-right: 1px solid var(--line);
 }
 
+/* 设置页的分类导航行（`components.md` §7.5 登记的 `.set-nav-item[data-set]`）：
+   与功能栏的 `.nav-item` 是**同一种可点行、不同归属**——分开两个类名，改一处不会误伤另一屏。
+   选中态沿用"主色浅底 + 主色字"这套既有语言。 */
+.set-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  text-align: left;
+}
+
+.set-nav-item:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.set-nav-item[aria-current="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+/* owner 徽标（功能拆解 M18-01）：只标"谁能看见这个分类"，不做状态表意 */
+.badge {
+  margin-left: auto;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+}
+
 .settings__body {
   flex: 1;
   min-width: 0;

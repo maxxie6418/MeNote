@@ -29,7 +29,8 @@ import { IconSprite } from "./ui/Icon";
 import { InsecureContextBanner } from "./ui/InsecureContextBanner";
 import { inspectCryptoEnvironment, type CryptoEnvironment } from "./ui/cryptoEnvironment";
 import { ToastHost, pushToast } from "./ui/Toast";
-import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { LogoutConfirm, UnlockDialog } from "./SessionDialogs";
+import { topbarWiring } from "./topbar/wiring";
 import { toIndicator, type SyncEngineStatus } from "./useSyncStatus";
 import { HomeView } from "./workarea/HomeView";
 import { NotesSlot } from "./NotesSlot";
@@ -43,7 +44,7 @@ import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
 import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
-import { AppUnlockModal, PrivacySlot } from "./PrivacySlot";
+import { PrivacySlot } from "./PrivacySlot";
 import { fnbarWiring, navPanels } from "./NavPanels";
 import { isInVault } from "../features/privacy/vault";
 import { isScopeGateOpen } from "@menote/shared";
@@ -378,38 +379,31 @@ export default function App() {
         }
         topbar={
           <Topbar
-            user={{ username: user.username, role: user.role }}
-            breadcrumb={
-              route.name === "settings"
-                ? "设置"
-                : search.query.trim() !== ""
-                  ? "搜索结果"
-                  : browse === "memo"
-                    ? "Memo"
-                    : browse === "task"
-                      ? "待办"
-                      : workspace.viewTitle
-            }
-            searchQuery={search.query}
-            onSearchChange={(next) => {
+            {...topbarWiring({
+              user: { username: user.username, role: user.role },
+              routeName: route.name,
+              searching: search.query.trim() !== "",
+              browse: browse ?? null,
+              viewTitle: workspace.viewTitle,
+              sync,
+              searchQuery: search.query,
+              onSearchChange: search.setQuery,
               // 搜索框在设置/回收站页上仍然可见：一开始输入就回笔记区，否则结果会被那两个分支挡住
-              if (next.trim() !== "") goNotes();
-              search.setQuery(next);
-            }}
-            userSettings={userSettings.settings}
-            themeMode={theme.mode}
-            onThemeMode={theme.setMode}
-            onFocusSearch={() => {
-              document.getElementById("search-input")?.focus();
-            }}
-            sync={sync}
-            privacy={<PrivacySlot privacy={privacy} onRequestUnlock={requestUnlock} />}
-            /* 快捷菜单两个"死件"接线（2026-09-28）：M3 的立即锁定、M4 的回收站都早已交付 */
-            onLock={privacy.lockAll}
-            onOpenTrash={() => navigate({ name: "trash" })}
-            onOpenSettings={() => navigate({ name: "settings", page: "general" })}
-            /* 登出是破坏性操作（DESIGN.md §6.5）：先确认，别一点就把会话清掉 */
-            onLogout={() => setConfirmLogout(true)}
+              onStartSearch: goNotes,
+              userSettings: userSettings.settings,
+              themeMode: theme.mode,
+              onThemeMode: theme.setMode,
+              onFocusSearch: () => {
+                document.getElementById("search-input")?.focus();
+              },
+              // 快捷菜单两个"死件"接线（2026-09-28）：M3 的立即锁定、M4 的回收站都早已交付
+              onLock: privacy.lockAll,
+              onOpenTrash: () => navigate({ name: "trash" }),
+              onOpenSettings: () => navigate({ name: "settings", page: "general" }),
+              // 登出是破坏性操作（DESIGN.md §6.5）：先确认，别一点就把会话清掉
+              onLogout: () => setConfirmLogout(true),
+              privacy: <PrivacySlot privacy={privacy} onRequestUnlock={requestUnlock} />,
+            })}
           />
         }
         fnbar={
@@ -617,32 +611,22 @@ export default function App() {
           />
         )}
       </AppShell>
-      {/* 解锁框：顶栏胶囊、Memo/待办占位、单篇加密共用同一个出口（实现见 PrivacySlot.tsx） */}
-      <AppUnlockModal
+      {/* 解锁框与登出确认：装配都在 SessionDialogs.tsx（入口文件只给"跳到哪 / 退不退"） */}
+      <UnlockDialog
         open={unlockOpen}
         privacy={privacy}
         settings={userSettings.settings}
         onClose={() => setUnlockOpen(false)}
-        onForgot={() => {
-          setUnlockOpen(false);
-          navigate({ name: "settings", page: "privacy" });
-        }}
+        onForgot={() => navigate({ name: "settings", page: "privacy" })}
       />
-      {/* 登出的二次确认（DESIGN.md §6.5：破坏性操作必须确认并写明后果） */}
-      <ConfirmDialog
+      <LogoutConfirm
         open={confirmLogout}
-        title="退出登录"
-        desc="本机会话会被清除，需要重新输入登录密码。"
-        confirmLabel="确认退出"
         onClose={() => setConfirmLogout(false)}
         onConfirm={() => {
           setConfirmLogout(false);
           void auth.logout().then(() => navigate({ name: "login" }));
         }}
-      >
-        {/* 可见的后果说明：本机缓存的明文内容不会被清掉（架构 §3.2 的既定边界），别让人误以为"退登就安全了" */}
-        <p>本机已缓存的内容不会被删除；隐私锁的解锁状态会一并失效。</p>
-      </ConfirmDialog>
+      />
       <ToastHost />
     </>
   );

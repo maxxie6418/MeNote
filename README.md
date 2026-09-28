@@ -83,6 +83,9 @@ CHANGELOG.md      每次改动一条记录
 - **主通道是 Workers Builds**：推送到 `main` 自动构建部署；非生产分支与 PR 自动获得预览 URL。构建命令 `pnpm install --frozen-lockfile && pnpm build`，部署命令 `npx wrangler deploy`（根目录会生成部署指针指向构建产物配置）。
 - **部署成功后必须做一步**：在 Dashboard 给这个 Worker 添加机密 **`AUTH_PEPPER`**（Settings → Variables and Secrets → 类型选 **Secret**，值用 `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` 生成）。
   没配之前注册/登录会返回 503 并提示缺哪一项（这是刻意的 fail-closed：绝不用空密钥算 HMAC）。**这个值以后不要更换**——密码校验值是 `HMAC(AUTH_PEPPER, 登录密钥)`，换了所有已有账号都登不进去。
+- **第二个机密 `BACKUP_CRED_KEY` 也建议现在就加**（同样 Settings → Variables and Secrets → 类型 Secret，值用 `openssl rand -base64 32` 生成）。
+  它是给内容密钥 K 包第二份钥匙用的（「重置隐私密码」现在就要用，后续的备份加密也要用）。**不加的表现**：点「启用隐私锁」会被服务端拒回 503，提示"实例未配置 `BACKUP_CRED_KEY` 机密，无法启用隐私锁"——其它功能不受影响。
+  **这个值同样要稳定**：换掉它会让已存的 `k_wrapped_backup` 解不开（重置隐私密码与备份加密随之中断），补救办法是在**解锁态**下重新包裹一次 K（重跑一次加密设置）。本地开发同理：`apps/web/.dev.vars` 里也要有它，否则本地启用隐私锁一样 503。
 - 表结构不用手工迁移：首个 API 请求会运行时自愈建表。
 - **命令行部署**：`pnpm build && pnpm deploy`（需 `wrangler login`）。
 - 建议顺手打开 **SSL/TLS → Edge Certificates → Always Use HTTPS**，避免用户用 http 进来（那样浏览器不提供 WebCrypto，注册与保存都会失败）。

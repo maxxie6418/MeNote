@@ -88,7 +88,7 @@ export interface MemoSidebarSettings {
 | `heatmap` | 热力图 | 近 12 周 × 7 天，5 档 + 「近 12 周 · 共 N 条」+ 图例（L1131-1149） | 同上；分档按当天条数（0/1/2-3/4-5/6+，具体阈值照原型 5 档） | 悬停给当天条数（`title`），不靠颜色单独表意 |
 | `random` | 随机漫步 | 单按钮（L1152-1158） | 无 | 从**当前筛选后**的 Memo 里随机挑一条 → `onLocate` |
 | `onThisDay` | 那年今日 | 历史上「月-日」离今天最近的一天 + 条数 + 摘要（L1161-1170） | `memo_at` 本地算；两个口径按原型（L2049-2051）：**排除今年**、前后等距时**取更早** | 点 → 切回时间轴并 `onLocate` 到那一条（高亮 2s，原型 `.is-walked`） |
-| `date` | 日期 | 全部 / 今天 / 本周 / 本月（L1172-1180） | 现有 `MemoRange`；口径按原型改成"本周（本周一至今）/ 本月（本月 1 日至今）"，与现有"近 7 / 近 30 天"**不一致——见 §六 待确认** | 改 `filter.range` |
+| `date` | 日期 | 全部 / 今天 / 近 7 天 / 近 30 天（**用户 2026-09-28 拍板：沿用现有 `MEMO_RANGES` 口径，不改成原型的「本周/本月」**——"本周"从周一起算与"近 7 天"不是一回事，会改变筛选结果，属产品口径；真要改是一行的事） | 现有 `MemoRange` | 改 `filter.range` |
 | `tags` | 标签 | 纵向列表：全部 + `# 标签` + 计数，选中主色浅底 + 左侧 2.5px 主色刻线（L317-326） | 现有 `collectMemoTags`（已带计数） | 改 `filter.tag` |
 
 **纯函数**（新增到 `features/memos/model.ts`，便于单测）：`summarizeMemos(memos, now, tz)`、`heatmap12w(memos, now, tz)`、`onThisDay(memos, now, tz)`、`pickRandom(memos, seed?)`。

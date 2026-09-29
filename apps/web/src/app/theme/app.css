@@ -3988,35 +3988,6 @@ button.chip--tag:hover {
   设置导航的行距收进刻度（`.nav` 自身是裸值 2px，而它**被功能栏复用**——
   所以只在这里用更具体选择器给设置页这一处，不动功能栏的版式）。
 */
-.settings__groups {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.settings__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  padding: var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-
-.settings__group-title {
-  margin: 0;
-  padding: 0 var(--sp-2);
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  font-weight: 650;
-  letter-spacing: 0.04em;
-}
-
-.settings__group .nav {
-  gap: var(--sp-1);
-}
-
 /* 设置页的分类导航行（`components.md` §7.5 登记的 `.set-nav-item[data-set]`）：
    与功能栏的 `.nav-item` 是**同一种可点行、不同归属**——分开两个类名，改一处不会误伤另一屏。
    选中态沿用"主色浅底 + 主色字"这套既有语言。 */

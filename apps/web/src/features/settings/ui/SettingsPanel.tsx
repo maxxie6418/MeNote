@@ -42,14 +42,6 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
  */
 const NAV_ORDER: readonly SettingsPageId[] = SETTINGS_PAGES;
 
-const SETTINGS_GROUPS: ReadonlyArray<{ label: string; pages: readonly SettingsPageId[] }> = [
-  { label: "常用", pages: ["general", "editor", "privacy"] },
-  { label: "数据", pages: ["versions"] },
-  { label: "账户", pages: ["account"] },
-  { label: "管理", pages: ["instance"] },
-  { label: "关于", pages: ["about"] },
-];
-
 /**
  * 时区候选（2026-09-28 补全）：**运行时取完整时区表**，不再只给常见几档。
  *
@@ -193,40 +185,34 @@ export function SettingsPanel({
   return (
     <div className="settings">
       <nav className="settings__nav" aria-label="设置分类">
-        <div className="settings__groups">
-          {SETTINGS_GROUPS.map((group) => {
-            const groupPages = group.pages.filter((candidate) => pages.includes(candidate));
-            if (groupPages.length === 0) return null;
-            return (
-              <section className="settings__group" key={group.label} aria-label={group.label}>
-                <h2 className="settings__group-title">{group.label}</h2>
-                <div className="nav">
-                  {groupPages.map((candidate) => (
-                    <button
-                      key={candidate}
-                      type="button"
-                      /*
+        <div className="nav">
+          {pages.map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              /*
                 分类导航用**语义化的 `.set-nav-item`**（`components.md` §7.5 登记过），
                 不再借用功能栏那套 `.nav-item`——两者是同一种"可点行"但归属不同屏，
                 共用一个类名会让改功能栏的样式时误伤设置页（2026-09-28）。
-                      */
-                      className="set-nav-item"
-                      data-set={candidate}
-                      aria-current={candidate === page}
-                      onClick={() => onNavigate(candidate)}
-                    >
-                      {PAGE_META[candidate].title}
-                      {candidate === "instance" ? (
-                        <span className="badge" aria-hidden="true">
-                          owner
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
+              */
+              className="set-nav-item"
+              data-set={candidate}
+              aria-current={candidate === page}
+              onClick={() => onNavigate(candidate)}
+            >
+              {PAGE_META[candidate].title}
+              {/*
+                owner 专属分类带徽标（功能拆解 M18-01）。徽标**对读屏隐藏**：
+                这个分类本来就只对 owner 渲染，徽标是重复信息；留着它会把可访问名污染成
+                「实例管理owner」（用例与读屏都会受影响）。
+              */}
+              {candidate === "instance" ? (
+                <span className="badge" aria-hidden="true">
+                  owner
+                </span>
+              ) : null}
+            </button>
+          ))}
         </div>
       </nav>
 

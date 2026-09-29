@@ -3980,7 +3980,7 @@ button.chip--tag:hover {
   width: var(--settings-nav-w);
   flex: none;
   overflow-y: auto;
-  padding: var(--sp-3);
+  padding: var(--sp-4);
   border-right: 1px solid var(--line);
 }
 
@@ -3988,15 +3988,21 @@ button.chip--tag:hover {
   设置导航的行距收进刻度（`.nav` 自身是裸值 2px，而它**被功能栏复用**——
   所以只在这里用更具体选择器给设置页这一处，不动功能栏的版式）。
 */
+.settings__nav .nav {
+  gap: var(--sp-1);
+}
+
 /* 设置页的分类导航行（`components.md` §7.5 登记的 `.set-nav-item[data-set]`）：
    与功能栏的 `.nav-item` 是**同一种可点行、不同归属**——分开两个类名，改一处不会误伤另一屏。
-   选中态沿用"主色浅底 + 主色字"这套既有语言。 */
+   选中态沿用"主色浅底 + 主色字"这套既有语言。
+   内边距比功能栏那一行大一档（2026-09-29 用户反馈列表挤在一起）：行高约 34px，
+   与主分类的点击节奏相称，也留出了触屏命中区。 */
 .set-nav-item {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
-  padding: var(--sp-1) var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius);
   color: var(--text-2);
   font-size: var(--fs-body);

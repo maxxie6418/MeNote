@@ -104,6 +104,20 @@ describe("级联覆盖（同选择器同属性不许被后置规则改值）", (
     于是把合法的 `@media` 覆盖（本仓 `@media (hover: none)` 的命中区补偿）报成了违规——
     假阳性比漏报更糟：它会让守卫被当成噪声而关掉。这一组用例就是为那条翻车写的。
   */
+  /**
+   * 设置导航的间距（2026-09-29 用户反馈"列表堆叠到一起、调整一下间距"）。
+   *
+   * 这一条是被事故逼出来的：此前去掉设置页分组块时，把前部那条
+   * `.settings__nav .nav { gap: var(--sp-1) }` 一起删掉了，于是设置导航**悄悄退回**
+   * `.nav` 的裸值 `gap: 2px`——没有任何用例会报错（功能栏复用的 `.nav` 本来就是 2px）。
+   * 现在把设置页这一处的取值钉住：行距 4px、行内边距 8px/12px、外框 16px。
+   */
+  it("设置导航的间距由设置页自己给出（不退回 `.nav` 的裸值 2px）", () => {
+    expect(effectiveValue(rules, ".settings__nav", "padding")).toBe("var(--sp-4)");
+    expect(effectiveValue(rules, ".settings__nav .nav", "gap")).toBe("var(--sp-1)");
+    expect(effectiveValue(rules, ".set-nav-item", "padding")).toBe("var(--sp-2) var(--sp-3)");
+  });
+
   it("自证：同一选择器同属性、取值不同、后置 → 必须被抓到", () => {
     const css = `
       .probe { color: red; }

@@ -5,7 +5,7 @@
 | 文档性质 | 前端组件规划：**组件名、所属 feature / 落点、职责、props 约定、复用关系**，以及与界面原型的对应。是架构文档 §2.3.2「功能 → 代码落点对照表」在**组件层**的展开 |
 | 基准 | 需求文档 `wiki/Menote-设计文档-v7.4.md`（下称“需求文档”）；功能点编号与验收看 `wiki/Menote-功能拆解-v2.md`（下称“功能拆解”）；落点、分层与依赖方向看 `wiki/Menote-项目架构-v1.md`（下称“架构”）§2.3、§3.1；视觉与令牌看根目录 `DESIGN.md`（下称“视觉源”） |
 | 主要来源 | 界面原型 `prototype/menote-prototype.html`（高保真）与 `prototype/menote-framework.html`（线框评审页）。引用原型**只写元素名或选择器**（如 `#topAccount`、`.composer`、`.nav-seg`），不写行号——行号随原型改动会失效 |
-| 版本 | v5（文件名 `components.md` 不变，版本在修订记录内演进） |
+| 版本 | v6（文件名 `components.md` 不变，版本在修订记录内演进） |
 | 日期 | 2026-09-29 |
 | 状态 | 首稿。**代码尚未初始化**：组件名与 props 均为**约定名**，实现时如无充分理由不要改名；若实现中发现更合适的拆法，先回报本文再改 |
 | 不包含 | 颜色 / 字号 / 间距 / 圆角 / 阴影的具体数值（归 `DESIGN.md`，本文只写“走令牌”，不复制令牌值）；接口、表结构、同步算法（归架构文档）；功能规则与验收口径（归需求文档与功能拆解） |
@@ -29,6 +29,7 @@
 | v3 | 2026-09-27 | 隐私锁设计 v1.3 回写【已定·用户确认 2026-09-27】：①`TierMenu` 改**三档**（本次会话 / N 分钟 / 当前设备长期）并删「仅本次查看」；②`PrivacyCapsule` **状态映射去掉「仅本次查看」**，三档显示口径按设计 §9.2（N 分钟带倒计时、本次会话显示「已解锁 · 本次会话」、当前设备长期用 danger 色 + 「本设备始终解锁」）；③把原型里两份形态相同的 `MemoLockedPlaceholder` / `TaskLockedPlaceholder` 记为**收敛为一个 `LockedPlaceholder`**（§14.2 收敛表新增第 6 条）；④账户快捷菜单账户头由两行改**三行**（用户名 / 角色 · 实例 / 版本号 `MeNote vX.Y.Z`，后两行复用 `.acct__sub`），并补设置新增的第 11 个分类页「**关于**」（版本号 + 项目 GitHub 地址链接）。（应用版本 v0.3.2；修改模型ID：deepseek-v4.1-flash） |
 | v4 | 2026-09-27 | M4 收口回写【已定·用户确认 2026-09-27（授权两点之一，M4 设计 §九 第 8 行）】：新增第十五章「M4 落地后的组件与收敛记录」——①**M4 实际新增的组件**（实现名 + 落点 + props，含表格六个、版本两个、回收站两个）；②**界面稿 §十一 约定的 11 个组件逐条对账**：4 个按代码回写（props 名/形态有差，差异与理由逐条写）、**7 个"未独立成组件"**（职责落在既有组件里，拆出去会引入共享状态或空壳）；③**§十二 预留表的处置**：`VersionHistoryPanel` / `VersionDiff` / `TableColumnManager` / `AttachmentUploader` 等已实现的行标「M4 已实现，见 §15」；④**已知未实现 6 条**（拖动柄、标签 chip 编辑、自动降级提示条、版本列表"已保留 N 个"、附件引用集合对齐、`ConfirmDialog`/`InfoHint` 未做）；⑤明确 **`media.worker` 落点已删除**（缩略图浏览器端生成）。（应用版本 v0.4.25（M4 收口期间的写回；里程碑版本为 v0.5.0）；修改模型ID：deepseek-v4.1-flash） |
 | v5 | 2026-09-29 | 功能栏**标签区贴底固定**回写【已定·用户确认 2026-09-29】：①第六章开头的"由上到下"与第四章结构树补上标签区（`TagGroup` 现在是 `.fnbar__tags`，**贴底固定、与导航区并列**，不再排在笔记本树之后）；②6.6 `TagGroup` 增「位置约束」（`flex:none`、在导航区与加密空间之间、**不在滚动区里**、高度按底部 1/4～1/3 预留）与「形态」（chip 横向铺开自动换行、放不下本区自己滚）两行。`DESIGN.md` §2.1 / §2.7 同步至 v1.8。（应用版本 v0.5.22；修改模型ID：deepseek-flash） |
+| v6 | 2026-09-29 | 「添加」按钮改弹窗回写【已定·用户确认 2026-09-29】：①新增 **6.8 `AddEntryDialog` · 添加内容窗口**（一个 `Modal` 结构两种 `kind`、字段复用 `Composer` 的 `ModeExtras`/`TASK_ITEM_PATTERN`、发布回调复用 `fnbarWiring`、关窗先清空再 `onClose`）；②组件地图 FnBar 子树补 `AddEntryDialog`（文件在 `app/fnbar/`，由 App 经 `AddEntrySlot` 挂浮层位，**不在 FnBar 内渲染**）；③6.2 `Composer` 的「复用」行改为——「添加」**不再切 `mode`、不再聚焦**，改开 `AddEntryDialog`（`Composer` 仍须导出 `ModeExtras`/`TASK_ITEM_PATTERN` 作共享件；`mode` 仍由首页「记录 Memo / 新建待办」快捷操作外部驱动）。（应用版本 v0.5.26；修改模型ID：mimo-v2.6-flash） |
 
 ---
 
@@ -109,7 +110,8 @@ AppShell                                    app/
 │  ├─ NavList (NavItem ×2)
 │  ├─ NotebookGroup (+ FolderTree / NbAddButton)
 │  ├─ TagGroup (TagChip ×n)                       —— 贴底固定（第六章 6.6）
-│  └─ VaultNode                             —— 贴底固定
+│  ├─ VaultNode                             —— 贴底固定
+│  └─ AddEntryDialog                        —— 添加内容窗口；文件在 `app/fnbar/`，但由 **App 经 `AddEntrySlot` 在浮层位挂载**（不在 FnBar 内渲染，见 6.8）
 └─ WorkArea                                 app/
    ├─ ListPane  → ItemRow ×n                features/<x>/ui/
    ├─ DocPane   → DocHead / DocBody / DocStatusBar
@@ -230,7 +232,7 @@ AppShell                                    app/
 | 原型 | `.composer`（`#composerInput` / `#composerExtra` / `#composerModes` / `#composerPublish`） |
 | 职责 | 添加内容的**主入口**，三行结构，见下 |
 | props | `mode`、`onModeChange`、`value`、`onChange`、`onPublish`、`taskMeta`、`onTaskMetaChange` |
-| 复用 | Memo 视图与待办视图的「添加」按钮**不另做输入框**，而是把本组件的 `mode` 切到对应档并聚焦（原型 `addViaComposer`）。因此本组件必须支持**外部驱动 mode** |
+| 复用 | Memo 视图与待办视图的「添加」按钮**不再切本组件的 `mode`、也不再聚焦本组件**，改为打开「添加内容窗口」`AddEntryDialog`（6.8）——该窗口**复用本组件导出的 `ModeExtras` / `TASK_ITEM_PATTERN`**，字段与本组件对应档一致，故本组件必须把这两者作为共享件导出。本组件的 `mode` 仍由功能栏模式切换与首页「记录 Memo / 新建待办」快捷操作外部驱动（M2-8） |
 | 需求 | M06-01、M07-01、M04-01（§7.4、§8.7） |
 
 三行结构（**顺序固定**）：
@@ -304,6 +306,19 @@ AppShell                                    app/
 | **空间内文件夹树** | `features/privacy/ui/VaultTree.tsx`：渲染在**加密空间视图的列表列顶部**（在该列已有的滚动容器里，`DESIGN.md` §2.7），切层 / 新建 / 重命名都在那里。**2026-09-29 从功能栏搬来**（用户要求"加密空间不需要在功能栏显示文件夹树"）；`FolderTree` 用 `rootId`（空间根 id）认根——空间内第 1 层文件夹的父是空间根行，不是 `null` |
 | 需求 | M08-07（§6.3） |
 
+### 6.8 `AddEntryDialog` · 添加内容窗口
+| 项 | 内容 |
+|---|---|
+| 原型 | 无（**新增**；设计见 `docs/modules/Menote-添加内容窗口-设计-v1.md`） |
+| 落点 | `app/fnbar/AddEntryDialog.tsx`；装配在 `app/AddEntrySlot.tsx`（`useAddEntrySlot`），由 **App 挂在浮层位**渲染（**不在 FnBar 内**） |
+| 职责 | Memo / 待办视图「添加」的落点：**单独弹窗**录一条 Memo 或待办，点「发布」→ 调发布回调 → 关窗 → toast + 列表立刻刷新（**给明确反馈**）。**不再跳回左侧录入框**【2026-09-29 用户要求】 |
+| 形态 | 一个 `Modal` 结构、两种 `kind`（`memo` / `task`）——「不同类型复用一个窗口结构，但显示的设置不同」（用户 2026-09-29） |
+| 字段 | 正文 `<textarea>`（`Ctrl/Cmd+Enter` 发布）+ 字段行 `.addentry__extras`（高 26px、`nowrap`，同 `Composer`）；`kind = "memo"` → 含 `- [ ]` 时给「设为清单？」chip；`kind = "task"` → 截止（date）+ 优先级三段。**字段与录入框 `Composer` 对应档一致，复用其 `ModeExtras` / `TASK_ITEM_PATTERN`，不另抄第二套判定** |
+| props | `open`、`kind`、`onClose`、`onPublishMemo`、`onPublishTask` |
+| 发布回调 | 复用 `fnbarWiring` 的 `onPublishMemo` / `onPublishTask`（与录入框**同一口径**）；`publishMemo` 会 `await refresh()`，故关窗后新条目**立刻出现在当前列表** |
+| 关闭 | 点「发布 / 取消 / Esc / 点遮罩」都走组件内 `close()`——**先清空字段、再 `onClose()`**（清空在事件处理器里做，不在 effect 里 `setState`），保证下次打开是干净输入区 |
+| 需求 | M06-10、M07-01（入口二）；设计 `docs/modules/Menote-添加内容窗口-设计-v1.md` |
+
 ---
 
 ## 七、主操作区与视图 `features/*` 【已落地】
@@ -353,7 +368,7 @@ AppShell                                    app/
 
 **要点**：
 
-- **Memo 与待办是两个独立视图**（Q1 已确认）。Memo → 时间轴 / 瀑布流，**无清单 tab**；待办 → 列表 / 看板。两者顶部各有「添加」按钮，点击切功能栏录入框模式并聚焦。
+- **Memo 与待办是两个独立视图**（Q1 已确认）。Memo → 时间轴 / 瀑布流，**无清单 tab**；待办 → 列表 / 看板。两者顶部各有「添加」按钮，点击**打开「添加内容窗口」弹窗**（6.8），不再切功能栏录入框模式。
 - 首页数据**全由本地元数据计算，不发请求**；**统计始终计入**加密空间与单篇加密条目，不区分锁定（用户确认 2026-09-26）；来自 Memo 的部分在门禁锁定时显示「已锁定」（M02-03）。
 - `MemoPanel` 与 `TaskPanel` 各有一个锁定占位（`.placeholder.boxed`），原型里是**两份形态相同的实现**（`MemoLockedPlaceholder` / `TaskLockedPlaceholder`，仅文案不同），收敛为**一个** `LockedPlaceholder`（文案作 props 传入）：**以实现名为准、只保留一个组件**，不两份并存；收敛去向见 14.2 第 6 条。
 - 表格**第一列 `_id`** 是稳定行 ID（6–8 位 base36），编辑器默认隐藏。
@@ -510,6 +525,7 @@ AppShell                                    app/
 | `NotebookGroup` / `FolderTree` / `NbAddButton` | `app/fnbar/` | M03-01、M03-02、M03-03、M03-04、M05-01 | §4.5、§7.4 |
 | `TagGroup` / `TagChip` | `app/fnbar/` | M03-07、M04-06 | §7.4、§7.1 |
 | `VaultNode` | `app/fnbar/` | M08-07 | §6.3 |
+| `AddEntryDialog` | `app/fnbar/`（App 经 `AddEntrySlot` 挂载） | M06-10、M07-01（入口二） | §8.7、§9.2 |
 | `TwoPane` / `ItemRow` / `ItemListHead` | `app/ui/` | M03-06、M03-07、M08-07、M08-12 | §7.4 |
 | `DocHead` / `DocModeSwitch` / `DocMoreMenu` | `app/` + features | M04-03、M04-08、M04-02、M05-10、M08-08 | §7.1、§6.2、§8.8、§10.11 |
 | `Editor`（CodeMirror 封装） | `app/editor/` | M04-03、M04-04、M04-05 | §7.1、§12.1、§15.7、§10.10 |
@@ -546,6 +562,7 @@ AppShell                                    app/
 | 6 处 `@media` 断点 | `.waterfall` 3→2 列（≤1240px）；`.kanban` 3→1 列、`.drawer` 390→330px（≤1080px） | 断点值统一收进 `DESIGN.md`；组件内不写裸数值 |
 | 硬编码渐变色 | `.logo`、`.btn-new`、`.avatar`、`.memo-imgs .thumb`、`.wf-img`、`.gal-cover`、`.sw` 的选中态有硬编码渐变 | 统一抽成令牌（如 `--brand-grad`、`--ph-cover`），否则换主题会漏改 |
 | `.mini-tree` / `.mini-row` 未被任何渲染函数使用 | 原型遗留 | 实现时**不要照搬** |
+| `Composer` 与 `AddEntryDialog` 的字段行 | 两处都有「模式附加项」字段行（`.composer__extras` / `.addentry__extras`，高 26px、`nowrap`），内容随档位换 | **复用同一份 `ModeExtras` / `TASK_ITEM_PATTERN`**（已由 `Composer` 导出，6.2 / 6.8），容器各留一个修饰类；**不要复制第二套字段判定** |
 
 ### 11.3 原型专用、不进生产
 

@@ -27,6 +27,7 @@ function lockStub(overrides: Partial<PrivacyLockActions> = {}): PrivacyLockActio
     enable: vi.fn(async () => undefined),
     changePassword: vi.fn(async () => true),
     resetPassword: vi.fn(async () => undefined),
+    rewrapContentKey: vi.fn(async () => true),
     disable: vi.fn(async () => undefined),
     ...overrides,
   };
@@ -254,9 +255,11 @@ describe("改密与重置", () => {
     expect(resetPassword).toHaveBeenCalledWith("重置后的");
   });
 
-  it("重置失败（实例没配备份凭据）：把服务端的说明显示出来", async () => {
+  it("重置失败：把服务端给的说明**可见地**显示出来（不再有「缺某个机密」这种专属失败）", async () => {
+    // 2026-09-28：实例机密已收敛成一个（不再是"两个机密里缺一个"），这里改成模拟通用的服务端拒绝，
+    // 仍然钉住那条真正重要的意图——**失败必须有可见反馈，不能静默**。
     const resetPassword = vi.fn(async () => {
-      throw new Error("实例未配置 BACKUP_CRED_KEY 机密，无法启用隐私锁（请联系实例管理员）");
+      throw new Error("服务暂时不可用，请稍后重试（503）");
     });
     renderPage({ lock: lockStub({ enabled: true, lockState: "locked", resetPassword }) });
 
@@ -267,7 +270,70 @@ describe("改密与重置", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("BACKUP_CRED_KEY");
+    expect(alert.textContent).toContain("服务暂时不可用");
+  });
+
+  it("重新包裹内容密钥：用当前隐私密码提交，成功给可见反馈", async () => {
+    const rewrapContentKey = vi.fn(async () => true);
+    renderPage({ lock: enabledLock({ rewrapContentKey }) });
+
+    typeInto("当前隐私密码", "现在的密码");
+    fireEvent.click(screen.getByRole("button", { name: "重新包裹" }));
+
+    expect(rewrapContentKey).toHaveBeenCalledWith("现在的密码");
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("重新包裹");
+  });
+
+  it("重新包裹内容密钥：密码不对 / 没填 都就地报错（不静默）", async () => {
+    const rewrapContentKey = vi.fn(async () => false);
+    renderPage({ lock: enabledLock({ rewrapContentKey }) });
+
+    // 没填当前密码
+    fireEvent.click(screen.getByRole("button", { name: "重新包裹" }));
+    expect(screen.getByRole("alert").textContent).toContain("请先填写当前隐私密码");
+    expect(rewrapContentKey).not.toHaveBeenCalled();
+
+    // 填了但密码不对
+    typeInto("当前隐私密码", "错的");
+    fireEvent.click(screen.getByRole("button", { name: "重新包裹" }));
+    expect(await screen.findByText("当前隐私密码不正确")).toBeTruthy();
+  });
+
+  it("重新包裹内容密钥：服务端拒绝 / 网络错时，把原因**可见地**显示出来", async () => {
+    const rewrapContentKey = vi.fn(async () => {
+      throw new Error("服务暂时不可用，请稍后重试（503）");
+    });
+    renderPage({ lock: enabledLock({ rewrapContentKey }) });
+
+    typeInto("当前隐私密码", "现在的密码");
+    fireEvent.click(screen.getByRole("button", { name: "重新包裹" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("服务暂时不可用");
+    // 失败不能同时报"成功"（成功提示只走 role=status）
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("重新包裹内容密钥：锁定或离线时禁用，且**可见地**说明原因（不只靠 title）", () => {
+    const { container, rerender } = renderPage({
+      lock: lockStub({ enabled: true, lockState: "locked" }),
+    });
+    const button = screen.getByRole("button", { name: "重新包裹" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(container.textContent).toContain("先解锁隐私锁");
+
+    rerender(
+      <PrivacySettingsPage
+        lock={enabledLock()}
+        settings={DEFAULT_PRIVACY_SETTINGS}
+        onPatchSettings={vi.fn()}
+        offline
+      />,
+    );
+    const offlineButton = screen.getByRole("button", { name: "重新包裹" }) as HTMLButtonElement;
+    expect(offlineButton.disabled).toBe(true);
+    expect(container.textContent).toContain("离线：这一步需要联网");
   });
 });
 
@@ -336,7 +402,7 @@ describe("六卡结构（M3 界面稿 §四：顺序即操作顺序）", () => {
     expect(
       screen.getByText("加密空间与单篇加密会先被清空；还有隐私内容时服务端会拒绝并说明原因。"),
     ).toBeTruthy();
-    expect(screen.getByText(/重置需要实例配置好备份凭据/)).toBeTruthy();
+    expect(screen.getByText(/重置需要联网：服务端会用实例机密解出内容密钥/)).toBeTruthy();
     expect(container.querySelectorAll(".infohint").length).toBeGreaterThan(0);
   });
 });

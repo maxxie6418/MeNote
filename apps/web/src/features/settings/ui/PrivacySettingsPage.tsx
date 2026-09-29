@@ -37,6 +37,8 @@ export interface PrivacyLockActions {
   enable: (password: string) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
   resetPassword: (newPassword: string) => Promise<void>;
+  /** 重新包裹内容密钥（运维修复入口）：输入当前密码 → 服务端用当前根机密重包一次 */
+  rewrapContentKey: (password: string) => Promise<boolean>;
   disable: () => Promise<void>;
 }
 
@@ -163,7 +165,7 @@ export function PrivacySettingsPage({
           <>
             <PasswordRow
               name="设置隐私密码"
-              desc="只用于本机校验，不会上传；忘记后可用实例的备份凭据重置"
+              desc="只用于本机校验，不会上传；忘记后可用「忘记隐私密码」重置"
               autoComplete="new-password"
               value={enablePassword}
               onChange={setEnablePassword}
@@ -221,6 +223,8 @@ export function PrivacySettingsPage({
             busy={lock.busy}
             changePassword={lock.changePassword}
             resetPassword={lock.resetPassword}
+            rewrapContentKey={lock.rewrapContentKey}
+            locked={locked}
             offline={offline}
             onNote={setNote}
           />

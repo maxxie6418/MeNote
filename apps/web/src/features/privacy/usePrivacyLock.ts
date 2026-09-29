@@ -60,10 +60,21 @@ export interface PrivacyLockState {
    */
   changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>;
   /**
-   * 重置隐私密码（忘记密码，M3-9）：服务端用 `BACKUP_CRED_KEY` 解出 K → 浏览器用新密码重新包裹。
-   * 同样**K 不变**；`k_wrapped_backup` 由服务端重新包一份。
+   * 重置隐私密码（忘记密码，M3-9）：服务端用**当前根机密**（`AUTH_PEPPER` 派生的备份包裹键）
+   * 解出 K → 浏览器用新密码重新包裹。同样**K 不变**；`k_wrapped_backup` 由服务端重新包一份。
    */
   resetPassword: (newPassword: string) => Promise<void>;
+  /**
+   * **重新包裹内容密钥**（2026-09-28 加的运维修复入口）。
+   *
+   * 什么时候需要：实例的根机密变更过，或从"另配第二个机密 `BACKUP_CRED_KEY`"的旧版本升级上来——
+   * 那时库里的 `k_wrapped_backup` 用**现在**的派生键解不开，表现是"忘记隐私密码 → 重置"失败。
+   * 这个动作把 K 从 `k_wrapped_pw` 解出来、交给服务端用当前键重包一次。
+   *
+   * 需要**当前隐私密码**（解 K 的唯一途径）；**不改密码、不动内容**；
+   * 密码不对返回 `false`（与 `changePassword` 同一约定），由调用方就地给可见提示。
+   */
+  rewrapContentKey: (password: string) => Promise<boolean>;
   disable: () => Promise<void>;
   lockAll: () => void;
   lockScope: () => void;
@@ -324,7 +335,7 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
             verifier,
             k_wrapped_pw: wrapped,
           },
-          // 第二份包裹由服务端用 BACKUP_CRED_KEY 包（浏览器拿不到该机密）
+          // 第二份包裹由服务端用根机密 `AUTH_PEPPER` 派生的键包（浏览器拿不到该机密）
           k: base64UrlEncode(contentKey),
         });
 
@@ -346,7 +357,8 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
 
   /**
    * 改密（M3-9）：旧密码解出 K → 新盐 → 新 KEK/verifier → 用新 KEK 重新包裹 K。
-   * `k_wrapped_backup` 原样带回（服务端用它兜底重置），所以这一步**只需要联网**、不需要备份机密。
+   * `k_wrapped_backup` 原样带回（服务端用它兜底重置），所以这一步**只需要联网**、
+   * 不需要浏览器碰实例机密（它拿不到，备份包裹一直是服务端包的）。
    */
   const changePassword = useCallback(
     async (oldPassword: string, newPassword: string): Promise<boolean> => {
@@ -391,7 +403,8 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
   /**
    * 重置（忘记密码，M3-9）：服务端解出 K → 新密码重新包裹。
    *
-   * 重置**不需要**旧的隐私密码（那正是"忘记"的意思），但需要联网 + 实例配好 `BACKUP_CRED_KEY`。
+   * 重置**不需要**旧的隐私密码（那正是"忘记"的意思），但需要联网 + 实例配好根机密
+   * （`AUTH_PEPPER`；缺它会在服务端明确报错）。
    * 重置后 `k_wrapped_backup` 由服务端用新的一份随机 IV 重新包（K 不变）。
    */
   const resetPassword = useCallback(
@@ -410,7 +423,7 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
             verifier: await makeVerifier(kek),
             k_wrapped_pw: await wrapContentKey(contentKey, kek),
           },
-          // 明文 K 交给服务端，由它用 BACKUP_CRED_KEY 重新包第二份
+          // 明文 K 交给服务端，由它用当前根机密派生的键重新包第二份
           k,
         });
         await cacheCryptoState(state);
@@ -423,6 +436,42 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
     },
     [config.tier, config.minutes],
   );
+
+  /**
+   * 重新包裹内容密钥：输入当前隐私密码 → 解出 K → 让服务端用**当前**根机密派生的键重包一次
+   * `k_wrapped_backup`。用途与三条口径见 `PrivacyLockState.rewrapContentKey` 的说明。
+   *
+   * 为什么是"再 PUT 一次、只多带个 `k`"：服务端**只要收到 `k` 就重包**（`services/crypto.ts`
+   * 的 `putCryptoMaterials`），与是不是首次启用无关——所以这条路不需要新端点、也不改契约。
+   */
+  const rewrapContentKey = useCallback(async (password: string): Promise<boolean> => {
+    const materials = await cachedMaterials();
+    if (!materials) throw new Error("本地没有校验材料，请联网后重试");
+
+    const salt = cryptoBlobFromBase64Url(materials.kdf_salt);
+    const kek = await deriveKek(password, salt, materials.kdf_iterations);
+    if (!(await verifyPassword(kek, materials.verifier))) return false;
+
+    setBusy(true);
+    try {
+      const contentKey = await unwrapContentKey(materials.k_wrapped_pw, kek);
+      // 材料原样带回（KDF 参数、verifier、密码包裹都不动），只额外带上明文 K
+      const state = await cryptoApi.put({
+        materials: {
+          kdf: materials.kdf,
+          kdf_iterations: materials.kdf_iterations,
+          kdf_salt: materials.kdf_salt,
+          verifier: materials.verifier,
+          k_wrapped_pw: materials.k_wrapped_pw,
+        },
+        k: base64UrlEncode(contentKey),
+      });
+      await cacheCryptoState(state);
+      return true;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const disable = useCallback(async (): Promise<void> => {
     setBusy(true);
@@ -493,6 +542,7 @@ export function usePrivacyLock(options: UsePrivacyLockOptions): PrivacyLockState
     enable,
     changePassword,
     resetPassword,
+    rewrapContentKey,
     disable,
     lockAll,
     lockScope,

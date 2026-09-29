@@ -178,9 +178,11 @@ export type CryptoMaterialsInput = v.InferOutput<typeof CryptoMaterialsInputSche
 /**
  * `PUT /api/crypto` 的请求体。
  *
- * `k` 只在**首次启用**时提供：浏览器没有（也不该有）根机密 `AUTH_PEPPER`，
- * 所以第二份包裹（供 Worker/重置使用的 `k_wrapped_backup`）由**服务端**用它派生出的
- * 备份包裹键包出来。改密 / 重置时浏览器手里已有旧的备份包裹，原样带回来即可，不必再传 K。
+ * `k` **只要服务端收到就重包一次** `k_wrapped_backup`（用根机密 `AUTH_PEPPER` 派生的备份包裹键）：
+ * - **首次启用**时必须给——浏览器没有（也不该有）根机密，第二份包裹只能由服务端包出来；
+ * - **重新包裹内容密钥**（2026-09-28 的运维修复入口：根机密换过 / 从旧版本升级后旧包裹解不开）
+ *   时再给一次，把坏掉的备份包裹换掉；
+ * - 改密 / 重置时浏览器手里已有旧的备份包裹，原样带回来即可，不必再传 K。
  */
 export const CryptoWriteSchema = v.object({
   materials: CryptoMaterialsInputSchema,

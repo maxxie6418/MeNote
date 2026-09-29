@@ -7,7 +7,7 @@ import "fake-indexeddb/auto";
  * 最重要的那条路径——**有本地缓存时离线也能解锁**；服务端那一侧的行为在 worker 用例里测。
  */
 import { renderHook, waitFor, act, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CRYPTO_KDF,
   DEFAULT_PRIVACY_SETTINGS,
@@ -29,9 +29,11 @@ import { cacheCryptoState, readCachedCrypto } from "../src/data/db/privacy";
 const PASSWORD = "隐私密码-测试用";
 const ITERATIONS = 1_000; // 用例里不用 600k，参数从材料读，代码路径一致
 
-async function seedCache(): Promise<CryptoState> {
+/** 造一份本地缓存材料；把明文 K 一并交出来，便于断言"重新包裹确实把它交给了服务端" */
+async function seedCache(): Promise<{ state: CryptoState; contentKey: Uint8Array<ArrayBuffer> }> {
   const salt = randomSalt();
   const kek = await deriveKek(PASSWORD, salt, ITERATIONS);
+  const contentKey = randomContentKey();
   const state: CryptoState = {
     enabled: true,
     materials: {
@@ -39,14 +41,27 @@ async function seedCache(): Promise<CryptoState> {
       kdf_iterations: ITERATIONS,
       kdf_salt: base64UrlEncode(salt),
       verifier: await makeVerifier(kek),
-      k_wrapped_pw: await wrapContentKey(randomContentKey(), kek),
+      k_wrapped_pw: await wrapContentKey(contentKey, kek),
       k_wrapped_backup: base64UrlEncode(new Uint8Array(61).fill(7)),
     },
     rev: 1,
     updated_at: 1,
   };
   await cacheCryptoState(state, 1);
-  return state;
+  return { state, contentKey };
+}
+
+/**
+ * 服务端响应的形状要过共享 schema（迭代数下限 10 万，用例里的 1000 过不了），
+ * blob 沿用种子那份；`rev` 与本地缓存相同 → 不会覆盖缓存（本组只关心"请求带了什么"）。
+ */
+function serverStateOf(state: CryptoState): CryptoState {
+  return {
+    enabled: true,
+    materials: { ...state.materials!, kdf_iterations: 100_000 },
+    rev: state.rev,
+    updated_at: state.updated_at,
+  };
 }
 
 function mount() {
@@ -59,6 +74,11 @@ beforeEach(async () => {
   await db.delete();
   await db.open();
   window.localStorage.clear();
+});
+
+afterEach(() => {
+  // 本文件只有"重新包裹"这一组顶替网络，别把替身留给别的用例（它们靠"连不上服务端"验离线路径）
+  vi.unstubAllGlobals();
 });
 
 describe("材料与初始状态", () => {
@@ -212,5 +232,75 @@ describe("旧设置行的组合回归", () => {
     await waitFor(() =>
       expect(screen.getByTestId("tier").textContent).toBe(DEFAULT_PRIVACY_SETTINGS.tier),
     );
+  });
+});
+
+/**
+ * 「重新包裹内容密钥」（2026-09-28 补的运维修复入口）在**组装层**的契约。
+ *
+ * 界面那侧只验到"点了按钮就把当前密码交给组装层"（`privacy-settings.test.tsx`）；
+ * 这里再走一步，验组装层**真的把明文 `k` 交给了服务端**——那是修复生效的唯一条件。
+ * 网络用替身顶住（本文件其余用例刻意不 mock，靠"连不上服务端"验离线路径）。
+ */
+describe("重新包裹内容密钥（组装层 → 服务端必须收到明文 k）", () => {
+  it("当前密码正确：解出 K 并随 PUT 提交，材料其余部分原样带回", async () => {
+    const { state, contentKey } = await seedCache();
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({
+        url: String(input),
+        method: init?.method ?? "GET",
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return new Response(JSON.stringify(serverStateOf(state)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const { result } = mount();
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.rewrapContentKey(PASSWORD);
+    });
+    expect(ok).toBe(true);
+
+    const put = calls.find((call) => call.method === "PUT");
+    expect(put, "重新包裹应当发一次 PUT /api/crypto").toBeTruthy();
+    const body = JSON.parse(put?.body ?? "{}") as {
+      materials: Record<string, unknown>;
+      k?: string;
+    };
+    // 明文 K 必须带上——服务端据此重包备份包裹
+    expect(body.k).toBe(base64UrlEncode(contentKey));
+    // 这个动作不改密码：校验块与密码包裹原样带回
+    expect(body.materials.verifier).toBe(state.materials?.verifier);
+    expect(body.materials.k_wrapped_pw).toBe(state.materials?.k_wrapped_pw);
+    // 旧备份包裹**不带**：由服务端用当前根机密重包（带回去可能把坏包裹又写回来）
+    expect(body.materials.k_wrapped_backup).toBeUndefined();
+  });
+
+  it("当前密码不对：返回 false，一个写请求都不发", async () => {
+    const { state } = await seedCache();
+    const methods: string[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      methods.push(init?.method ?? "GET");
+      return new Response(JSON.stringify(serverStateOf(state)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const { result } = mount();
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+
+    let ok = true;
+    await act(async () => {
+      ok = await result.current.rewrapContentKey("不是这个密码");
+    });
+    expect(ok).toBe(false);
+    expect(methods).not.toContain("PUT");
   });
 });

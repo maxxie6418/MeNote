@@ -113,10 +113,17 @@ export async function getCryptoState(db: D1Database, userId: string): Promise<Cr
 }
 
 /**
- * `PUT /api/crypto`：启用 / 改密 / 重置后的整体覆盖（后写为准，`rev + 1`）。
+ * `PUT /api/crypto`：启用 / 改密 / 重置 / **重新包裹**后的整体覆盖（后写为准，`rev + 1`）。
  *
- * `input.k` 只在**首次启用**时提供——见 `wrapContentKeyWithBackupSecret` 的说明；
- * 改密 / 重置时把 `GET` 拿到的旧备份包裹原样带回来即可。
+ * `input.k` **只要出现就用当前根机密派生的键重包一份 `k_wrapped_backup`**，与是否首次启用无关：
+ * - **首次启用**：浏览器手里没有备份包裹，只能给明文 K（服务端见 `wrapContentKey`）；
+ * - **重新包裹**（2026-09-28 补的运维修复入口）：实例根机密换过、或从旧版本升级后旧包裹
+ *   解不开时，浏览器用当前隐私密码解出 K 再交一次，把坏掉的备份包裹换掉。
+ *   **为什么允许再次带 `k`**：这不改变安全边界——K 本来就由服务端用根机密包着
+ *   （内容也本就是明文存储，见《隐私锁设计》P1/P3），服务端多收一次 K 不多暴露任何东西；
+ *   密码对不对由浏览器拿 `verifier` 本地校验，服务端不参与、也不改写材料的其余部分；
+ * - **不带 `k`** 的常规 PUT（改密 / 重置）把 `GET` 拿到的旧备份包裹原样带回来即可，
+ *   不重包（既有行为，由 `crypto.test.ts` 的改密用例钉住）。
  */
 export async function putCryptoMaterials(
   env: EnvBindings,
@@ -224,7 +231,8 @@ async function deriveBackupWrapKey(
 }
 
 /**
- * 用派生的备份包裹键把内容密钥 K 包起来（**只在首次启用时走这条路**）。
+ * 用派生的备份包裹键把内容密钥 K 包起来（**首次启用**与**重新包裹**都走这条路：
+ * `input.k` 出现即调用，见 `putCryptoMaterials` 的说明）。
  *
  * 为什么服务端要做这一步：根机密是 Worker 机密，浏览器拿不到也不该拿到；
  * 而"重置隐私密码"要求服务端能解出 K。所以启用时浏览器把 K 交给服务端包一次

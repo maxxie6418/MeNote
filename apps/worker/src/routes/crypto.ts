@@ -3,7 +3,7 @@
  *
  * 四个端点，都需要会话（不是公开接口）：
  * | `GET /api/crypto`        | 取材料（未启用时 `enabled: false`） |
- * | `PUT /api/crypto`        | 启用 / 改密 / 重置后整体覆盖 |
+ * | `PUT /api/crypto`        | 启用 / 改密 / 重置 / 重新包裹 K 后整体覆盖（带 `k` 即重包备份包裹） |
  * | `POST /api/crypto/reset` | 忘记密码：服务端用**从根机密派生的备份包裹键**解出 K |
  * | `DELETE /api/crypto`     | 关闭隐私锁（有隐私内容时拒绝） |
  *

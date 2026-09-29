@@ -307,7 +307,8 @@ export const searchApi = {
  * 隐私锁门禁材料（M3；《隐私锁设计》§4.2）。
  *
  * 四个端点都返回 `no-store` 的材料，响应过一遍共享 schema。
- * `put` 的 `k` 只在**首次启用**时给（服务端用 `BACKUP_CRED_KEY` 包第二份包裹）。
+ * `put` 的 `k`：**首次启用**时必须给；改密 / 重置 / **重新包裹内容密钥**时也可以给——
+ * 服务端只要收到 `k` 就用当前根机密（`AUTH_PEPPER` 派生）重包一次 `k_wrapped_backup`。
  */
 export const cryptoApi = {
   get: async (): Promise<CryptoState> => {

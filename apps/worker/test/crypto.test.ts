@@ -155,6 +155,59 @@ describe("PUT /api/crypto（启用 / 改密）", () => {
     expect(second.state.materials?.k_wrapped_backup).toBe(first.state.materials?.k_wrapped_backup);
   });
 
+  /**
+   * 修复路径（2026-09-28 补的「重新包裹内容密钥」入口在服务端的契约）。
+   *
+   * 场景：实例的根机密换过、或从"另配第二个机密"的旧版本升级上来——库里的
+   * `k_wrapped_backup` 用**现在**的派生键解不开，表现是"忘记隐私密码 → 重置"失败。
+   * 运维动作：浏览器用当前隐私密码解出 K，把材料原样带回、再带一次 `k`。
+   *
+   * 这条与上面的"改密"用例一起，把 PUT 的两半行为都钉住：
+   * **带 `k` → 重包**（本条），**不带 `k` → 原样沿用旧包裹**（改密那条）。
+   */
+  it("重新包裹：备份包裹解不开时，带 K 的 PUT 换掉它，之后 reset 能解出 K", async () => {
+    const k = new Uint8Array(CRYPTO_KEY_BYTES).fill(51);
+    const first = await putCrypto(alice.cookie, {
+      materials: fakeMaterials(),
+      k: base64UrlEncode(k),
+    });
+    expect(first.status).toBe(200);
+
+    // 模拟"旧机密包的"备份包裹：直接换成一个当前派生键解不开的密文块
+    const broken = blob(CRYPTO_KEY_BYTES, 77);
+    await env.DB.prepare("UPDATE user_crypto SET k_wrapped_backup = ? WHERE user_id = ?")
+      .bind(cryptoBlobFromBase64Url(broken), alice.id)
+      .run();
+
+    const beforeRes = await SELF.fetch(`${ORIGIN}/api/crypto/reset`, {
+      method: "POST",
+      headers: headers(alice.cookie),
+      body: "{}",
+    });
+    expect(beforeRes.status).toBe(422);
+
+    // 运维修复：材料原样带回 + 再带一次明文 K
+    const fixed = await putCrypto(alice.cookie, {
+      materials: fakeMaterials(),
+      k: base64UrlEncode(k),
+    });
+    expect(fixed.status).toBe(200);
+    expect(fixed.state.rev).toBe(2);
+    // 坏包裹被换掉，且重包是新的一份（IV 随机，与首次的也不一样）
+    expect(fixed.state.materials?.k_wrapped_backup).not.toBe(broken);
+    expect(fixed.state.materials?.k_wrapped_backup).not.toBe(
+      first.state.materials?.k_wrapped_backup,
+    );
+
+    const afterRes = await SELF.fetch(`${ORIGIN}/api/crypto/reset`, {
+      method: "POST",
+      headers: headers(alice.cookie),
+      body: "{}",
+    });
+    expect(afterRes.status).toBe(200);
+    expect(((await afterRes.json()) as CryptoResetResponse).k).toBe(base64UrlEncode(k));
+  });
+
   it("首次启用既不带 K 也不带备份包裹：422（服务端无法自己造出内容密钥）", async () => {
     const { kdf, kdf_iterations, kdf_salt, verifier, k_wrapped_pw } = fakeMaterials();
     const { status } = await putCrypto(alice.cookie, {

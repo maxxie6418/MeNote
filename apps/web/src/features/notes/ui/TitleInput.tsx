@@ -15,6 +15,7 @@
  * 提交仍然走 `patch_meta`（离线优先、幂等），数据口径与之前一致。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { registerEditingSession } from "../../../app/shortcuts/shortcuts";
 
 /** 空闲多久提交一次（期间继续敲字就顺延） */
 export const COMMIT_IDLE_MS = 400;
@@ -37,6 +38,7 @@ export function TitleInput({
   disabled = false,
 }: TitleInputProps) {
   const [text, setText] = useState(value);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const textRef = useRef(value);
   /** 已经交出去的那份值（用来判断"有没有待提交的内容"） */
   const committedRef = useRef(value);
@@ -64,6 +66,19 @@ export function TitleInput({
   useEffect(() => () => flush(), [flush]);
 
   /*
+    `Ctrl/Cmd+S` 走全局编辑会话：焦点在标题上，或还有没提交的字，都算正在编辑。
+    没改动时 `flush` 自己返回，不会多写一次。
+  */
+  useEffect(() => {
+    return registerEditingSession({
+      id: "note-title",
+      isActive: () =>
+        document.activeElement === inputRef.current || textRef.current !== committedRef.current,
+      flush,
+    });
+  }, [flush]);
+
+  /*
     外部值变化（同步下来 / 冲突处理改了这一篇）：
     - 与"已交出去的那份"相同 → 是我们自己提交后的回灌，什么都不做；
     - 本地还有待提交内容 → 不采纳，用户的输入优先（提交后自然会覆盖）；
@@ -89,6 +104,7 @@ export function TitleInput({
 
   return (
     <input
+      ref={inputRef}
       className={className}
       aria-label={ariaLabel}
       value={text}

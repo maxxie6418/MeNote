@@ -28,6 +28,7 @@ import {
   type LocalItem,
   type MemoContent,
 } from "../../data/db";
+import { useNoteEditingSession } from "../../app/shortcuts/useNoteEditingSession";
 import { createNoteEditor, type NoteEditorController, type NoteEditorSnapshot } from "./model";
 import { itemsApi } from "../../data/api/endpoints";
 import {
@@ -260,6 +261,7 @@ export function useNotesWorkspace(
   );
 
   const editorRef = useRef<NoteEditorController | null>(null);
+  useNoteEditingSession(editorRef);
   /**
    * 当前"显示的这一篇"的 id（`open` 阶段 1 落，供 `notifyUploaded` 判定回调归属）：
    * 编辑器回调可能迟到，上一篇的迟到回调不该改掉这一篇的打开基准（见 `notifyUploaded`）。

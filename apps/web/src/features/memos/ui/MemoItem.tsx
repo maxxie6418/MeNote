@@ -6,7 +6,8 @@
  * **不提供收藏**（Q8：收藏视图不含 Memo）。
  * 编辑时只呈现**正文内容**：YAML front matter 由数据层维护，不让用户碰到。
  */
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { registerEditingSession } from "../../../app/shortcuts/shortcuts";
 import type { LocalItem, MemoContent } from "../../../data/db";
 import { Icon } from "../../../app/ui/Icon";
 import { Chip } from "../../../app/ui/Chip";
@@ -43,16 +44,38 @@ export function MemoItem({
   const content = entry.content;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(content);
+  const draftRef = useRef(draft);
+  const onSaveRef = useRef(onSave);
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
   function beginEdit(): void {
+    draftRef.current = content;
     setDraft(content);
     setEditing(true);
   }
 
+  /** 写入本地并入队，不收起编辑。`Ctrl/Cmd+S` 走这里，人还在改。 */
+  function persist(): void {
+    if (draftRef.current !== content) onSaveRef.current(memo.id, draftRef.current);
+  }
+
   function save(): void {
     setEditing(false);
-    if (draft !== content) onSave(memo.id, draft);
+    persist();
   }
+
+  useEffect(() => {
+    if (!editing) return undefined;
+    return registerEditingSession({
+      id: `memo:${memo.id}`,
+      isActive: () => true,
+      flush: () => {
+        if (draftRef.current !== content) onSaveRef.current(memo.id, draftRef.current);
+      },
+    });
+  }, [content, editing, memo.id]);
 
   return (
     <article className="memo" data-memo-id={memo.id}>
@@ -119,7 +142,10 @@ export function MemoItem({
             aria-label="编辑 Memo"
             value={draft}
             autoFocus
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              draftRef.current = event.target.value;
+              setDraft(event.target.value);
+            }}
             onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
                 event.preventDefault();
@@ -131,7 +157,7 @@ export function MemoItem({
             }}
           />
           <div className="memo__editfoot">
-            <span className="memo__hint">Ctrl+Enter 保存 · Esc 取消</span>
+            <span className="memo__hint">Ctrl+S 保存并同步 · Ctrl+Enter 收起 · Esc 取消</span>
             <button
               type="button"
               className="memo__cancel"

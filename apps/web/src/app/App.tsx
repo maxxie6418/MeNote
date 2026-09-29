@@ -49,6 +49,7 @@ import { fnbarWiring, navPanels } from "./NavPanels";
 import { isInVault } from "../features/privacy/vault";
 import { isScopeGateOpen } from "@menote/shared";
 import type { NotesView } from "../features/notes/views";
+import { useGlobalShortcuts } from "./shortcuts/useGlobalShortcuts";
 
 export default function App() {
   const { route, navigate } = useRoute();
@@ -263,18 +264,6 @@ export default function App() {
   /** 待办视图的"今天"：按**用户设置的时区**算，且只在挂载时取一次（渲染期调 Date.now() 不纯） */
   const [today] = useState(() => dayKeyInZone(Date.now(), userSettings.settings.timezone));
 
-  // Ctrl/Cmd+K 聚焦顶栏搜索（M2-6）；输入框用固定 id 定位，避免为一处焦点穿透多个组件
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent): void {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        document.getElementById("search-input")?.focus();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
-
   /**
    * 同步引擎必须**只随登录状态**创建/销毁。
    *
@@ -356,6 +345,19 @@ export default function App() {
   });
   /** 添加内容窗口（Memo / 待办「添加」的落点，改弹窗不再跳录入框）：开关状态与 JSX 收在 slot 里 */
   const addEntry = useAddEntrySlot(fnbarProps.onPublishMemo, fnbarProps.onPublishTask);
+  /*
+    全局快捷键只在这一处监听（`app/shortcuts/`）。
+    未登录时「新建」是空操作——窗口只在登录后的树里渲染，不能在登录页把 kind 先设上。
+  */
+  useGlobalShortcuts({
+    syncNow: () => {
+      void engineRef.current?.runOnce();
+    },
+    openNewMemo: () => {
+      if (auth.snapshot.status !== "authenticated") return;
+      addEntry.open("memo");
+    },
+  });
 
   if (auth.snapshot.status === "loading") {
     return <AuthLoading />;

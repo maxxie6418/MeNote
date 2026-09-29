@@ -602,6 +602,7 @@ export default function App() {
           <NotesSlot
             workspace={workspace}
             editorMode={userSettings.settings.editor_mode}
+            editorModes={userSettings.settings.editor_modes}
             privacy={privacy}
             onRequestUnlock={requestUnlock}
             /*

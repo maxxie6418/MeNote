@@ -6,7 +6,7 @@
  * 2. **单篇加密的四个动作**（加密此篇 / 取消加密 / 锁上此篇 / 锁上全部单篇）与它们的可用性说明，
  *    都来自隐私锁组装层，界面只负责呈现原因（禁用必须带 `title`）。
  */
-import type { PrivacyGate } from "@menote/shared";
+import type { EditorMode, PrivacyGate } from "@menote/shared";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "../ui/Controls";
 import { Modal } from "../ui/Modal";
@@ -26,8 +26,10 @@ import { TwoPane } from "./TwoPane";
 
 export interface NotesPaneProps {
   workspace: NotesWorkspace;
-  /** 默认编辑模式（来自设置） */
+  /** 打开笔记时的模式**种子**（设置里的 `editor_mode`）；日常用哪一档由正文区自己记在本机 */
   editorMode: DocMode;
+  /** 用户在设置里开着哪几档（`editor_modes`）：正文区的切换条只列这些 */
+  editorModes: EditorMode[];
   encryption: {
     enabled: boolean;
     gate: PrivacyGate;
@@ -61,6 +63,7 @@ export interface NotesPaneProps {
 export function NotesPane({
   workspace,
   editorMode,
+  editorModes,
   encryption,
   privacyLine,
   onToggleEncryption,
@@ -235,6 +238,7 @@ export function NotesPane({
             initialBody={workspace.initialBody}
             snapshot={workspace.snapshot}
             initialMode={editorMode}
+            availableModes={editorModes}
             remoteChanged={workspace.remoteChanged}
             conflict={workspace.conflictCopy}
             onOpenConflictCopy={() => {

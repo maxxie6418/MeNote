@@ -6,7 +6,7 @@
  */
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { EditorMode, StartView, TaskFilterForm, UserSettings } from "@menote/shared";
-import { TASK_FILTER_FORMS } from "@menote/shared";
+import { TASK_FILTER_FORMS, normalizeEditorModes } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
 import { InfoHint } from "../../../app/ui/InfoHint";
 import type { ThemeMode } from "../../../app/theme/useTheme";
@@ -25,7 +25,7 @@ import { InstancePage } from "./InstancePage";
 const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   general: { title: "通用", summary: "启动视图、时区、主题、笔记本树与快捷菜单" },
   account: { title: "账户与安全", summary: "登录密码与会话" },
-  editor: { title: "编辑器", summary: "打开笔记时的默认编辑模式" },
+  editor: { title: "编辑器", summary: "打开笔记时用哪一档、正文区能切到哪几档" },
   privacy: { title: "隐私锁", summary: "加密空间、门禁与隐私密码" },
   versions: { title: "版本与回收站", summary: "版本封存与保留策略、回收站保留天数" },
   instance: { title: "实例管理", summary: "本实例的注册开关与用量（仅管理员）" },
@@ -81,7 +81,7 @@ const START_VIEW_OPTIONS: ReadonlyArray<{ id: StartView; label: string }> = [
 ];
 
 const EDITOR_MODE_OPTIONS: ReadonlyArray<{ id: EditorMode; label: string; desc: string }> = [
-  { id: "split", label: "双栏", desc: "左编辑右预览，默认" },
+  { id: "split", label: "双栏", desc: "左编辑右预览" },
   { id: "edit", label: "仅编辑", desc: "只显示编辑区" },
   { id: "preview", label: "仅预览", desc: "只显示预览区" },
   {
@@ -167,6 +167,20 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const pages = NAV_ORDER.filter((candidate) => candidate !== "instance" || role === "owner");
   const meta = PAGE_META[page];
+
+  /**
+   * 改「正文区能切到哪几档」（用户 2026-09-29 拍板改成开关组）。
+   *
+   * 两条纪律：①落库顺序一律走契约的规范顺序（`normalizeEditorModes`），不随点击次序漂；
+   * ②**至少留一档**——UI 已经把"最后开着的那一个"禁用掉，这里再挡一次（一个不变式不靠单点保证；
+   * 注意这里**不能**直接用归一化的兜底，那会把"关掉最后一个"变成"四档全开"，与用户意图相反）。
+   */
+  function patchEditorModes(id: EditorMode, on: boolean): void {
+    const current = userSettings.editor_modes;
+    const next = on ? [...current, id] : current.filter((mode) => mode !== id);
+    if (next.length === 0) return;
+    onPatchSettings({ editor_modes: normalizeEditorModes(next) });
+  }
 
   return (
     <div className="settings">
@@ -360,28 +374,40 @@ export function SettingsPanel({
 
         {page === "editor" ? (
           <section className="setcard" aria-label="编辑器">
-            <h3 className="setcard__title">默认编辑模式</h3>
-            <div className="setrow">
-              <div className="setrow__label">
-                <span className="setrow__name">打开笔记时的模式</span>
-                <span className="setrow__desc">随时可以在正文区手动切换</span>
-              </div>
-              <div className="radioset" role="group" aria-label="默认编辑模式">
-                {EDITOR_MODE_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className="radioset__item"
-                    aria-pressed={userSettings.editor_mode === option.id}
-                    title={option.desc}
-                    onClick={() => onPatchSettings({ editor_mode: option.id })}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-                {/* 四档都可用：第四档「即时渲染」2026-09-28 落地，取代原先"置灰并说明原因"的占位 */}
-              </div>
-            </div>
+            <h3 className="setcard__title">
+              编辑模式
+              <InfoHint label="编辑模式说明">
+                开关决定正文区能切到哪几档；关掉的档不再出现在那条切换条里，至少要留一个。
+                打开笔记时用你上次用的那一档——这个"上次"记在本机，不跟随账号同步。
+              </InfoHint>
+            </h3>
+            {EDITOR_MODE_OPTIONS.map((option) => {
+              const on = userSettings.editor_modes.includes(option.id);
+              const lastOne = on && userSettings.editor_modes.length === 1;
+              return (
+                <div className="setrow" key={option.id}>
+                  <div className="setrow__label">
+                    <span className="setrow__name">{option.label}</span>
+                    <span className="setrow__desc">{option.desc}</span>
+                    {/* 禁用不能只靠悬停（DESIGN.md §6.1）：最后开着的那一档把原因平铺出来 */}
+                    {lastOne ? (
+                      <span className="setrow__desc">至少保留一个模式，所以这一个不能再关</span>
+                    ) : null}
+                  </div>
+                  <span className="setrow__control">
+                    <button
+                      type="button"
+                      role="switch"
+                      className="toggle"
+                      aria-checked={on}
+                      aria-label={option.label}
+                      disabled={lastOne}
+                      onClick={() => patchEditorModes(option.id, !on)}
+                    />
+                  </span>
+                </div>
+              );
+            })}
           </section>
         ) : null}
 

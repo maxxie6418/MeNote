@@ -516,19 +516,45 @@ describe("设置壳", () => {
     expect(onPatchSettings).toHaveBeenCalledWith({ task_view: { filter_form: "floating" } });
   });
 
-  it("编辑器页：四档都可选，第四档「即时渲染」不再是置灰占位（2026-09-28 落地）", async () => {
+  it("编辑器页：四档改成**开关组**，开关写的是「显示哪几档」（2026-09-29）", async () => {
     const user = userEvent.setup();
     const onPatchSettings = vi.fn();
 
     render(<SettingsPanel {...baseProps} page="editor" onPatchSettings={onPatchSettings} />);
 
-    await user.click(screen.getByRole("button", { name: "仅预览" }));
-    expect(onPatchSettings).toHaveBeenCalledWith({ editor_mode: "preview" });
+    // 单选组退场：不再有"默认编辑模式"这一说（默认档概念整体去掉了）
+    expect(screen.queryByRole("group", { name: "默认编辑模式" })).toBeNull();
+    const switches = screen.getAllByRole("switch");
+    expect(switches).toHaveLength(4);
+    for (const mode of ["双栏", "仅编辑", "仅预览", "即时渲染"]) {
+      const control = screen.getByRole("switch", { name: mode });
+      expect(control.getAttribute("aria-checked"), mode).toBe("true");
+      expect((control as HTMLButtonElement).disabled, mode).toBe(false);
+    }
 
-    const live = screen.getByRole("button", { name: "即时渲染" }) as HTMLButtonElement;
-    expect(live.disabled).toBe(false);
-    await user.click(live);
-    expect(onPatchSettings).toHaveBeenCalledWith({ editor_mode: "live" });
+    // 关掉「仅预览」：交回去的是**过滤后的数组**，顺序按契约的规范顺序（不随点击次序漂）
+    await user.click(screen.getByRole("switch", { name: "仅预览" }));
+    expect(onPatchSettings).toHaveBeenCalledWith({ editor_modes: ["split", "edit", "live"] });
+  });
+
+  it("编辑器页：只剩一档时，最后那个开关禁用且**原因平铺可见**（DESIGN.md §6.1）", () => {
+    render(
+      <SettingsPanel
+        {...baseProps}
+        page="editor"
+        userSettings={{ ...DEFAULT_USER_SETTINGS, editor_modes: ["live"] }}
+      />,
+    );
+
+    const last = screen.getByRole("switch", { name: "即时渲染" }) as HTMLButtonElement;
+    expect(last.disabled).toBe(true);
+    // 原因必须看得见（不是只挂在 title 上）
+    expect(screen.getByText(/至少保留一个模式/)).toBeTruthy();
+
+    // 另外三档是关着的、而且可以重新打开
+    const off = screen.getByRole("switch", { name: "双栏" }) as HTMLButtonElement;
+    expect(off.getAttribute("aria-checked")).toBe("false");
+    expect(off.disabled).toBe(false);
   });
 
   it("账户与安全页：改密表单与退出登录都在", () => {

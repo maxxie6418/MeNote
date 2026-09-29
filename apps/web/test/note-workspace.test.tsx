@@ -12,7 +12,7 @@
  */
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/app/editor/Editor", () => ({
   Editor: (props: {
@@ -38,6 +38,11 @@ import { NoteWorkspace } from "../src/features/notes/ui/NoteWorkspace";
 import type { LocalItem } from "../src/data/db";
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  // "上次用的那一档"记在本机：用例之间必须隔离，否则互相串档
+  window.localStorage.clear();
+});
 
 function item(id: string, title = "笔记"): LocalItem {
   return {
@@ -154,6 +159,78 @@ describe("正文区模式切换", () => {
     );
 
     expect((await screen.findByTestId("editor")).getAttribute("data-initial")).toBe("B 的内容");
+  });
+});
+
+describe("编辑模式：只列开着的档 + 记住上次用的那一档（2026-09-29）", () => {
+  it("切换条只列设置里开着的档；只剩一档时它照常渲染（就一个按钮）", () => {
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        initialMode="preview"
+        availableModes={["preview"]}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "编辑模式" });
+    expect(within(group).getAllByRole("button")).toHaveLength(1);
+    expect(
+      within(group).getByRole("button", { name: "仅预览" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("打开时用**本机记住的**那一档（上次离开时用的），而不是设置里的种子", () => {
+    window.localStorage.setItem("menote:editor:last-mode", "preview");
+
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        initialMode="split"
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "仅预览" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("记住的那一档被关掉了 → 落到还开着的第一档（坏值不卡正文）", () => {
+    window.localStorage.setItem("menote:editor:last-mode", "live");
+
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        availableModes={["edit", "preview"]}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "仅编辑" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: "即时渲染" })).toBeNull();
+  });
+
+  it("在切换条里点一档会记进本机：下次打开照它", () => {
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "仅预览" }));
+    expect(window.localStorage.getItem("menote:editor:last-mode")).toBe("preview");
   });
 });
 

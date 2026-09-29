@@ -7,7 +7,7 @@
  *   这不是前端"偷偷限制"，而是锁定态下那些文件夹本来就不可见（设计 §6.3、走查第 15 行）。
  */
 import type { NotesWorkspace } from "../features/notes/useNotesWorkspace";
-import { isScopeGateOpen } from "@menote/shared";
+import { isScopeGateOpen, type EditorMode } from "@menote/shared";
 import { useCallback, useMemo } from "react";
 import type { DocMode } from "../features/notes/ui/NoteWorkspace";
 import { formatCountdown } from "../features/privacy/model";
@@ -17,7 +17,10 @@ import { NotesPane } from "./workarea/NotesPane";
 
 export interface NotesSlotProps {
   workspace: NotesWorkspace;
+  /** 打开笔记时的模式**种子**（设置里的 `editor_mode`） */
   editorMode: DocMode;
+  /** 用户在设置里开着哪几档（`editor_modes`）：正文区的切换条只列这些 */
+  editorModes: EditorMode[];
   /** 隐私锁组装层的返回值（整份传进来，少一层手工转写） */
   privacy: PrivacyLockState;
   onRequestUnlock: () => void;
@@ -34,6 +37,7 @@ function toastError(onToast: NotesSlotProps["onToast"], fallback: string) {
 export function NotesSlot({
   workspace,
   editorMode,
+  editorModes,
   privacy,
   onRequestUnlock,
   onToast,
@@ -138,6 +142,7 @@ export function NotesSlot({
     <NotesPane
       workspace={workspace}
       editorMode={editorMode}
+      editorModes={editorModes}
       privacyLine={privacyLine}
       encryption={{
         enabled: privacy.enabled,

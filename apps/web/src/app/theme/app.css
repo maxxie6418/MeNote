@@ -4075,6 +4075,13 @@ button.chip--tag:hover {
   transform: translateX(17px);
 }
 
+/* 禁用态（编辑器设置的「最后一个模式不能关」）：看得出点不动；
+   原因在行内平铺可见，不靠悬停（DESIGN.md §6.1）。 */
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* 窄屏兼容底线（DESIGN.md §2.4）：只做弹性收缩，不发明移动端布局 */
 @media (max-width: 1080px) {
   :root {

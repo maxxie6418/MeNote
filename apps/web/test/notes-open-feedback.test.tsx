@@ -81,6 +81,7 @@ function Harness() {
     <NotesPane
       workspace={workspace}
       editorMode="edit"
+      editorModes={["split", "edit", "preview", "live"]}
       encryption={{
         enabled: false,
         gate: GATE,

@@ -4,13 +4,15 @@
  * 编辑器与 Markdown 渲染都走**动态 import**（架构 §14.1：编辑器与渲染各自独立分包，不进首屏）。
  * 切换条目由 `key={item.id}` 重新挂载编辑器；切换编辑/预览模式**不重建文档**（架构 §3.3）。
  */
-import { Suspense, lazy, useRef, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
+import { type EditorMode, normalizeEditorModes } from "@menote/shared";
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
 import { Button } from "../../../app/ui/Controls";
 import { Modal } from "../../../app/ui/Modal";
 import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
 import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
+import { initialEditorMode, writeLastEditorMode } from "../editor-mode";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
 import { TitleInput } from "./TitleInput";
@@ -35,7 +37,11 @@ const MarkdownPreview = lazy(async () => {
   return { default: mod.MarkdownPreview };
 });
 
-export type DocMode = "split" | "edit" | "preview" | "live";
+/**
+ * 正文区这一档的取值，与设置契约**同一个联合类型**（`DocMode` 只是本组件的别名）：
+ * 契约里加一档时，下面的 `MODE_LABEL` 会因为缺键立刻报错，而不是界面上悄悄少一个按钮。
+ */
+export type DocMode = EditorMode;
 
 const MODE_LABEL: Record<DocMode, string> = {
   split: "分屏",
@@ -49,8 +55,17 @@ export interface NoteWorkspaceProps {
   item: LocalItem | null;
   initialBody: string;
   snapshot: NoteEditorSnapshot | null;
-  /** 打开条目时的模式；来自 设置 › 编辑器 › 默认编辑模式（M2-7），之后可手动切换 */
+  /**
+   * 打开条目时的模式**种子**：设置里的 `editor_mode`（M2-7）。
+   * 2026-09-29 起它只是"本机还没记住上次用过哪一档"时的首次初始值——
+   * 日常打开用的是本机记住的那一档（见 `features/notes/editor-mode.ts`）。
+   */
   initialMode?: DocMode;
+  /**
+   * 用户在设置里**开着**的档（`editor_modes`）：正文区的切换条只列这些。
+   * 缺省 = 四档全开（老调用点与用例不必逐个补参数）。
+   */
+  availableModes?: EditorMode[];
   /** 这条被别的标签页改过（M2-9）：显示事前提示，避免"以为没冲突" */
   remoteChanged?: boolean;
   /** 这条有冲突副本（M2-9 对比 UI）：显示处理入口 */
@@ -127,6 +142,7 @@ export function NoteWorkspace({
   initialBody,
   snapshot,
   initialMode,
+  availableModes,
   remoteChanged = false,
   conflict = null,
   onOpenConflictCopy,
@@ -145,11 +161,30 @@ export function NoteWorkspace({
   attachmentsMeta,
   onEditorReady,
 }: NoteWorkspaceProps) {
-  const [mode, setMode] = useState<DocMode>(initialMode ?? "split");
+  /** 用户在设置里**开着**的档（`editor_modes`）；切换条只列这些，顺序按契约的规范顺序 */
+  const available = useMemo(() => normalizeEditorModes(availableModes), [availableModes]);
+  /**
+   * 打开这篇时用哪一档：**本机记住的"上次用的那档"优先**，其次设置里的首次初始值
+   * （`editor_mode`）；两者都要"还开着"才算数。见 `features/notes/editor-mode.ts`。
+   */
+  const [mode, setMode] = useState<DocMode>(() => initialEditorMode(available, initialMode));
+
+  /** 切档：顺手记进本机——"没有默认档"之后，这一档就是下次打开的依据 */
+  function switchMode(next: DocMode): void {
+    setMode(next);
+    writeLastEditorMode(next);
+  }
+
   /** 「添加附件」代点的隐藏文件输入（M4-10） */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   /** 表格条目的两种形态由它决定：能解析走表格界面，解析失败走自动降级（界面稿 §2.10） */
   const isTable = item?.type === "table";
+  /**
+   * 实际渲染用的档：**当前档被设置关掉时**落到还开着的第一档（跨设备改设置的窗口期）。
+   * 表格是例外——坏表格的「查看原文」是救援入口（`onViewSource`），那一档即使没开也要能切过去；
+   * 表格本来也不渲染模式切换条，所以这里不担心"显示了没开的档"。
+   */
+  const shownMode: DocMode = isTable || available.includes(mode) ? mode : available[0]!;
   const table = useTableDoc(initialBody);
   /** 主动降级的确认框（要改 `items.type`，属 API 变更 → 待拍板，见下面 Modal 的说明） */
   const [degradeOpen, setDegradeOpen] = useState(false);
@@ -274,18 +309,21 @@ export function NoteWorkspace({
         {/*
           模式切换只对 Markdown 正文有意义：表格有自己的"表格 / 图册"档位（界面稿 §3 的正文头
           也只列了标题 + 锁标识 + 更多菜单，**没有模式切换**）。对表格显示它，就是一个点了没反应的控件。
+
+          列哪几档由设置决定（`editor_modes`）：**关掉的档不出现在这里**，所以只剩一档时
+          这条切换条也照常渲染（就一个按钮，仍是当前档）。
         */}
         {isTable ? null : (
           <div className="segmented" role="group" aria-label="编辑模式" style={{ flex: "none" }}>
-            {(Object.keys(MODE_LABEL) as DocMode[]).map((candidate) => (
+            {available.map((candidate) => (
               <button
                 key={candidate}
                 type="button"
                 className="segmented__item"
-                aria-pressed={mode === candidate}
+                aria-pressed={shownMode === candidate}
                 disabled={bodyLocked}
                 title={bodyLocked ? "解锁后才能查看或编辑正文" : undefined}
-                onClick={() => setMode(candidate)}
+                onClick={() => switchMode(candidate)}
               >
                 {MODE_LABEL[candidate]}
               </button>
@@ -400,6 +438,11 @@ export function NoteWorkspace({
             */}
             {isTable ? (
               <TableDegradeNotice
+                /*
+                  救援入口：坏表格的「查看原文」必须能切到「仅编辑」——即使那一档没被打开，
+                  也不能让它变成一个点了没反应的按钮（这里**故意**不走 `switchMode`，
+                  它既不受"显示哪几档"限制，也不会把救援动作记成"用户偏好"）。
+                */
                 onViewSource={() => setMode("edit")}
                 onDownload={() => {
                   const blob = new Blob([table.current()], { type: "text/markdown;charset=utf-8" });
@@ -414,7 +457,7 @@ export function NoteWorkspace({
             ) : null}
 
             <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
-            {mode === "split" ? (
+            {shownMode === "split" ? (
             <div className="doc-split">
               <div className="doc-split__pane">
                 {/*
@@ -435,7 +478,7 @@ export function NoteWorkspace({
                 <MarkdownPreview source={previewSource} attachments={attachmentsMeta} />
               </div>
             </div>
-          ) : mode === "edit" || mode === "live" ? (
+          ) : shownMode === "edit" || shownMode === "live" ? (
             /*
               「仅编辑」与「即时渲染」共用这一个位置（都是单栏编辑器），差别只在 `live` 这个开关
               ——它在 `Editor` 里走 `Compartment` 重配置，所以两档互切**不重建文档**。
@@ -447,7 +490,7 @@ export function NoteWorkspace({
                 onChange={handleInput}
                 onReady={onEditorReady}
                 onFiles={onFiles}
-                live={mode === "live"}
+                live={shownMode === "live"}
                 ariaLabel="正文"
               />
             </div>

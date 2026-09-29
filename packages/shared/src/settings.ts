@@ -17,14 +17,37 @@ export const StartViewSchema = v.picklist(["home", "recent", "starred"]);
 export type StartView = v.InferOutput<typeof StartViewSchema>;
 
 /**
- * 默认编辑模式（M04-03）。四档：双栏（默认）/ 仅编辑 / 仅预览 / **即时渲染**。
+ * 编辑模式（M04-03）。四档：双栏（默认）/ 仅编辑 / 仅预览 / **即时渲染**。
  *
  * 「即时渲染」于 2026-09-28 落地（wiki 设计文档 §7.1 的既定需求；首期覆盖范围见
  * `docs/modules/Menote-即时渲染-设计-v1.md`）。加这一档**只扩取值、不动字段**：
  * 旧客户端只发前三档仍然合法；前端与 Worker 同一次部署上线，不存在新旧值卡壳。
+ *
+ * 【2026-09-29 语义调整】设置页不再让用户"四选一当默认档"，改成**开关组选"显示哪几档"**
+ * （见 `editor_modes`）；打开笔记时用**哪一档**由本机记住的"上次用的那档"决定，
+ * `editor_mode` 退为**首次初始值**（见 `UserSettingsSchema` 里该字段的说明）。
  */
 export const EditorModeSchema = v.picklist(["split", "edit", "preview", "live"]);
 export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
+
+/** 四档的**规范顺序**：契约、设置页开关、正文区切换条都用它，顺序不随设置变 */
+export const EDITOR_MODES: readonly EditorMode[] = ["split", "edit", "preview", "live"];
+
+/** 「显示哪些档」的默认值：**全开**（与加这个字段之前的行为完全一致） */
+export const DEFAULT_EDITOR_MODES: readonly EditorMode[] = EDITOR_MODES;
+
+/**
+ * 归一化「显示哪些档」：只留合法档、去重、按 {@link EDITOR_MODES} 的规范顺序排；
+ * **空**则兜成全开。
+ *
+ * 为什么兜底：UI 保证"至少开一个"，但设置是**整份 JSON**——可能被手改、被旧客户端整份覆盖成空，
+ * 而空数组的后果是"正文区一个档都切不了、正文也没了"，兜成全开最不伤（宁可多显示，不可没得用）。
+ */
+export function normalizeEditorModes(value: readonly EditorMode[] | undefined): EditorMode[] {
+  const wanted = new Set(value ?? []);
+  const kept = EDITOR_MODES.filter((mode) => wanted.has(mode));
+  return kept.length > 0 ? [...kept] : [...EDITOR_MODES];
+}
 
 /** 账户快捷菜单的可配置功能项（M18-03：第一版 5 个候选） */
 export const QuickMenuFeatureSchema = v.picklist(["theme", "lock", "search", "trash", "backup"]);
@@ -210,7 +233,24 @@ export const DEFAULT_NOTEBOOK_SETTINGS: NotebookSettings = { show_items: false }
 export const UserSettingsSchema = v.object({
   start_view: StartViewSchema,
   timezone: v.string(),
+  /**
+   * 编辑模式的**首次初始值**（2026-09-29 起不再由设置页直接改）。
+   *
+   * 打开笔记用哪一档：优先用**本机记住的"上次用的那档"**（设备级偏好，像主题那样），
+   * 本机还没记住过才用它；它被用户关掉了（不在 `editor_modes` 里）则落到开着的第一档。
+   * **字段保留**：老行里存着用户当年选的档，直接拿掉会让升级后第一次打开悄悄换档（行为倒退）；
+   * 旧客户端整份 PUT 仍会原样带上它，不构成兼容问题。
+   */
   editor_mode: EditorModeSchema,
+  /**
+   * **显示哪几档**（2026-09-29 加）：设置页用开关组改它，正文区的切换条只列这里开着的档；
+   * 至少留一档（UI 保证最后一个不许关，见 `apps/web` 的编辑器设置卡）。
+   *
+   * **optional + 默认值 = 全开**：与加字段之前的行为一致——老行、旧客户端 PUT 不带它时，
+   * 四档照旧都在（**不需要迁移**：设置是整份 JSON，读侧由 schema 补默认值）。
+   * 顺序由 {@link normalizeEditorModes} 收口，不依赖存储里的顺序。
+   */
+  editor_modes: v.optional(v.array(EditorModeSchema), () => [...DEFAULT_EDITOR_MODES]),
   /** 选中的功能项；**数组顺序即菜单里的显示顺序** */
   quick_menu: v.array(QuickMenuFeatureSchema),
   /**
@@ -247,6 +287,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   start_view: "home",
   timezone: "Asia/Shanghai",
   editor_mode: "split",
+  editor_modes: [...DEFAULT_EDITOR_MODES],
   quick_menu: QUICK_MENU_FEATURES.filter((feature) => feature.defaultOn).map(
     (feature) => feature.id,
   ),

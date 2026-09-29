@@ -13,6 +13,7 @@ import { AccountQuickMenu } from "./AccountQuickMenu";
 import { SearchBox } from "./SearchBox";
 import type { ThemeMode } from "../theme/useTheme";
 import type { SyncIndicator } from "../useSyncStatus";
+import type { AccountQuickMenuProps } from "./AccountQuickMenu";
 
 export interface TopbarUser {
   username: string;
@@ -38,6 +39,8 @@ export interface TopbarProps {
   onOpenTrash: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+  /** 头像外圈使用的隐私状态；未启用时不显示状态圈 */
+  privacyStatus?: AccountQuickMenuProps["privacyStatus"];
   /**
    * ⑤ 隐私锁胶囊（M3）。**由 `App` 组装后按插槽传入**：顶栏不认识隐私锁状态机，
    * 未启用时传 `null`（整个槽位不渲染，符合"未启用不显示"）。
@@ -60,6 +63,7 @@ export function Topbar({
   onOpenSettings,
   onLogout,
   privacy,
+  privacyStatus,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -97,6 +101,7 @@ export function Topbar({
           onOpenTrash={onOpenTrash}
           onOpenSettings={onOpenSettings}
           onLogout={onLogout}
+          privacyStatus={privacyStatus}
         />
       </div>
     </header>

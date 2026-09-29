@@ -73,6 +73,14 @@ describe("级联覆盖（同选择器同属性不许被后置规则改值）", (
    * - `.tkhead` 不能是 flex（否则右侧控件挤在页头中间）；
    * - 看板下滚动容器必须 `flex:none`（否则 `width:80%` 在 flex 行里根本不生效）。
    */
+  it("即时渲染正文与仅预览共享同一内容边界", () => {
+    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "max-width")).toBe("740px");
+    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "margin")).toBe("0 auto");
+    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "padding")).toBe(
+      "var(--sp-5) var(--sp-6) 80px",
+    );
+  });
+
   it("memo / 待办那三条显示修复的取值被钉住", () => {
     expect(effectiveValue(rules, ".markdown-body", "max-width")).toBe("");
     expect(effectiveValue(rules, ".markdown-body", "padding")).toBe("");

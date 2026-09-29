@@ -44,7 +44,6 @@ import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
 import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
-import { PrivacySlot } from "./PrivacySlot";
 import { fnbarWiring, navPanels } from "./NavPanels";
 import { isInVault } from "../features/privacy/vault";
 import { isScopeGateOpen } from "@menote/shared";
@@ -403,7 +402,13 @@ export default function App() {
               onOpenTrash: () => navigate({ name: "trash" }),
               onOpenSettings: () => navigate({ name: "settings", page: "general" }),
               onLogout: () => setConfirmLogout(true),
-              privacy: <PrivacySlot privacy={privacy} onRequestUnlock={requestUnlock} />,
+              privacy: null,
+              privacyStatus: {
+                lockState: privacy.runtime.lockState,
+                tier: privacy.runtime.tier,
+                expiresAt: privacy.runtime.expiresAt,
+                durationMs: userSettings.settings.privacy.minutes * 60_000,
+              },
             })}
           />
         }
@@ -621,13 +626,8 @@ export default function App() {
         onClose={() => setUnlockOpen(false)}
         onForgot={() => navigate({ name: "settings", page: "privacy" })}
       />
-      <LogoutConfirm
-        open={confirmLogout}
-        onClose={() => setConfirmLogout(false)}
-        onConfirm={() => {
-          setConfirmLogout(false);
-          void auth.logout().then(() => navigate({ name: "login" }));
-        }}
+      <LogoutConfirm open={confirmLogout} onClose={() => setConfirmLogout(false)}
+        onConfirm={() => { setConfirmLogout(false); void auth.logout().then(() => navigate({ name: "login" })); }}
       />
       <ToastHost />
     </>

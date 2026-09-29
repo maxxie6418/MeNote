@@ -596,6 +596,19 @@ button {
   font-size: var(--fs-body);
 }
 
+/* 即时渲染与 MarkdownPreview 使用相同的正文阅读边界，避免左右起止线错位。 */
+[data-editor="live"] .cm-scroller {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-6) 80px;
+  font-family: var(--sans);
+  line-height: 1.75;
+}
+
+[data-editor="live"] .cm-content {
+  min-height: 100%;
+}
+
 /*
   —— 即时渲染（live preview）——
   逻辑在 `app/editor/live-preview.ts`：基于 Lezer 语法树的装饰，光标所在行显示源码。
@@ -3182,6 +3195,34 @@ button {
   background: var(--red-soft);
 }
 
+.avatar-status {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-circle);
+}
+
+.avatar-status--locked { border-color: var(--green); }
+.avatar-status--session { border: 2px dashed var(--primary); }
+.avatar-status--device { border-color: var(--primary); }
+.avatar-status--minutes { border-color: transparent; }
+.avatar-status__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+.avatar-status__ring circle {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+
 .avatar {
   width: 30px;
   height: 30px;
@@ -3947,7 +3988,32 @@ button.chip--tag:hover {
   设置导航的行距收进刻度（`.nav` 自身是裸值 2px，而它**被功能栏复用**——
   所以只在这里用更具体选择器给设置页这一处，不动功能栏的版式）。
 */
-.settings__nav .nav {
+.settings__groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.settings__group-title {
+  margin: 0;
+  padding: 0 var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.settings__group .nav {
   gap: var(--sp-1);
 }
 

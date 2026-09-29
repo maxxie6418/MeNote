@@ -181,7 +181,7 @@ export function Editor({
       onDragLeave={() => setDragging(false)}
       onDrop={() => setDragging(false)}
     >
-      <div ref={hostRef} data-editor aria-label={ariaLabel} />
+      <div ref={hostRef} data-editor={live ? "live" : "true"} aria-label={ariaLabel} />
     </div>
   );
 }

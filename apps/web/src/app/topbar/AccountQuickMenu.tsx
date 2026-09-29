@@ -21,6 +21,9 @@ import { Avatar } from "../ui/Controls";
 import { DropdownMenu, type MenuItemSpec } from "../ui/Menu";
 import type { ThemeMode } from "../theme/useTheme";
 import type { TopbarUser } from "./Topbar";
+import { useTicker } from "../ui/useTicker";
+import type { PrivacyLockState as LockState } from "@menote/shared";
+import type { PrivacyTier } from "../../features/privacy/model";
 
 const THEME_ROW: ReadonlyArray<{ id: ThemeMode; label: string }> = [
   { id: "light", label: "浅色" },
@@ -41,6 +44,31 @@ export interface AccountQuickMenuProps {
   onOpenTrash: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
+  privacyStatus?: { lockState: LockState; tier: PrivacyTier; expiresAt: number | null; durationMs: number };
+}
+
+function AvatarStatus({
+  username,
+  size,
+  status,
+  now,
+}: {
+  username: string;
+  size: number;
+  status?: AccountQuickMenuProps["privacyStatus"];
+  now: number;
+}) {
+  const remaining = status?.expiresAt === null || status?.expiresAt === undefined ? null : Math.max(0, status.expiresAt - now);
+  const ratio = status?.durationMs && remaining !== null ? Math.min(1, remaining / status.durationMs) : 1;
+  const state = status?.lockState === "locked" ? "locked" : status?.lockState === "unlocked" ? status.tier : "disabled";
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <span className={`avatar-status avatar-status--${state}`} aria-label={state === "disabled" ? "账户" : state === "locked" ? "账户，隐私锁已锁定" : "账户，隐私锁已解锁"}>
+      {state === "minutes" ? <svg className="avatar-status__ring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - ratio)} /></svg> : null}
+      <Avatar username={username} size={size} />
+    </span>
+  );
 }
 
 /** 功能项要用的动作：集中成一份，免得每加一项就多一个位置参数 */
@@ -60,7 +88,9 @@ export function AccountQuickMenu({
   onOpenTrash,
   onOpenSettings,
   onLogout,
+  privacyStatus,
 }: AccountQuickMenuProps) {
+  const now = useTicker(privacyStatus?.lockState === "unlocked" && privacyStatus.tier === "minutes");
   const enabled = QUICK_MENU_FEATURES.filter((feature) =>
     settings.quick_menu.includes(feature.id),
   );
@@ -82,7 +112,7 @@ export function AccountQuickMenu({
     <DropdownMenu
       label="账户与设置"
       align="right"
-      trigger={<Avatar username={user.username} size={24} />}
+      trigger={<AvatarStatus username={user.username} size={24} status={privacyStatus} now={now} />}
       header={
         <div className="acct">
           <Avatar username={user.username} size={28} />

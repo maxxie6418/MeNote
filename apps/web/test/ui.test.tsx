@@ -438,6 +438,11 @@ describe("设置壳", () => {
     render(<SettingsPanel {...baseProps} page="general" />);
 
     const nav = screen.getByRole("navigation", { name: "设置分类" });
+    expect(within(nav).getByText("常用")).toBeTruthy();
+    expect(within(nav).getByText("数据")).toBeTruthy();
+    expect(within(nav).getByText("账户")).toBeTruthy();
+    expect(within(nav).getByText("管理")).toBeTruthy();
+    expect(within(nav).getAllByText("关于")).toHaveLength(2);
     for (const label of [
       "通用",
       "账户与安全",

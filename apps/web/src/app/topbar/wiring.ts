@@ -11,7 +11,9 @@ import type { ThemeMode } from "../theme/useTheme";
 import type { SyncIndicator } from "../useSyncStatus";
 import type { BrowsableView } from "../fnbar/NavSegmented";
 import type { NotesView } from "../../features/notes/views";
+import type { PrivacyTier } from "../../features/privacy/model";
 import type { TopbarProps, TopbarUser } from "./Topbar";
+import type { PrivacyLockState } from "@menote/shared";
 
 export interface TopbarWiringInput {
   user: TopbarUser;
@@ -36,8 +38,9 @@ export interface TopbarWiringInput {
   onOpenTrash: () => void;
   onOpenSettings: () => void;
   onLogout: () => void;
-  /** 隐私锁胶囊（由 `App` 组装后按插槽传入；未启用时 `null`） */
+  /** 隐私锁弹窗/兼容插槽；头像状态单独传入 */
   privacy?: ReactNode;
+  privacyStatus?: { lockState: PrivacyLockState; tier: PrivacyTier; expiresAt: number | null; durationMs: number };
 }
 
 export type { NotesView };
@@ -72,5 +75,6 @@ export function topbarWiring(input: TopbarWiringInput): TopbarProps {
     onOpenSettings: input.onOpenSettings,
     onLogout: input.onLogout,
     privacy: input.privacy,
+    privacyStatus: input.privacyStatus,
   };
 }

@@ -221,7 +221,7 @@ export function SettingsPanel({
         </div>
       </nav>
 
-      <div className="settings__body">
+      <div className={page === "editor-lab" ? "settings__body settings__body--lab" : "settings__body"}>
         {/*
           页头收成一条（2026-09-28 设置页重构 B 批）：标题（`h1` + `--fs-title`/650，与其它屏的
           页头同级）· 说明（**进 ⓘ**，不平铺）· **分类计数保持可见**（实时计数不靠悬停）· 出口在右端。

@@ -27,10 +27,14 @@ describe("编辑试验页", () => {
     render(<EditorLabPage />);
 
     expect(screen.getByRole("status").textContent).toContain("不写入笔记");
-    expect(screen.getByRole("button", { name: "短文" }).getAttribute("aria-pressed")).toBe("true");
+    const list = screen.getByRole("complementary", { name: "试验笔记列表" });
+    expect(list.className).toContain("listpane");
+    expect(screen.getByRole("button", { name: "短文" }).getAttribute("aria-current")).toBe("true");
+    expect(screen.getByRole("button", { name: "代码块" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "稍长" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "代码块" }));
-    expect(screen.getByRole("button", { name: "代码块" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "代码块" }).getAttribute("aria-current")).toBe("true");
     await waitFor(() => {
       expect((screen.getByLabelText("代码块的试验正文") as HTMLTextAreaElement).value).toContain(
         "function greet",

@@ -7,6 +7,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { SegmentedControl } from "../../../app/ui/SegmentedControl";
 import { Button } from "../../../app/ui/Controls";
+import { Icon } from "../../../app/ui/Icon";
 import {
   attributeLongTask,
   labNow,
@@ -192,45 +193,65 @@ export function EditorLabPage() {
         )}
       </section>
 
-      <section className="setcard" aria-label="试验笔记">
-        <h3 className="setcard__title">三篇试验笔记</h3>
-        <div className="editor-lab__notes" role="group" aria-label="切换试验笔记">
-          {state.notes.map((note) => (
-            <button
-              key={note.id}
-              type="button"
-              className="btn btn--secondary btn--sm"
-              aria-pressed={note.id === selected.id}
-              onClick={() => selectNote(note.id)}
-            >
-              {note.title}
-            </button>
-          ))}
-          <Button variant="secondary" size="sm" onClick={reset}>
-            恢复样文
-          </Button>
-        </div>
-        <SegmentedControl
-          ariaLabel="试验编辑模式"
-          options={MODE_OPTIONS}
-          value={state.mode}
-          onChange={selectMode}
-        />
-        <div
-          ref={stageRef}
-          className="editor-lab__stage"
-          onKeyDown={(event) => {
-            if (event.repeat || event.isComposing) return;
-            if (event.ctrlKey || event.metaKey || event.altKey) return;
-            if (event.key === "Shift") return;
-            beginAction("按键");
-          }}
-        >
-          <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
-            <LabStage note={selected} mode={state.mode} onChange={editBody} />
-          </Suspense>
-        </div>
-      </section>
+      <div className="editor-lab__workspace">
+        <aside className="listpane" aria-label="试验笔记列表">
+          <div className="listpane__head">
+            <h2 className="listpane__title">试验笔记</h2>
+            <span className="listpane__count">{state.notes.length} 篇</span>
+          </div>
+          <div className="listpane__scroll">
+            {state.notes.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                className="itemrow"
+                aria-label={note.title}
+                aria-current={note.id === selected.id}
+                onClick={() => selectNote(note.id)}
+              >
+                <span className="itemrow__ico" aria-hidden="true">
+                  <Icon name="note" size={13} />
+                </span>
+                <span className="itemrow__main">
+                  <span className="itemrow__title">{note.title}</span>
+                  <span className="itemrow__excerpt">{excerptOf(note.body)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="editor-lab__listfoot">
+            <Button variant="secondary" size="sm" onClick={reset}>
+              恢复样文
+            </Button>
+          </div>
+        </aside>
+        <section className="docpane" aria-label="试验正文">
+          <div className="docpane__head">
+            <h2 className="editor-lab__doctitle">{selected.title}</h2>
+            <SegmentedControl
+              ariaLabel="试验编辑模式"
+              size="compact"
+              options={MODE_OPTIONS}
+              value={state.mode}
+              onChange={selectMode}
+            />
+          </div>
+          <div
+            ref={stageRef}
+            className="docpane__body"
+            onKeyDown={(event) => {
+              if (event.repeat || event.isComposing) return;
+              if (event.ctrlKey || event.metaKey || event.altKey) return;
+              if (event.key === "Shift") return;
+              beginAction("按键");
+            }}
+          >
+            <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
+              <LabStage note={selected} mode={state.mode} onChange={editBody} />
+            </Suspense>
+          </div>
+        </section>
+      </div>
 
       <section className="setcard" aria-label="快捷录入试验">
         <h3 className="setcard__title">快捷录入</h3>
@@ -249,6 +270,15 @@ export function EditorLabPage() {
       </section>
     </div>
   );
+}
+
+function excerptOf(body: string): string {
+  const line = body
+    .split("\n")
+    .map((item) => item.trim())
+    .find((item) => item !== "" && !item.startsWith("#"));
+  if (!line) return "没有正文";
+  return line.replace(/[*`]/g, "").slice(0, 42);
 }
 
 function LabStage({

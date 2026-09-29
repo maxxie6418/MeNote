@@ -294,10 +294,11 @@ AppShell                                    app/
 | 项 | 内容 |
 |---|---|
 | 原型 | `.fn-vault` > `.nav-item.vault-node`（`#vaultNode`，含 `.lock-ic` 与 `.tagline`） |
-| 职责 | 加密空间入口，两态：`locked`（虚线边框 → 实线 + 灰字）/ `unlocked`（锁图标转主色/琥珀） |
-| **位置约束** | 在独立 `.fn-vault` 里，`flex:none` + 上分隔线，是 `.fnbar` 的最后一段，**贴底固定、不随 `.fn-scroll` 滚动**；**不设分组小标题** |
-| props | `locked`、`onEnter` |
-| 交互 | 锁定时点击 → 打开解锁框（不直接进空间） |
+| 职责 | 加密空间**入口**（三态）：未启用 → 引导启用；锁定 → 打开解锁框；解锁 → 进入空间视图 |
+| **位置约束** | 在独立 `.fn-vault`（`app/fnbar/VaultNode.tsx`）里，`flex:none` + 上分隔线，是 `.fnbar` 的最后一段，**贴底固定、不随滚动区滚动**；**不设分组小标题**；**不在功能栏展开任何树**【2026-09-29 起】 |
+| props | `enabled`、`locked`、`count`、`onOpen`、`onUnlock`、`onEnable` |
+| 交互 | 锁定时点击 → 打开解锁框（不直接进空间）；解锁后点击 → 把笔记区切到加密空间视图 |
+| **空间内文件夹树** | `features/privacy/ui/VaultTree.tsx`：渲染在**加密空间视图的列表列顶部**（在该列已有的滚动容器里，`DESIGN.md` §2.7），切层 / 新建 / 重命名都在那里。**2026-09-29 从功能栏搬来**（用户要求"加密空间不需要在功能栏显示文件夹树"）；`FolderTree` 用 `rootId`（空间根 id）认根——空间内第 1 层文件夹的父是空间根行，不是 `null` |
 | 需求 | M08-07（§6.3） |
 
 ---

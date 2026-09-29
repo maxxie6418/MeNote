@@ -3782,7 +3782,9 @@ button.chip--tag:hover {
    站点图标本体（内联的 `public/icon.svg`，与 favicon / 顶栏 / 登录注册页同一份）在这里
    "云"与"书"竖直微跳——这是 §6.8「不使用弹跳、旋转等注意力抢占用动效」的**已登记例外**
    （用户 2026-09-29 确认，**仅这一屏**：加载态没有进度可报时，用它表达"进行中"）。
-   幅度：显示 72px / viewBox 512 → 1 显示 px ≈ 7.1 用户单位，±21 用户单位 ≈ 各 3px，只上下、不旋转。
+   幅度：显示 96px / viewBox 512 → 1 显示 px ≈ 5.3 用户单位，±16 用户单位 ≈ 各 3px，只上下、不旋转。
+   （尺寸与幅度是**成对的**：放大图标要同时把用户单位折算回去，才能保住"轻"；`auth-loading.test.tsx`
+   里有一条断言把这两个数钉在一起，改一个就会红。）
    `prefers-reduced-motion` 由文件顶部的全局块兜住（时长压到 0.01ms，等价于停住不动）。 */
 .authloading {
   display: flex;
@@ -3791,8 +3793,8 @@ button.chip--tag:hover {
 }
 
 .authloading__logo {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
   display: block;
 }
 
@@ -3817,7 +3819,7 @@ button.chip--tag:hover {
   }
 
   50% {
-    transform: translateY(-21px);
+    transform: translateY(-16px);
   }
 }
 
@@ -3828,7 +3830,7 @@ button.chip--tag:hover {
   }
 
   50% {
-    transform: translateY(21px);
+    transform: translateY(16px);
   }
 }
 

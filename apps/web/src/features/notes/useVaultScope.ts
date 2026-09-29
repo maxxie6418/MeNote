@@ -24,6 +24,7 @@ import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
 import { runBatch, type BatchProgress, type BatchResult } from "./batch";
 import {
   findVaultRoot,
+  isInVault,
   notebookFolders,
   vaultChildFolders,
   vaultSubtree,
@@ -119,18 +120,35 @@ export function useVaultScope(input: VaultScopeInput): VaultScope {
     [allItems, folders, vaultRoot],
   );
 
+  /**
+   * 在空间里新建文件夹。`parentId = null` 表示"建在空间根下"。
+   *
+   * 【2026-09-29 修复，两处】此前这里把 **`parentId` 原样**（空间根时就是 `null`）写进本地行，
+   * 只靠 `{ inEncSpace: true }` 给标记，于是：
+   * 1. **同步上去会变成普通文件夹**——服务端是按父节点推导 `in_enc_space` 的
+   *    （`worker/services/folders.ts` 的 `isInSpace(parent)`），而建夹的推送只发
+   *    `{ id, parent_id, name }`；`parent_id = null` → 服务端存成 `in_enc_space = 0`，
+   *    下次拉取就把它放进**笔记本树**（而空间里那棵树永远看不到它，见下）；
+   * 2. **空间树里一个文件夹行都不渲染**：`vaultChildFolders` 只认"父 = 空间根"的子夹，
+   *    父写成 `null` 的这条两边都不认（`FolderTree` 的根判定也已改成按空间根认，见那边注释）。
+   * 现在统一成模型的正确形态：**空间内第 1 层文件夹的父就是空间根**（与"整夹移入"同一条路径，
+   * 也与空间内条目 `folder_id = 空间根` 一致）。
+   */
   const createVaultFolder = useCallback(
     async (name: string, parentId: string | null) => {
       const parent =
         parentId === null
           ? (vaultRoot ?? null)
           : (folders.find((row) => row.id === parentId) ?? null);
+      if (!parent) throw new Error("加密空间还没同步下来，请稍后重试");
+      // 空间内的文件夹只能挂在空间根或另一个空间内文件夹下（防止父级串到普通文件夹）
+      if (!isInVault(folders, parent.id)) throw new Error("只能在加密空间里新建文件夹");
       const depth = folderDepthFor(parent);
       if (depth > MAX_FOLDER_DEPTH) {
         throw new Error(`最多支持 ${MAX_FOLDER_DEPTH} 层文件夹`);
       }
       const id = newUlid();
-      await createLocalFolder(id, name, parentId, depth, Date.now(), { inEncSpace: true });
+      await createLocalFolder(id, name, parent.id, depth, Date.now(), { inEncSpace: true });
       await refresh();
       setView({ kind: "notebook", folderId: id });
       onLocalWrite?.();

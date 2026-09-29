@@ -45,16 +45,6 @@ export interface NavPanelsInput {
   onOpenItem: (itemId: string) => void;
 }
 
-/** 空间视图里当前选中的子夹（空间根算 `null`） */
-export function selectedVaultFolderId(
-  workspace: NotesWorkspace,
-): string | null {
-  if (workspace.view.kind !== "notebook") return null;
-  const folderId = workspace.view.folderId ?? null;
-  if (!folderId || folderId === workspace.vault.id) return null;
-  return isInVault(workspace.folders, folderId) ? folderId : null;
-}
-
 export interface FnBarWiringInput {
   workspace: NotesWorkspace;
   view: FnBarProps["view"];
@@ -196,14 +186,8 @@ export function navPanels(input: NavPanelsInput): {
       if (workspace.vault.id) input.onOpenVaultFolder(workspace.vault.id);
       else input.onVaultMissing();
     },
-    tree: {
-      folders: workspace.vault.folders,
-      counts: workspace.folderCounts,
-      selectedId: selectedVaultFolderId(workspace),
-      onSelect: input.onOpenVaultFolder,
-      onCreateFolder: workspace.createVaultFolder,
-      onRenameFolder: workspace.renameFolder,
-    },
+    // 【2026-09-29】空间内的文件夹树已搬进加密空间视图的列表列（见 `NotesPane`）：
+    // 功能栏这条贴底节点只作入口，不再往下展开。
   };
 
   return { notebookPanel, vault };

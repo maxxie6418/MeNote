@@ -8,10 +8,12 @@
  * 三态（设计 §9.2-② 的表格逐条落在这里）：
  * - **未启用**：锁图标 + "未启用 · 去启用"，**可点并引导启用**（不是 disabled 占位）；
  * - **已锁定**：实心灰锁 + "已锁定" + **条目数照常显示**（计数属统计口径），点击开解锁框；
- * - **已解锁**：显示条目数，点击把笔记区切到空间；节点下方展开空间内文件夹树。
+ * - **已解锁**：显示条目数，点击把笔记区切到空间。
+ *
+ * 【2026-09-29 变更·用户要求】解锁后**不再在功能栏展开空间内文件夹树**——那个位置只作入口；
+ * 树搬进了加密空间视图的列表列（见 `features/privacy/ui/VaultTree.tsx`）。
  */
 import { Icon } from "../ui/Icon";
-import { VaultTree, type VaultTreeProps } from "./VaultTree";
 
 export interface VaultNodeProps {
   /** 隐私锁是否已启用 */
@@ -26,19 +28,9 @@ export interface VaultNodeProps {
   onUnlock: () => void;
   /** 未启用：引导启用（去设置 › 隐私锁） */
   onEnable: () => void;
-  /** 解锁后节点下方展开的空间内文件夹树 */
-  tree: VaultTreeProps;
 }
 
-export function VaultNode({
-  enabled,
-  locked,
-  count,
-  onOpen,
-  onUnlock,
-  onEnable,
-  tree,
-}: VaultNodeProps) {
+export function VaultNode({ enabled, locked, count, onOpen, onUnlock, onEnable }: VaultNodeProps) {
   return (
     <div className="fnbar__vault">
       {!enabled ? (
@@ -67,19 +59,16 @@ export function VaultNode({
           <span className="nav-item__count">{count}</span>
         </button>
       ) : (
-        <>
-          <button
-            type="button"
-            className="nav-item vault-node"
-            title="打开加密空间"
-            onClick={onOpen}
-          >
-            <Icon name="lock" size={16} />
-            <span className="nav-item__label">加密空间</span>
-            <span className="nav-item__count">{count}</span>
-          </button>
-          <VaultTree {...tree} />
-        </>
+        <button
+          type="button"
+          className="nav-item vault-node"
+          title="打开加密空间"
+          onClick={onOpen}
+        >
+          <Icon name="lock" size={16} />
+          <span className="nav-item__label">加密空间</span>
+          <span className="nav-item__count">{count}</span>
+        </button>
       )}
     </div>
   );

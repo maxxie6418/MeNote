@@ -8,6 +8,7 @@
  * 单行的结构与它的渲染成本守卫在 `NoteRow.tsx`（那一层必须 `memo`，否则整表重渲染）。
  */
 import { memo } from "react";
+import type { ReactNode } from "react";
 import type { LocalItem } from "../../../data/db";
 import { Button, EmptyState } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
@@ -20,6 +21,12 @@ export interface NoteListProps {
   items: LocalItem[];
   /** 列表头标题（随视图变化：全部笔记 / 最近编辑 / 收藏 / #标签） */
   title: string;
+  /**
+   * 滚动区顶部的附加块（加密空间用它挂**空间内的文件夹树**；2026-09-29 从功能栏搬来）。
+   *
+   * 放在**同一个滚动容器**里（不新增第二层滚动，`DESIGN.md` §2.7），所以它会随列表一起滚。
+   */
+  top?: ReactNode;
   /** 当前视图的层级路径（笔记本视图才有；见 `ItemListHead`） */
   path?: readonly string[];
   /**
@@ -106,6 +113,7 @@ function emptyCopy(title: string): { title: string; hint: string } {
 export function NoteListView({
   items,
   title,
+  top,
   path = [],
   groups,
   hideGroupRootHeader = false,
@@ -163,6 +171,7 @@ export function NoteListView({
       <ItemListHead title={title} count={items.length} path={path} />
 
       <div className="listpane__scroll">
+        {top}
         {loading ? (
           <div style={{ display: "grid", gap: 10, padding: 8 }}>
             <div className="skeleton" />

@@ -1,20 +1,27 @@
 /**
- * 空间内文件夹树（M3-6；挂在加密空间节点下方，与笔记本分组同一套 `FolderTree`）。
+ * 空间内文件夹树（M3-6 建；**2026-09-29 从功能栏搬进加密空间视图**）。
  *
- * 与笔记本的差别只有两点：
+ * 为什么搬：用户 2026-09-29 要求"加密空间不需要在功能栏显示文件夹树"——功能栏那条贴底节点
+ * 从此只作**入口**；而空间内的文件夹（切到某一层 / 新建 / 重命名）总得有个地方，
+ * 就落在**加密空间视图的列表列**里，渲染在列表的滚动区内（不新增第二个滚动容器，`DESIGN.md` §2.7）。
+ *
+ * 与笔记本树的差别只有两点：
  * 1. 只显示**空间内**的子夹（空间根自己不出现在树里，它就是空间本身）；
  * 2. 新建出来的文件夹带 `in_enc_space` 标记（`createVaultFolder` 负责），
  *    于是它天然只在空间里可见。
  *
  * 两层限制与"非法入口不出现"的规则完全照搬笔记本：第 2 层不提供"新建子文件夹"。
+ * 文件落在 `features/privacy/`（而不是 `app/fnbar/`）：它现在属于空间自己的那一屏。
  */
 import { useState } from "react";
-import type { LocalFolder } from "../../data/db";
-import { FolderTree } from "../../features/notes/ui/FolderTree";
-import { FolderRenameModal } from "../../features/notes/ui/FolderRenameModal";
-import { canCreateChildFolder } from "../../features/notes/folders";
+import type { LocalFolder } from "../../../data/db";
+import { FolderTree } from "../../notes/ui/FolderTree";
+import { FolderRenameModal } from "../../notes/ui/FolderRenameModal";
+import { canCreateChildFolder } from "../../notes/folders";
 
 export interface VaultTreeProps {
+  /** 空间根 id：空间内**第 1 层**文件夹的 `parent_id` 就是它（`FolderTree` 靠它认根） */
+  rootId: string;
   folders: readonly LocalFolder[];
   counts: Readonly<Record<string, number>>;
   /** 当前选中的空间内文件夹（`null` = 空间根） */
@@ -25,6 +32,7 @@ export interface VaultTreeProps {
 }
 
 export function VaultTree({
+  rootId,
   folders,
   counts,
   selectedId,
@@ -56,7 +64,7 @@ export function VaultTree({
   }
 
   return (
-    <div className="fnbar__group">
+    <div className="vaulttree">
       {creatingIn ? (
         <div className="tree__new">
           <input
@@ -83,6 +91,7 @@ export function VaultTree({
 
       <FolderTree
         folders={folders}
+        rootId={rootId}
         selectedId={selectedId}
         counts={counts}
         onSelect={onSelect}

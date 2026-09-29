@@ -167,14 +167,6 @@ describe("功能栏与录入框占位", () => {
           onOpen: vi.fn(),
           onUnlock: vi.fn(),
           onEnable: vi.fn(),
-          tree: {
-            folders: [],
-            counts: {},
-            selectedId: null,
-            onSelect: vi.fn(),
-            onCreateFolder: vi.fn(),
-            onRenameFolder: vi.fn(),
-          },
         }}
       />,
     );

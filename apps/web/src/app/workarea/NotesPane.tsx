@@ -15,6 +15,8 @@ import { restoreNotice } from "../../features/trash/model";
 import type { NotesWorkspace } from "../../features/notes/useNotesWorkspace";
 import type { DocMode } from "../../features/notes/ui/NoteWorkspace";
 import { NoteList } from "../../features/notes/ui/NoteList";
+import { VaultTree } from "../../features/privacy/ui/VaultTree";
+import { isInVault } from "../../features/privacy/vault";
 import { groupNotesByFolder } from "../../features/notes/groups";
 import { NoteWorkspace } from "../../features/notes/ui/NoteWorkspace";
 import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPanel";
@@ -165,6 +167,47 @@ export function NotesPane({
     [vault.enabled, vault.folders, vault.id, vault.locked, vault.onMoveIn, vault.onMoveOut],
   );
 
+  /**
+   * 加密空间视图：**空间内的文件夹树挂在列表列顶部**（2026-09-29 从功能栏搬来）。
+   *
+   * 起因：用户要求"加密空间不需要在功能栏显示文件夹树"——功能栏那条贴底节点从此刻只作入口；
+   * 而空间内的文件夹（切到某一层 / 新建 / 重命名）是**唯一入口**，所以树搬到这里、功能一个不丢。
+   * 只在"当前视图确实在空间子树里"时出现（空间根与空间内某一层都算）；锁定态由 `App` 负责
+   * 把视图拉出空间，这里不必再判一次。
+   *
+   * 元素用 `useMemo` 稳定身份：它进 `NoteList` 的 props 浅比较（那个 `memo` 是 2000 篇时的性能守卫）。
+   */
+  const vaultTree = useMemo(() => {
+    const view = workspace.view;
+    if (view.kind !== "notebook") return undefined;
+    const folderId = view.folderId ?? null;
+    if (!isInVault(workspace.folders, folderId)) return undefined;
+    // 空间根还没同步下来时没有"根"可挂，宁可不渲染（`vault.id` 为 null 时 `FolderTree` 也不认根）
+    if (!workspace.vault.id) return undefined;
+    return (
+      <VaultTree
+        rootId={workspace.vault.id}
+        folders={workspace.vault.folders}
+        counts={workspace.folderCounts}
+        selectedId={folderId && folderId !== workspace.vault.id ? folderId : null}
+        onSelect={(next) =>
+          workspace.setView({ kind: "notebook", folderId: next ?? workspace.vault.id })
+        }
+        onCreateFolder={workspace.createVaultFolder}
+        onRenameFolder={workspace.renameFolder}
+      />
+    );
+  }, [
+    workspace.view,
+    workspace.folders,
+    workspace.vault.folders,
+    workspace.vault.id,
+    workspace.folderCounts,
+    workspace.createVaultFolder,
+    workspace.renameFolder,
+    workspace.setView,
+  ]);
+
   return (
     <>
       {versionsOpen && selected ? (
@@ -196,6 +239,7 @@ export function NotesPane({
         <NoteList
           items={workspace.items}
           title={workspace.viewTitle}
+          top={vaultTree}
           path={workspace.viewPath}
           groups={noteGroups}
           hideGroupRootHeader={selectedNotebookId !== null}

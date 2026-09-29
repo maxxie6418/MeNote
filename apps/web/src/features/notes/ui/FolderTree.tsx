@@ -21,6 +21,13 @@ import { canCreateChildFolder } from "../folders";
 
 export interface FolderTreeProps {
   folders: readonly LocalFolder[];
+  /**
+   * 这棵树的"根"是谁的 `parent_id`：默认 `null`（普通笔记本树——第 1 层的父就是根目录）。
+   *
+   * **加密空间树要传空间根 id**（2026-09-29 修）：空间内第 1 层文件夹的父是**空间根那一行**，
+   * 不是 `null`；此前这里只认 `null`，于是空间树一个文件夹行都渲染不出来（只剩"新建"链接）。
+   */
+  rootId?: string | null;
   /** 当前选中的文件夹（null = 根目录） */
   selectedId: string | null;
   onSelect: (folderId: string) => void;
@@ -65,6 +72,7 @@ export const TREE_ITEMS_LIMIT = 50;
 
 export function FolderTree({
   folders,
+  rootId = null,
   selectedId,
   onSelect,
   counts,
@@ -92,7 +100,7 @@ export function FolderTree({
     );
   };
 
-  const roots = folders.filter((folder) => folder.parent_id === null);
+  const roots = folders.filter((folder) => (folder.parent_id ?? null) === rootId);
   const childrenOf = (parentId: string): LocalFolder[] =>
     folders
       .filter((folder) => folder.parent_id === parentId)

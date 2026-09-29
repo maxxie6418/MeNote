@@ -3523,6 +3523,20 @@ button.chip--tag:hover {
   margin-top: var(--sp-4);
 }
 
+/*
+  空间内的文件夹树（2026-09-29 从功能栏搬进**加密空间视图的列表列**）。
+  它挂在该列已有滚动区的顶部，所以这里只给间距与一条分隔线——
+  **不新建滚动容器**（`DESIGN.md` §2.7：每层只允许一个）。
+*/
+.vaulttree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+
 .group-title {
   display: flex;
   align-items: center;

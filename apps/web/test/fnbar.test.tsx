@@ -33,14 +33,6 @@ function renderFnBar(overrides: Partial<Parameters<typeof FnBar>[0]> = {}) {
         onOpen: vi.fn(),
         onUnlock: vi.fn(),
         onEnable: vi.fn(),
-        tree: {
-          folders: [],
-          counts: {},
-          selectedId: null,
-          onSelect: vi.fn(),
-          onCreateFolder: vi.fn(),
-          onRenameFolder: vi.fn(),
-        },
       }}
       tags={[
         { tag: "工作", count: 2 },
@@ -150,14 +142,6 @@ describe("功能栏结构", () => {
         onOpen: vi.fn(),
         onUnlock,
         onEnable: vi.fn(),
-        tree: {
-          folders: [],
-          counts: {},
-          selectedId: null,
-          onSelect: vi.fn(),
-          onCreateFolder: vi.fn(),
-          onRenameFolder: vi.fn(),
-        },
       },
     });
 
@@ -178,14 +162,6 @@ describe("功能栏结构", () => {
         onOpen: vi.fn(),
         onUnlock: vi.fn(),
         onEnable,
-        tree: {
-          folders: [],
-          counts: {},
-          selectedId: null,
-          onSelect: vi.fn(),
-          onCreateFolder: vi.fn(),
-          onRenameFolder: vi.fn(),
-        },
       },
     });
 
@@ -205,14 +181,6 @@ describe("功能栏结构", () => {
         onOpen: vi.fn(),
         onUnlock: vi.fn(),
         onEnable: vi.fn(),
-        tree: {
-          folders: [],
-          counts: {},
-          selectedId: null,
-          onSelect: vi.fn(),
-          onCreateFolder: vi.fn(),
-          onRenameFolder: vi.fn(),
-        },
       },
     });
 
@@ -221,9 +189,9 @@ describe("功能栏结构", () => {
     expect(vault.textContent).toContain("5");
   });
 
-  it("已解锁：显示空间内条目数，点击打开空间", () => {
+  it("已解锁：显示空间内条目数，点击打开空间；**功能栏里不再有空间内文件夹树**（2026-09-29）", () => {
     const onOpen = vi.fn();
-    renderFnBar({
+    const { container } = renderFnBar({
       vault: {
         enabled: true,
         locked: false,
@@ -231,14 +199,6 @@ describe("功能栏结构", () => {
         onOpen,
         onUnlock: vi.fn(),
         onEnable: vi.fn(),
-        tree: {
-          folders: [],
-          counts: {},
-          selectedId: null,
-          onSelect: vi.fn(),
-          onCreateFolder: vi.fn(),
-          onRenameFolder: vi.fn(),
-        },
       },
     });
 
@@ -246,6 +206,10 @@ describe("功能栏结构", () => {
     expect(vault.textContent).toContain("7");
     fireEvent.click(vault);
     expect(onOpen).toHaveBeenCalledTimes(1);
+
+    // 树搬去了加密空间视图（`NotesPane` 的列表列）；功能栏这条贴底节点只作入口
+    expect(container.querySelector(".vaulttree")).toBeNull();
+    expect(screen.queryByText("新建空间内文件夹")).toBeNull();
   });
 });
 

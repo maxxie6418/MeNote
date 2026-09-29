@@ -5358,3 +5358,55 @@ button.chip--tag:hover {
   color: var(--muted);
   font-size: var(--fs-small);
 }
+
+/*
+  编辑试验（设置页）。编辑区自己滚，是为了量现在这套编辑器的真实滚动，
+  不把设置页的滚动当成编辑器滚动。仅这一页。
+*/
+.editor-lab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+}
+.editor-lab__notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.editor-lab__stage {
+  height: 42vh;
+  min-height: 240px;
+  margin-top: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.editor-lab__stage .doc-split,
+.editor-lab__stage .doc-split__pane {
+  height: 100%;
+}
+.editor-lab__stat {
+  margin: 0 0 var(--sp-2);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+.editor-lab__quick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-small);
+}
+.editor-lab__quick textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}

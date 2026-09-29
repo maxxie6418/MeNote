@@ -442,6 +442,7 @@ describe("设置壳", () => {
       "通用",
       "账户与安全",
       "编辑器",
+      "编辑试验",
       "隐私锁",
       "版本与回收站",
       "实例管理",
@@ -463,7 +464,7 @@ describe("设置壳", () => {
     // 标题与其它屏同级（首页 `.pane-head h1` / 待办 `.tkhead`）——此前这里是 h2
     expect(screen.getByRole("heading", { level: 1, name: "通用" })).toBeTruthy();
     // 实时计数保持**可见**，不进 ⓘ（DESIGN.md §5.4-2）
-    expect(screen.getByText("共 7 个分类")).toBeTruthy();
+    expect(screen.getByText("共 8 个分类")).toBeTruthy();
     // 口径说明收进 ⓘ（可点开的按钮），不在正文里平铺
     expect(screen.getByRole("button", { name: "通用分类说明" })).toBeTruthy();
   });

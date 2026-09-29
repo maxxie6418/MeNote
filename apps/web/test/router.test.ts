@@ -20,7 +20,7 @@ describe("设置分类的路由往返", () => {
   it("清单覆盖全部设置分类（漏一个就会落到「通用」）", () => {
     // 期望值独立写在这里：往 SettingsPageId 里加分类时，必须同时进 SETTINGS_PAGES
     expect([...SETTINGS_PAGES].sort()).toEqual(
-      ["general", "account", "editor", "privacy", "versions", "instance", "about"].sort(),
+      ["general", "account", "editor", "editor-lab", "privacy", "versions", "instance", "about"].sort(),
     );
   });
 

@@ -20,6 +20,7 @@ export const SETTINGS_PAGES = [
   "general",
   "account",
   "editor",
+  "editor-lab",
   "privacy",
   "versions",
   "instance",

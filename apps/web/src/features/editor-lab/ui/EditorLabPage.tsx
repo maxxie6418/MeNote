@@ -170,6 +170,73 @@ export function EditorLabPage() {
         这三篇和下面三个框只存在于本机的试验存储，不写入笔记、不上传、不出现在列表或搜索里。
       </p>
 
+      {/*
+        试验区是这一页的主角，放开 `.setcard` 的 790px 上限——330px 列表挤在里面，
+        双栏每边只剩两百多像素，正是上一版看起来乱的原因。其余两张卡仍按设置页常规宽度居中。
+      */}
+      <section className="setcard setcard--wide" aria-label="试验笔记">
+        <h3 className="setcard__title">试验笔记</h3>
+        <div className="editor-lab__workspace">
+          <aside className="listpane" aria-label="试验笔记列表">
+            <div className="listpane__head">
+              <h2 className="listpane__title">样文</h2>
+              <span className="listpane__count">{state.notes.length} 篇</span>
+            </div>
+            <div className="listpane__scroll">
+              {state.notes.map((note) => (
+                <button
+                  key={note.id}
+                  type="button"
+                  className="itemrow"
+                  aria-label={note.title}
+                  aria-current={note.id === selected.id}
+                  onClick={() => selectNote(note.id)}
+                >
+                  <span className="itemrow__ico" aria-hidden="true">
+                    <Icon name="note" size={13} />
+                  </span>
+                  <span className="itemrow__main">
+                    <span className="itemrow__title">{note.title}</span>
+                    <span className="itemrow__excerpt">{excerptOf(note.body)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="editor-lab__listfoot">
+              <Button variant="secondary" size="sm" onClick={reset}>
+                恢复样文
+              </Button>
+            </div>
+          </aside>
+          <section className="docpane" aria-label="试验正文">
+            <div className="docpane__head">
+              <h2 className="editor-lab__doctitle">{selected.title}</h2>
+              <SegmentedControl
+                ariaLabel="试验编辑模式"
+                size="compact"
+                options={MODE_OPTIONS}
+                value={state.mode}
+                onChange={selectMode}
+              />
+            </div>
+            <div
+              ref={stageRef}
+              className="docpane__body"
+              onKeyDown={(event) => {
+                if (event.repeat || event.isComposing) return;
+                if (event.ctrlKey || event.metaKey || event.altKey) return;
+                if (event.key === "Shift") return;
+                beginAction("按键");
+              }}
+            >
+              <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
+                <LabStage note={selected} mode={state.mode} onChange={editBody} />
+              </Suspense>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section className="setcard" aria-label="性能">
         <h3 className="setcard__title">性能</h3>
         <p className="editor-lab__stat">
@@ -192,66 +259,6 @@ export function EditorLabPage() {
           <p className="editor-lab__stat">这个浏览器不提供长任务记录，只能看上面的动作耗时。</p>
         )}
       </section>
-
-      <div className="editor-lab__workspace">
-        <aside className="listpane" aria-label="试验笔记列表">
-          <div className="listpane__head">
-            <h2 className="listpane__title">试验笔记</h2>
-            <span className="listpane__count">{state.notes.length} 篇</span>
-          </div>
-          <div className="listpane__scroll">
-            {state.notes.map((note) => (
-              <button
-                key={note.id}
-                type="button"
-                className="itemrow"
-                aria-label={note.title}
-                aria-current={note.id === selected.id}
-                onClick={() => selectNote(note.id)}
-              >
-                <span className="itemrow__ico" aria-hidden="true">
-                  <Icon name="note" size={13} />
-                </span>
-                <span className="itemrow__main">
-                  <span className="itemrow__title">{note.title}</span>
-                  <span className="itemrow__excerpt">{excerptOf(note.body)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="editor-lab__listfoot">
-            <Button variant="secondary" size="sm" onClick={reset}>
-              恢复样文
-            </Button>
-          </div>
-        </aside>
-        <section className="docpane" aria-label="试验正文">
-          <div className="docpane__head">
-            <h2 className="editor-lab__doctitle">{selected.title}</h2>
-            <SegmentedControl
-              ariaLabel="试验编辑模式"
-              size="compact"
-              options={MODE_OPTIONS}
-              value={state.mode}
-              onChange={selectMode}
-            />
-          </div>
-          <div
-            ref={stageRef}
-            className="docpane__body"
-            onKeyDown={(event) => {
-              if (event.repeat || event.isComposing) return;
-              if (event.ctrlKey || event.metaKey || event.altKey) return;
-              if (event.key === "Shift") return;
-              beginAction("按键");
-            }}
-          >
-            <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
-              <LabStage note={selected} mode={state.mode} onChange={editBody} />
-            </Suspense>
-          </div>
-        </section>
-      </div>
 
       <section className="setcard" aria-label="快捷录入试验">
         <h3 className="setcard__title">快捷录入</h3>

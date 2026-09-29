@@ -5360,35 +5360,50 @@ button.chip--tag:hover {
 }
 
 /*
-  编辑试验（设置页）。编辑区自己滚，是为了量现在这套编辑器的真实滚动，
-  不把设置页的滚动当成编辑器滚动。仅这一页。
+  编辑试验（设置页）。
+  ——————————————————————————————————————————————————————————————
+  这一页**照设置页原有写法**：整页由 `.settings__body` 滚动（一层一个滚动容器，DESIGN.md §2.7），
+  卡片照常居中。上一版把整页设成不滚动、让正文区吃 `flex:1`，结果性能卡与快捷录入卡被挤出视口
+  且滚不到——那是错的，已改回。
+  两处例外，都只作用于这一页：
+  ① 试验区放开 `.setcard` 的 790px 上限。330px 列表挤在 790px 里，双栏每边只剩两百多像素；
+  ② 双栏放进一个有界高度的框里。框内是**正文区自己滚**——这跟正式编辑页一样，
+     不量出真实滚动就没法回答"卡不卡"。
 */
-.settings__body--lab {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
-}
-.editor-lab {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
 .editor-lab .panel-hint {
-  margin: 0;
-  border-radius: 0;
+  margin: 0 0 var(--sp-4);
 }
+
+.setcard--wide {
+  /*
+    试验区这一张不用卡片外观：它本身就是一个带框的编辑区，再套一层卡片边框就成了盒里套盒。
+    只留标题与间距，框由 `.editor-lab__workspace` 一个来画。
+  */
+  max-width: none;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
 .editor-lab__workspace {
-  flex: 1;
-  min-height: 0;
+  /*
+    临时值（未进 DESIGN.md 刻度）：试验正文区的高度。取视高与固定值里小的那个，
+    矮屏上不至于要滚很久才看到下面的读数。
+  */
+  --lab-stage-h: min(560px, 62vh);
+  height: var(--lab-stage-h);
   display: flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
+
 .editor-lab__listfoot {
   flex: none;
   padding: var(--sp-2) var(--sp-3);
   border-top: 1px solid var(--line);
 }
+
 .editor-lab__doctitle {
   flex: 1;
   min-width: 0;
@@ -5399,11 +5414,13 @@ button.chip--tag:hover {
   font-size: var(--fs-title);
   font-weight: 600;
 }
+
 .editor-lab__stat {
   margin: 0 0 var(--sp-2);
   color: var(--text);
   font-size: var(--fs-small);
 }
+
 .editor-lab__quick {
   display: flex;
   flex-direction: column;
@@ -5411,6 +5428,7 @@ button.chip--tag:hover {
   margin-top: var(--sp-3);
   font-size: var(--fs-small);
 }
+
 .editor-lab__quick textarea {
   width: 100%;
   min-height: 72px;

@@ -3778,6 +3778,60 @@ button.chip--tag:hover {
 
 /* ——————————————————————————— 认证页 ——————————————————————————— */
 
+/* 启动时的登录态检查（`DESIGN.md` §6.1：「加载中」必须有进度或骨架，禁止静默等待）。
+   站点图标本体（内联的 `public/icon.svg`，与 favicon / 顶栏 / 登录注册页同一份）在这里
+   "云"与"书"竖直微跳——这是 §6.8「不使用弹跳、旋转等注意力抢占用动效」的**已登记例外**
+   （用户 2026-09-29 确认，**仅这一屏**：加载态没有进度可报时，用它表达"进行中"）。
+   幅度：显示 72px / viewBox 512 → 1 显示 px ≈ 7.1 用户单位，±21 用户单位 ≈ 各 3px，只上下、不旋转。
+   `prefers-reduced-motion` 由文件顶部的全局块兜住（时长压到 0.01ms，等价于停住不动）。 */
+.authloading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.authloading__logo {
+  width: 72px;
+  height: 72px;
+  display: block;
+}
+
+.authloading__logo svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.authloading__logo .mn-cloud {
+  animation: authloading-cloud 1.8s ease-in-out infinite;
+}
+
+.authloading__logo .mn-book {
+  animation: authloading-book 1.8s ease-in-out infinite;
+}
+
+@keyframes authloading-cloud {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-21px);
+  }
+}
+
+@keyframes authloading-book {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(21px);
+  }
+}
+
 .authpage {
   min-height: 100%;
   display: grid;

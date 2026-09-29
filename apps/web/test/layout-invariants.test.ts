@@ -167,3 +167,55 @@ describe("组件硬性规范（DESIGN.md §3.2 / §5.5）", () => {
     expect(tokens).toMatch(/--primary-grad:\s*linear-gradient\([^)]*var\(--primary\)/);
   });
 });
+
+/**
+ * 2026-09-29 用户反馈的界面异常的守卫（"Memo/待办状态切换条不对、笔记本树菜单压住数字"）。
+ *
+ * 为什么守**声明值**：jsdom 没有排版引擎，"位置不对 / 被压住"在渲染用例里测不出来；
+ * 但这两处的成因都是**少了一条声明**——Memo 页头没跟着待办一起定宽、树行右侧没给
+ * 绝对定位的菜单留位置。把声明钉住，再犯就红。
+ */
+describe("页头视图切换与树行右侧的留白（2026-09-29 修复）", () => {
+  /** 去掉注释再匹配：注释里也会出现这些选择器（本文件别处同样做法） */
+  const css = app.replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  it("Memo 与待办页头那条视图切换共用同一条定宽规则（否则 Memo 那条会被 compact 的 flex:1 拉宽）", () => {
+    const rule =
+      /^\.tkhead__main \.segmented,\s*\n\.memopanel__head \.segmented\s*\{([^}]*)\}/m.exec(css)?.[1] ??
+      "";
+    expect(rule, "两个页头没有共用定宽规则——Memo 那条会漂到页头中间").not.toBe("");
+    expect(rule).toMatch(/flex:\s*none/);
+    expect(rule).toMatch(/min-width:\s*176px/);
+
+    const itemRule =
+      /^\.tkhead__main \.segmented__item,\s*\n\.memopanel__head \.segmented__item\s*\{([^}]*)\}/m.exec(
+        css,
+      )?.[1] ?? "";
+    expect(itemRule, "定宽之后还要让两个按钮平分").toMatch(/flex:\s*1/);
+  });
+
+  it("笔记本树的行右侧给「更多」菜单留出位置（不许压住行尾计数）", () => {
+    const row = /^\.tree-row\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+    const menu = /^\.tree-row__menu\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+    expect(row, "`.tree-row` 没有规则").not.toBe("");
+    expect(menu, "`.tree-row__menu` 没有规则").not.toBe("");
+
+    const padding = /padding:\s*([^;]+)/.exec(row)?.[1]?.trim() ?? "";
+    const parts = padding.split(/\s+/);
+    expect(parts, "`.tree-row` 的 padding 要写成四值，右侧留了多少才看得见").toHaveLength(4);
+
+    /** 把 `var(--sp-N)` 与裸 px 都折算成数字 */
+    const px = (raw: string): number => {
+      const token = /var\(--sp-(\d+)\)/.exec(raw)?.[1];
+      if (token !== undefined) {
+        return Number(new RegExp(`--sp-${token}:\\s*(\\d+)px`).exec(tokens)?.[1]);
+      }
+      return Number.parseFloat(raw);
+    };
+
+    // 菜单占一列 = `right: <offset>` + 13px 图标；行的右内边距必须不小于它
+    const offset = px(/right:\s*([^;]+)/.exec(menu)?.[1]?.trim() ?? "0");
+    const reserved = px(parts[1] ?? "0");
+    expect(reserved, "行右侧留得不够，绝对定位的菜单会压住计数").toBeGreaterThanOrEqual(offset + 13);
+  });
+});

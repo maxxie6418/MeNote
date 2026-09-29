@@ -41,9 +41,15 @@ import { TaskListView } from "./TaskListView";
 
 export type TaskViewMode = "list" | "kanban";
 
+/**
+ * 页头那条「列表 / 看板」切换（原型 `#taskView`：**两项都带图标**）。
+ *
+ * 2026-09-29 补：此前只给了文字，两个按钮是光秃秃的（用户反馈"待办的状态切换条缺少图标"）。
+ * 图标沿用原型那一对：`i-list` / `i-kanban`（后者按本套 16 网格补进了 sprite）。
+ */
 const VIEW_MODES = [
-  { value: "list" as const, label: "列表" },
-  { value: "kanban" as const, label: "看板" },
+  { value: "list" as const, label: "列表", icon: "list" as const },
+  { value: "kanban" as const, label: "看板", icon: "kanban" as const },
 ];
 
 export interface TaskPanelProps {

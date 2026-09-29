@@ -151,6 +151,22 @@ describe("待办列表", () => {
 });
 
 describe("看板", () => {
+  /*
+    页头那条「列表 / 看板」切换：原型两项都带图标（`#i-list` / `#i-kanban`）。
+    2026-09-29 修复前只有文字——用户反馈"待办的状态切换条缺少图标"。
+  */
+  it("页头的「列表 / 看板」两个按钮都带 sprite 图标（原型 `#i-list` / `#i-kanban`）", () => {
+    const { container } = renderPanel();
+
+    const group = container.querySelector('[aria-label="待办视图切换"]');
+    expect(group).not.toBeNull();
+    expect(group?.querySelector('use[href="#i-list"]')).not.toBeNull();
+    expect(group?.querySelector('use[href="#i-kanban"]')).not.toBeNull();
+    // 图标只是辅助，文字照旧在（DESIGN.md §5.5-4）
+    expect(group?.textContent).toContain("列表");
+    expect(group?.textContent).toContain("看板");
+  });
+
   it("三列固定顺序：待办 / 进行中 / 已完成，空列也保留", async () => {
     const user = userEvent.setup();
     const { container } = renderPanel({

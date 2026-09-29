@@ -3608,12 +3608,19 @@ button.chip--tag:hover {
   transform: rotate(-90deg);
 }
 
+/*
+  行右侧要给"更多"菜单留一列：`.tree-row__menu` 是**绝对定位**在行右端
+  （`right: 2px` + 13px 图标 ≈ 占 15px），不留就会被它压住行尾的计数
+  （`.nav-item__count` 是 `margin-left: auto`，正好也在最右）——用户 2026-09-29 反馈的
+  "笔记本树里下拉菜单和数字显示重叠了"。这与 `[data-has-children] .tree-row` 给折叠三角
+  留左侧那一列是同一手法（同样是 20px = `--sp-5`）。
+*/
 .tree-row {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
   width: 100%;
-  padding: var(--sp-1) var(--sp-2);
+  padding: var(--sp-1) var(--sp-5) var(--sp-1) var(--sp-2);
   border-radius: var(--radius-sm);
   color: var(--text-2);
   font-size: var(--fs-small);
@@ -3730,13 +3737,23 @@ button.chip--tag:hover {
   font-size: var(--fs-small);
 }
 
-/* 页头右侧那一组视图切换（原型 `.seg--view`）：定宽 + 按钮平分，切 Memo/待办时位置不跳 */
-.tkhead__main .segmented {
+/*
+  页头右侧那一组视图切换（原型 `.seg--view`）：定宽 + 按钮平分，切 Memo/待办时位置不跳。
+
+  【2026-09-29 修复】此前只写了待办那一边（`.tkhead__main`）：Memo 页头没有这条，
+  而 `SegmentedControl` 传的是 `size="compact"`，`.segmented--compact` 带着
+  `flex: 1; min-width: 0`（那是给录入框模式行的），于是 Memo 那条控件被拉宽、
+  按钮漂到页头中间——用户反馈的"memo 状态切换条位置不对"。
+  Memo 份的宽度按《Memo 侧栏与图册设计》§七：**176px、不加令牌**（与这里同一个值）。
+*/
+.tkhead__main .segmented,
+.memopanel__head .segmented {
   flex: none;
   min-width: 176px;
 }
 
-.tkhead__main .segmented__item {
+.tkhead__main .segmented__item,
+.memopanel__head .segmented__item {
   flex: 1;
 }
 

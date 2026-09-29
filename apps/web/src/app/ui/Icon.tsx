@@ -35,7 +35,9 @@ export type IconName =
   | "list"
   | "grid"
   | "image"
-  | "bolt";
+  | "bolt"
+  /* 待办页的「列表 / 看板」切换（2026-09-29 补：此前只有文字，原型 `#i-kanban` 那个字形没有） */
+  | "kanban";
 
 export function IconSprite() {
   return (
@@ -152,6 +154,15 @@ export function IconSprite() {
       {/* 「随机漫步」（原型 `#i-bolt`） */}
       <symbol id="i-bolt" viewBox="0 0 16 16">
         <path d="M8.8 1.8 4.4 8.8h3l-.8 5.4 4.6-7.2h-3z" />
+      </symbol>
+      {/*
+        「看板」（原型 `#i-kanban`：三列不等高）。原型画在 24 网格上，这里按本套 sprite 的
+        16 网格重画——列宽 3、列间距 1.4，与 `#i-grid` 的间距同一量级（1.6px 描边下才不会糊成一块）。
+      */}
+      <symbol id="i-kanban" viewBox="0 0 16 16">
+        <rect x="2.2" y="3.3" width="3" height="9.4" rx="1" />
+        <rect x="6.6" y="3.3" width="3" height="6.2" rx="1" />
+        <rect x="11" y="3.3" width="3" height="8.2" rx="1" />
       </symbol>
     </svg>
   );

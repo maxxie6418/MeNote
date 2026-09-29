@@ -123,6 +123,39 @@ describe("功能栏结构", () => {
     expect(onViewChange).toHaveBeenCalledWith({ kind: "tag", tag: "工作" });
   });
 
+  it("标签区**贴底固定**：与滚动区并列（不被笔记本树推挤），位置在导航区之后、加密空间之前", () => {
+    const { container } = renderFnBar();
+    const scroll = container.querySelector(".fnbar__scroll");
+    const tags = container.querySelector(".fnbar__tags");
+
+    expect(scroll).toBeTruthy();
+    expect(tags).toBeTruthy();
+    // 关键：它不在滚动区里——树再长也推不动它
+    expect(scroll?.contains(tags as Node)).toBe(false);
+    expect(tags?.parentElement?.className).toBe("fnbar");
+    expect([...(tags?.parentElement?.children ?? [])].map((node) => node.className)).toEqual([
+      "fnbar__top",
+      "fnbar__scroll",
+      "fnbar__tags",
+      "fnbar__vault",
+    ]);
+  });
+
+  it("标签用**按钮铺开**（不是列）：每个标签是一个可点的 chip，仍能点进标签视图", async () => {
+    const user = userEvent.setup();
+    const onViewChange = vi.fn();
+    const { container } = renderFnBar({ onViewChange });
+
+    const tags = container.querySelector(".fnbar__tags");
+    const buttons = [...(tags?.querySelectorAll("button.chip--tag") ?? [])];
+    expect(buttons.map((node) => node.textContent?.trim())).toEqual(["# 工作", "# dev"]);
+    // 铺开的容器是 `.tags`（flex-wrap）；"不排成列"由 layout-invariants 在 CSS 上守
+    expect(tags?.querySelector(".tags")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /# 工作/ }));
+    expect(onViewChange).toHaveBeenCalledWith({ kind: "tag", tag: "工作" });
+  });
+
   it("未启用隐私锁时，节点说明去哪里启用且不带锁定标记（M3-10 起改为「引导启用」）", () => {
     renderFnBar();
     const vault = screen.getByRole("button", { name: /加密空间/ }) as HTMLButtonElement;

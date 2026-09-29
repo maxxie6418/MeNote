@@ -1,12 +1,17 @@
 /**
- * 功能栏（DESIGN.md §2.2：宽 294px；§2.7：**只有导航区滚动**）。
+ * 功能栏（DESIGN.md §2.2：宽 294px；§2.7 的滚动归属见下）。
  *
  * 结构与间距照抄原型，以保住「新建按钮 38px + 录入框 136px → 导航区顶部 y = 252」的
  * 结构不变量（DESIGN.md §2.5-2）：
  *   54(顶栏) + 12(padding) + 38(按钮) + 12(录入框上边距) + 136(录入框) = 252
  *
- * 组成：新建按钮 + 快速录入框（`.fnbar__top`，固定不滚）/ 浏览三段 + 导航 + 笔记本分组 +
- * 标签分组（`.fnbar__scroll`，唯一滚动区）/ 加密空间（`.fnbar__vault`，**贴底固定**）。
+ * 组成（自上而下）：
+ * 1. `.fnbar__top`——新建按钮 + 快速录入框（固定，不滚）；
+ * 2. `.fnbar__scroll`——浏览三段 + 导航 + 笔记本分组（**唯一跟着内容滚的区域**）；
+ * 3. `.fnbar__tags`——**标签区（贴底固定）**【2026-09-29 用户要求：不再排在笔记本树之后、
+ *    不被树的内容推挤，也不随导航区滚动；高度按"功能栏底部约 1/3～1/4"预留，标签用按钮铺开】；
+ * 4. `.fnbar__vault`——加密空间节点（**贴底固定**）。
+ *
  * **功能栏内不出现账户区**——账户入口只在顶栏（DESIGN.md §2.5-1）。
  */
 import { Icon } from "../ui/Icon";
@@ -88,8 +93,14 @@ export function FnBar({
         <NavSegmented active={browseView} onSelect={onBrowseChange} showHome={showHome} />
         <NavList view={view} onViewChange={onViewChange} />
         {notebookPanel}
-        <TagGroup view={view} onViewChange={onViewChange} tags={tags} />
       </div>
+
+      {/*
+        标签区：**贴底固定**（2026-09-29 用户要求）。
+        以前它排在笔记本树之后、在同一个滚动区里，树一长就被推到看不见的地方；
+        现在与加密空间节点一样是固定段，导航区怎么滚都动不了它。
+      */}
+      <TagGroup view={view} onViewChange={onViewChange} tags={tags} />
 
       <VaultNode {...vault} />
     </aside>

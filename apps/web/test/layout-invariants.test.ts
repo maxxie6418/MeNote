@@ -219,3 +219,37 @@ describe("页头视图切换与树行右侧的留白（2026-09-29 修复）", ()
     expect(reserved, "行右侧留得不够，绝对定位的菜单会压住计数").toBeGreaterThanOrEqual(offset + 13);
   });
 });
+
+/**
+ * 功能栏标签区（2026-09-29 用户要求："标签区域要贴底部固定，不要被笔记本里的内容推挤；
+ * 大概预留底部三分之一到四分之一的位置；不要按列显示标签，要用标签按钮显示"）。
+ *
+ * 声明值守卫：起固定作用的是 `flex: none`（不然会被上面的导航区挤），
+ * 起"按钮铺开"作用的是 `.tags` 的 `flex-wrap: wrap`（写成 column 就变成一列了）。
+ * DOM 层的那两条（与滚动区并列、位置在导航区之后）在 `fnbar.test.tsx`。
+ */
+describe("功能栏标签区：贴底固定 + 按钮铺开（2026-09-29）", () => {
+  const css = app.replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  it("标签区贴底固定：`flex:none` + 预留底部 1/4～1/3 的高度 + 自己滚动", () => {
+    const rule = /^\.fnbar__tags\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+    expect(rule, "`.fnbar__tags` 没有规则").not.toBe("");
+
+    expect(rule, "少了 flex:none 就会被上面的内容推挤").toMatch(/flex:\s*none/);
+    const height = Number(/height:\s*(\d+)%/.exec(rule)?.[1]);
+    expect(height, "高度占比读不出来（用户要求约 1/3～1/4）").toBeGreaterThan(0);
+    expect(height).toBeGreaterThanOrEqual(25);
+    expect(height).toBeLessThanOrEqual(34);
+    expect(rule, "矮窗口下要给一个可用下限").toMatch(/min-height:\s*\d+px/);
+    expect(rule, "放不下时本区要能自己滚").toMatch(/overflow-y:\s*auto/);
+  });
+
+  it("标签用按钮铺开：`.tags` 换行排列，任何 `.tags` 规则都不许改成纵向", () => {
+    const rule = /^\.tags\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+    expect(rule, "`.tags` 没有规则").not.toBe("");
+    expect(rule).toMatch(/display:\s*flex/);
+    expect(rule, "少了 flex-wrap:wrap 就会排成一列").toMatch(/flex-wrap:\s*wrap/);
+    // 兜底：别处在 `.tags` 上写纵向排列也不行（同选择器 + 新属性，css-cascade 抓不到这种）
+    expect(css, "`.tags` 被改成纵向排列了").not.toMatch(/\.tags\s*\{[^}]*flex-direction:\s*column/);
+  });
+});

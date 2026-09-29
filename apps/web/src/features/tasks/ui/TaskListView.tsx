@@ -29,7 +29,7 @@ export interface TaskListViewProps {
   /** 「隐藏已完成」的当前状态（与筛选条开关同一份） */
   hideDone: boolean;
   onToggleHideDone: () => void;
-  /** 空状态里的「切到录入框」出口（原型空态有主按钮；面板已有这个回调） */
+  /** 空状态里的「添加」出口（原型空态有主按钮）：打开添加内容窗口（`AddEntryDialog`） */
   onAdd?: () => void;
 }
 
@@ -55,12 +55,13 @@ export function TaskListView({
         </span>
         <p className="memo-empty__title">没有待办</p>
         <p className="memo-empty__hint">
-          在录入框切到「待办」记一条，或者放宽上面的筛选条件。
+          点「添加待办」记一条，或者放宽上面的筛选条件。
         </p>
+        {/* 空状态必须给出口（DESIGN.md §5.4-3）；这里开的是添加窗口，不是跳左侧录入框 */}
         {onAdd ? (
           <Button size="sm" variant="secondary" onClick={onAdd}>
             <Icon name="plus" size={13} />
-            切到录入框
+            添加待办
           </Button>
         ) : null}
       </div>

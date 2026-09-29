@@ -150,17 +150,21 @@ describe("侧栏：可插拔模块", () => {
 });
 
 describe("视图切换与图册", () => {
-  it("默认时间轴；切到瀑布流后没有图就给空态与出口", async () => {
+  it("默认时间轴；切到瀑布流后没有图就给空态，出口是「切回时间轴」", async () => {
     const user = userEvent.setup();
-    const { container, onAdd } = renderPanel();
+    const { container } = renderPanel();
 
     expect(container.querySelector(".timeline")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "瀑布流" }));
 
     expect(container.querySelector(".flow")).toBeNull();
     expect(screen.getByText("还没有带图的 Memo")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /切到录入框/ }));
-    expect(onAdd).toHaveBeenCalled();
+    /*
+      出口**切回时间轴**、不是"添加"：瀑布流只画带图的 Memo，文本 Memo 发布后不出现，
+      在这一屏添加会"加了看不见"（用户 2026-09-29 的"明确反馈"要求）。
+    */
+    await user.click(screen.getByRole("button", { name: /切回时间轴/ }));
+    expect(container.querySelector(".timeline")).toBeTruthy();
   });
 
   it("有已上传的图片时渲染瓦片；宽高缺失取方档", async () => {

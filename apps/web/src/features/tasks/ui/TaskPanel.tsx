@@ -67,7 +67,7 @@ export interface TaskPanelProps {
   gate: PrivacyGate;
   /** 占位上的「解锁」出口（打开解锁框） */
   onUnlock: () => void;
-  /** 页头「添加待办」：把焦点送回功能栏的录入框并切到待办档（M07-01 入口二） */
+  /** 页头「添加待办」：**打开添加内容窗口**（`AddEntryDialog`；不再跳左侧录入框，用户 2026-09-29） */
   onAdd: () => void;
   /** 筛选条形态（用户设置 `task_view.filter_form`：胶囊横排 / 悬浮小组件） */
   filterForm: TaskFilterForm;
@@ -171,7 +171,7 @@ export function TaskPanel({
             variant="primary"
             size="sm"
             onClick={onAdd}
-            title="回到功能栏的录入框记一条待办"
+            title="打开添加窗口记一条待办"
           >
             <Icon name="plus" size={13} />
             添加待办

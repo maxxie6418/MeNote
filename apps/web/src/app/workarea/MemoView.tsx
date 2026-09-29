@@ -21,6 +21,7 @@ export interface MemoViewProps {
   /** 转成笔记：调用方负责"回到笔记视图并打开它" */
   onConvert: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
+  /** 页头「添加 Memo」：打开添加内容窗口（`AddEntryDialog`） */
   onAdd: () => void;
   /** 删除 Memo（M4-12）：移入回收站 */
   onDelete: (itemId: string) => void;

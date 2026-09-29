@@ -36,6 +36,18 @@ export function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * 打开时把焦点移入对话框（键盘用户不会"停在遮罩外面"）。
+   * **只随 `open` 变、不随 `onClose` 身份变**：调用方的关闭处理常是内联函数（每次渲染换身份），
+   * 若把它放进本 effect 的依赖，就会每渲染都重新 `focus()`——把焦点从输入区（如添加内容窗口的
+   * 文本框）抢回第一个按钮，用户打一个字就失焦。
+   */
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLElement>("input, button, [tabindex]")?.focus();
+  }, [open]);
+
+  /** Esc 关闭：listener 要拿到**最新的** `onClose`（故依赖含它），但这只换监听、不动焦点。 */
   useEffect(() => {
     if (!open) return undefined;
 
@@ -47,9 +59,6 @@ export function Modal({
     }
 
     document.addEventListener("keydown", onKeyDown);
-    // 焦点移入对话框，键盘用户不会"停在遮罩外面"
-    panelRef.current?.querySelector<HTMLElement>("input, button, [tabindex]")?.focus();
-
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose, open]);
 

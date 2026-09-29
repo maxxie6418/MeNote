@@ -4239,6 +4239,48 @@ button.chip--tag:hover {
   padding: var(--sp-4) var(--sp-5) var(--sp-5);
 }
 
+/* —— 添加内容窗口（`app/fnbar/AddEntryDialog.tsx`；字段随 kind 换，容器不塌陷） —— */
+.addentry__input {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  max-height: 320px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+}
+
+/* 焦点：给 border-color + box-shadow 焦点环；**不写 outline:none**（禁止项 #11 由全局 :focus-visible 兜底） */
+.addentry__input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.addentry__input::placeholder {
+  color: var(--muted);
+}
+
+/* 模式附加项行：与录入框 `.composer__extras` 同族取值（切字段只换内容不塌高度） */
+.addentry__extras {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: var(--sp-2);
+  min-height: 26px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.addentry__extras::-webkit-scrollbar {
+  height: 0;
+}
+
 /* 移动目标的候选列表（禁用项必须带原因，见 DESIGN.md §6.1） */
 .target-list {
   display: flex;

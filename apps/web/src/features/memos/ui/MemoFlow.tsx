@@ -22,8 +22,12 @@ export interface MemoFlowProps {
   images?: ReadonlyMap<string, MemoImageRef[]>;
   /** 点卡片：切回时间轴并定位 */
   onOpen: (itemId: string) => void;
-  /** 空态出口：回到录入框 */
-  onAdd?: () => void;
+  /**
+   * 空态出口：**切回时间轴**（不是添加）。
+   * 瀑布流只画带图的 Memo，文本 Memo 发布后不出现——在这里添加会"加了看不见"，
+   * 所以这一屏的出口是回到时间轴，到那里再添加（用户 2026-09-29 的"明确反馈"要求）。
+   */
+  onBackToTimeline?: () => void;
   timeZone?: string;
 }
 
@@ -37,7 +41,14 @@ function ratioClass(image: MemoImageRef): string {
   return "wf__img--wide";
 }
 
-export function MemoFlow({ memos, contents, images, onOpen, onAdd, timeZone }: MemoFlowProps) {
+export function MemoFlow({
+  memos,
+  contents,
+  images,
+  onOpen,
+  onBackToTimeline,
+  timeZone,
+}: MemoFlowProps) {
   const tiles = useMemo(() => {
     const out: Array<{ memo: LocalItem; image: MemoImageRef; caption: string }> = [];
     for (const memo of memos) {
@@ -60,12 +71,13 @@ export function MemoFlow({ memos, contents, images, onOpen, onAdd, timeZone }: M
         </span>
         <p className="memo-empty__title">还没有带图的 Memo</p>
         <p className="memo-empty__hint">
-          在录入框里粘贴或拖入一张图片，或者切回时间轴看全部 Memo。
+          瀑布流只显示带图的 Memo。切回时间轴看全部，也能在那里添加。
         </p>
-        {onAdd ? (
-          <Button size="sm" variant="secondary" onClick={onAdd}>
-            <Icon name="clock" size={13} />
-            切到录入框
+        {/* 空状态必须给出口（DESIGN.md §5.4-3）：这一屏加了看不见，故出口是切回时间轴 */}
+        {onBackToTimeline ? (
+          <Button size="sm" variant="secondary" onClick={onBackToTimeline}>
+            <Icon name="list" size={13} />
+            切回时间轴
           </Button>
         ) : null}
       </div>

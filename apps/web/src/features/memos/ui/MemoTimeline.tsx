@@ -21,7 +21,7 @@ export interface MemoTimelineProps {
   onDelete?: (itemId: string) => void;
   onOpenConverted: (noteId: string) => void;
   onSelectTag: (tag: string) => void;
-  /** 空状态里的「切到录入框」出口（原型 `.empty` 有主按钮；面板已有这个回调） */
+  /** 空状态里的「添加」出口（原型 `.empty` 有主按钮）：打开添加内容窗口（`AddEntryDialog`） */
   onAdd?: () => void;
   /** 刚被「随机漫步 / 那年今日 / 图册」定位到的那一条：加一处可见的着落点（原型 `.is-walked`） */
   walkedId?: string | null;
@@ -52,13 +52,13 @@ export function MemoTimeline({
         </span>
         <p className="memo-empty__title">还没有 Memo</p>
         <p className="memo-empty__hint">
-          用功能栏的录入框随手记一条：记完按 Ctrl+Enter 就会出现在这里。
+          点「添加 Memo」记一条，按天分组出现在这里。
         </p>
-        {/* 空状态必须给出口（DESIGN.md §5.4-3） */}
+        {/* 空状态必须给出口（DESIGN.md §5.4-3）；这里开的是添加窗口，不是跳左侧录入框 */}
         {onAdd ? (
           <Button size="sm" variant="secondary" onClick={onAdd}>
-            <Icon name="clock" size={13} />
-            切到录入框
+            <Icon name="plus" size={13} />
+            添加 Memo
           </Button>
         ) : null}
       </div>

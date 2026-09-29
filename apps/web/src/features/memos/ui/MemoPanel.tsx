@@ -73,7 +73,7 @@ export interface MemoPanelProps {
   onDelete?: (itemId: string) => void;
   /** 打开已转出的那篇笔记 */
   onOpenConverted: (noteId: string) => void;
-  /** 「添加」按钮：把焦点送回功能栏的录入框（M07-01 入口二） */
+  /** 「添加」按钮：**打开添加内容窗口**（`AddEntryDialog`；不再跳左侧录入框，用户 2026-09-29） */
   onAdd: () => void;
   timeZone?: string;
   /** 便于测试固定"现在" */
@@ -206,7 +206,7 @@ export function MemoPanel({
             icon: item.icon,
           }))}
         />
-        <Button size="sm" variant="secondary" onClick={onAdd} title="回到功能栏的录入框记一条">
+        <Button size="sm" variant="secondary" onClick={onAdd} title="打开添加窗口记一条">
           <Icon name="plus" size={13} />
           添加 Memo
         </Button>
@@ -244,7 +244,8 @@ export function MemoPanel({
               contents={contents}
               images={images}
               onOpen={locate}
-              onAdd={onAdd}
+              /* 空态出口切回时间轴（文本 Memo 在瀑布流里看不见，见 `MemoFlow.onBackToTimeline`） */
+              onBackToTimeline={() => setView("timeline")}
               timeZone={timeZone}
             />
           )}

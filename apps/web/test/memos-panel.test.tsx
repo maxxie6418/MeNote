@@ -199,7 +199,7 @@ describe("筛选", () => {
 });
 
 describe("操作", () => {
-  it("「添加」按钮交给调用方（把焦点送回录入框）", async () => {
+  it("「添加」按钮交给调用方（打开添加内容窗口，不再跳录入框）", async () => {
     const user = userEvent.setup();
     const { onAdd } = renderPanel();
 

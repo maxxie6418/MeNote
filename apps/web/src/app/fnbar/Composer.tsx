@@ -40,11 +40,20 @@ const MODE_DISABLED_REASON: Record<ComposerMode, string> = {
   note: "",
 };
 
-/** `- [ ]` 清单项：写了它就在录入框里提示"设为清单？"（需求 §9.3） */
-const TASK_ITEM_PATTERN = /^\s*[-*+]\s+\[[ xX]\]/m;
+/**
+ * `- [ ]` 清单项：写了它就在录入框里提示"设为清单？"（需求 §9.3）。
+ * **导出**给 `AddEntryDialog` 复用——两个录入面（功能栏框 / 添加窗口）必须同一套判定。
+ */
+export const TASK_ITEM_PATTERN = /^\s*[-*+]\s+\[[ xX]\]/m;
 
-/** 模式附加项：内容随模式变，**容器高度恒定** */
-function ModeExtras({
+/**
+ * 模式附加项：内容随模式变，**容器高度恒定**（功能栏里那条 26px 不变量）。
+ *
+ * **导出**给 `AddEntryDialog` 复用（用户 2026-09-29：一个窗口结构、只换显示的设置）——
+ * 待办的「截止 + 优先级」、Memo 的「设为清单？」都只有这一份实现。
+ * `noteTargetLabel` 对非笔记档无意义，故可选（窗口只渲染 memo / task）。
+ */
+export function ModeExtras({
   mode,
   showTaskPrompt,
   asTask,
@@ -53,7 +62,7 @@ function ModeExtras({
   onTaskDue,
   taskPriority,
   onTaskPriority,
-  noteTargetLabel,
+  noteTargetLabel = "根目录",
 }: {
   mode: ComposerMode;
   showTaskPrompt: boolean;
@@ -64,7 +73,7 @@ function ModeExtras({
   taskPriority: TaskPriority;
   onTaskPriority: (value: TaskPriority) => void;
   /** 「笔记」档新建会落到哪里（当前选中的笔记本名；没有笔记本上下文时是「根目录」） */
-  noteTargetLabel: string;
+  noteTargetLabel?: string;
 }) {
   if (mode === "task") {
     // 真实控件：截止用原生 date（可键盘输入、有系统选择器），优先级用盒式分段控件

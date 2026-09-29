@@ -4,7 +4,7 @@
  * 三条口径在这里落定：
  * - **任务集合只取清单 Memo**（`is_task === 1`），标题与正文都由 Memo 正文剥出来；
  * - 改状态 / 清标记后**刷新工作区**（列表与时间轴都要跟着变）；
- * - 页头的「添加待办」与筛选条形态都由组合根给（前者要切录入框的档、后者来自用户设置），
+ * - 页头的「添加待办」与筛选条形态都由组合根给（前者开**添加内容窗口**、后者来自用户设置），
  *   本组件只做透传，不自己持有全局状态。
  */
 import type { LocalItem, MemoContent } from "../../data/db";
@@ -23,7 +23,7 @@ export interface TaskViewProps {
   today: string;
   gate: PrivacyGate;
   onUnlock: () => void;
-  /** 页头「添加待办」：切录入框到待办档并聚焦 */
+  /** 页头「添加待办」：打开添加内容窗口（`AddEntryDialog`） */
   onAdd: () => void;
   /** 筛选条形态（用户设置） */
   filterForm: TaskFilterForm;

@@ -238,14 +238,16 @@ describe("筛选（纯本地）", () => {
     expect(container.textContent).toContain("买牛奶");
   });
 
-  it("筛完没有结果时给空状态与出口（原型空态带「切到录入框」主按钮）", async () => {
+  it("筛完没有结果时给空状态与出口（出口开添加窗口，不再跳录入框）", async () => {
     const user = userEvent.setup();
     renderPanel({ tasks: [task("t1", { task_status: "todo" })] });
 
     await user.click(screen.getByRole("button", { name: /^已完成/ }));
     expect(screen.getByText("没有待办")).toBeTruthy();
-    expect(screen.getByText(/在录入框切到「待办」记一条/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /切到录入框/ })).toBeTruthy();
+    expect(screen.getByText(/点「添加待办」记一条/)).toBeTruthy();
+    // 页头也有一个「添加待办」，故把空状态出口**限定在空块内**查
+    const empty = screen.getByText("没有待办").closest(".memo-empty") as HTMLElement;
+    expect(within(empty).getByRole("button", { name: /添加待办/ })).toBeTruthy();
   });
 
   it("隐私门禁锁定时整屏占位：不显示卡片与状态，且「解锁」是活出口（M3-5）", async () => {
@@ -351,7 +353,7 @@ describe("页头与筛选条（v0.5.2 按定稿 2026-09-27 调整）", () => {
     expect(within(head as HTMLElement).getByRole("button", { name: "添加待办" })).toBeTruthy();
   });
 
-  it("「添加待办」把请求交回组合根（切录入框的待办档并聚焦，M07-01 入口二）", async () => {
+  it("「添加待办」把请求交回组合根（打开添加内容窗口，不再跳录入框）", async () => {
     const user = userEvent.setup();
     const { onAdd } = renderPanel();
 

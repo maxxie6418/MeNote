@@ -21,6 +21,7 @@ import type { UserSettings } from "@menote/shared";
 import { AppShell } from "./AppShell";
 import { FnBar } from "./fnbar/FnBar";
 import type { ComposerMode } from "./fnbar/Composer";
+import { useAddEntrySlot } from "./AddEntrySlot";
 import type { BrowsableView } from "./fnbar/NavSegmented";
 import { useRoute } from "./router";
 import { useTheme } from "./theme/useTheme";
@@ -237,7 +238,10 @@ export default function App() {
     await userSettings.reload();
   }, [refreshPending, userSettings, workspace]);
 
-  /** 「添加 / 记一条」类入口：**给了档位就切档**，再把焦点送回功能栏的录入框（M07-01 入口二） */
+  /**
+   * 把焦点送回功能栏的录入框（可选切档）。**现在只有首页快捷方式「记录 Memo / 新建待办」走这里**
+   * （M2-8）——Memo / 待办视图的「添加」已改弹窗，见 `AddEntryDialog`。
+   */
   const focusComposer = useCallback((mode?: ComposerMode) => {
     if (mode) setComposerMode(mode);
     const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="快速录入"]');
@@ -338,6 +342,21 @@ export default function App() {
     }
   }, [auth.snapshot, navigate, route.name]);
 
+  /**
+   * 功能栏的 props 组装**提前到变量**（并提到鉴权早退之前）：「添加内容窗口」的 hook 要复用
+   * 同一套发布回调（`onPublishMemo` / `onPublishTask`），而 hook 必须在早退前跑——否则 Memo /
+   * 待办两个入口得各自再抄一遍发布逻辑。`fnbarWiring` 是纯函数，在早退前多算一次无副作用。
+   */
+  const fnbarProps = fnbarWiring({
+    workspace, view: workspace.view, browseView: browse ?? undefined,
+    tags: workspace.tags, showHome: userSettings.settings.start_view === "home",
+    composerMode, notebookPanel: nav.notebookPanel, vault: nav.vault, goNotes,
+    onViewChange: showNotesView, onBrowseChange: (next) => setBrowse(next ?? null),
+    onComposerModeChange: setComposerMode, toast: pushToast,
+  });
+  /** 添加内容窗口（Memo / 待办「添加」的落点，改弹窗不再跳录入框）：开关状态与 JSX 收在 slot 里 */
+  const addEntry = useAddEntrySlot(fnbarProps.onPublishMemo, fnbarProps.onPublishTask);
+
   if (auth.snapshot.status === "loading") {
     return <AuthLoading />;
   }
@@ -412,25 +431,7 @@ export default function App() {
             })}
           />
         }
-        fnbar={
-          <FnBar
-            {...fnbarWiring({
-              workspace,
-              view: workspace.view,
-              browseView: browse ?? undefined,
-              tags: workspace.tags,
-              showHome: userSettings.settings.start_view === "home",
-              composerMode,
-              notebookPanel: nav.notebookPanel,
-              vault: nav.vault,
-              goNotes,
-              onViewChange: showNotesView,
-              onBrowseChange: (next) => setBrowse(next ?? null),
-              onComposerModeChange: setComposerMode,
-              toast: pushToast,
-            })}
-          />
-        }
+        fnbar={<FnBar {...fnbarProps} />}
       >
         {route.name === "trash" ? (
           /* 回收站（M4-12）：独立页；「← 返回设置」回落到「版本与回收站」分类 */
@@ -555,8 +556,8 @@ export default function App() {
             today={today}
             gate={privacy.gate}
             onUnlock={requestUnlock}
-            /* 页头「添加待办」= M07-01 入口二：切到待办档再聚焦（同一个函数，别处不必再抄一遍） */
-            onAdd={() => focusComposer("task")}
+            /* 页头「添加待办」= 打开添加内容窗口（用户 2026-09-29：不再跳左侧录入框） */
+            onAdd={() => addEntry.open("task")}
             filterForm={userSettings.settings.task_view.filter_form}
             onStatusChange={(id, status) => {
               void setTaskStatus(id, status).then(() => workspace.refresh());
@@ -589,7 +590,8 @@ export default function App() {
               setBrowse(null);
               void workspace.open(noteId);
             }}
-            onAdd={() => focusComposer()}
+            /* 页头「添加 Memo」= 打开添加内容窗口（用户 2026-09-29：不再跳左侧录入框） */
+            onAdd={() => addEntry.open("memo")}
             onDelete={(id) => {
               // 删除 Memo（M4-12）：与笔记/文件夹同一套（软删走服务端，本地记账后再刷新）
               void moveToTrash(id)
@@ -629,6 +631,8 @@ export default function App() {
       <LogoutConfirm open={confirmLogout} onClose={() => setConfirmLogout(false)}
         onConfirm={() => { setConfirmLogout(false); void auth.logout().then(() => navigate({ name: "login" })); }}
       />
+      {/* 添加内容窗口（Memo / 待办「添加」的落点，见 `AddEntrySlot`） */}
+      {addEntry.dialog}
       <ToastHost />
     </>
   );

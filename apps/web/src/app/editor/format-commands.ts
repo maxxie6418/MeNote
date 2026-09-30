@@ -1,0 +1,301 @@
+/**
+ * Markdown 格式命令的**唯一纯函数入口**（编辑拓展阶段 B / Task B1）。
+ *
+ * 职责只有一个：`(文本, 选区, 命令) → (新文本, 新选区)`。不碰 React、不碰 CodeMirror、
+ * 不知道宿主是谁——正文编辑器、快捷输入、将来的移动端都调这里，避免各宿主各拼一份 Markdown。
+ *
+ * 边界（写死）：
+ * - 只产生**标准 Markdown**：没有下划线、HTML、颜色、字号、CSS。命令表是白名单，加命令要改这里。
+ * - 不做异步内容动作：`/图片`、`/附件` 需要上传、占位符替换与 `EditorHandle.replace()`，
+ *   它们不是同步的 `{ text, selection }`，所以**不在**本注册表里（附件继续走正文的附件按钮）。
+ * - 跨行选区按**被覆盖的整行**展开（半行也算整行）；成对标记按精确字符区间包裹。
+ *   `to` 是开区间：`to` 正好落在下一行行首时，下一行不算被覆盖。
+ * - 重复执行是 **toggle**：成对标记已被完整包裹时再去掉；行前缀命令在所有非空行都已有前缀时统一去掉，
+ *   否则只给缺的行补。宁可多包一层，也不要误删用户的内容。
+ */
+
+export const FORMAT_COMMANDS = [
+  "bold",
+  "italic",
+  "bullet-list",
+  "ordered-list",
+  "quote",
+  "inline-code",
+  "link",
+  "heading",
+  "code-block",
+  "task-list",
+] as const;
+
+export type FormatCommandId = (typeof FORMAT_COMMANDS)[number];
+
+/** 选区按 CodeMirror 的习惯用 `to` 开区间（`{ from: 0, to: 8 }` 覆盖索引 0–7）。 */
+export type TextSelection = { from: number; to: number };
+
+export type FormatResult = { text: string; selection: TextSelection };
+
+/** 成对标记：包在选区两侧，选区留在标记内（继续打字就是标记里的内容）。 */
+const PAIR_MARKERS: Partial<Record<FormatCommandId, string>> = {
+  bold: "**",
+  italic: "*",
+  "inline-code": "`",
+};
+
+/** 链接模板里的地址占位：给用户一个可以立刻替换的合法 URL，而不是空括号。 */
+const LINK_URL = "https://";
+const LINK_PLACEHOLDER = "链接文字";
+const CODE_FENCE = "```";
+
+interface LineRule {
+  /** 这一行是否已经有**本命令**的前缀（要能区分无序列表与任务清单）。 */
+  has: (line: string) => boolean;
+  /** 给第 `index` 个非空行加前缀（有序列表按非空行次序编号）。 */
+  prefix: (index: number) => string;
+  /** 去掉已有前缀，行内其余内容一字不动。 */
+  strip: (line: string) => string;
+}
+
+/**
+ * 行前缀命令。`bullet-list` 的 `has` 特意带负向先行断言：`- [ ] 待办` 是**任务清单**，
+ * 不能被无序列表当成"已有前缀"而 toggle 掉，否则一条待办会被静默降级成普通列表项。
+ */
+const LINE_RULES: Record<
+  "bullet-list" | "ordered-list" | "quote" | "heading" | "task-list",
+  LineRule
+> = {
+  "bullet-list": {
+    has: (line) => /^\s*[-*+]\s+(?!\[[ xX]\]\s)/.test(line),
+    prefix: () => "- ",
+    strip: (line) => line.replace(/^(\s*)[-*+]\s+/, "$1"),
+  },
+  "ordered-list": {
+    has: (line) => /^\s*\d+[.)]\s+/.test(line),
+    prefix: (index) => `${index + 1}. `,
+    strip: (line) => line.replace(/^(\s*)\d+[.)]\s+/, "$1"),
+  },
+  quote: {
+    has: (line) => /^\s*>\s?/.test(line),
+    prefix: () => "> ",
+    strip: (line) => line.replace(/^(\s*)>\s?/, "$1"),
+  },
+  heading: {
+    has: (line) => /^\s*#{1,6}\s+/.test(line),
+    prefix: () => "## ",
+    strip: (line) => line.replace(/^(\s*)#{1,6}\s+/, "$1"),
+  },
+  "task-list": {
+    has: (line) => /^\s*[-*+]\s+\[[ xX]\]\s+/.test(line),
+    prefix: () => "- [ ] ",
+    strip: (line) => line.replace(/^(\s*)[-*+]\s+\[[ xX]\]\s+/, "$1"),
+  },
+};
+
+/** 选区落到的整行区间（`start` 含、`end` 不含，`end` 指到行尾换行符或文末）。 */
+function coveredLines(text: string, selection: TextSelection): { start: number; end: number } {
+  const from = Math.max(0, Math.min(selection.from, selection.to));
+  const to = Math.max(from, Math.max(selection.from, selection.to));
+  const start = text.lastIndexOf("\n", from - 1) + 1;
+  // 空选区（光标）按光标所在行算；有选区时看**最后一个被覆盖的字符**
+  const lastCovered = to > from ? to - 1 : from;
+  const newline = text.indexOf("\n", lastCovered);
+  const end = newline === -1 ? text.length : newline;
+  return { start, end: Math.max(end, start) };
+}
+
+function applyPair(text: string, selection: TextSelection, marker: string): FormatResult {
+  const { from, to } = selection;
+  const length = marker.length;
+  const selected = text.slice(from, to);
+
+  if (from === to) {
+    // 空选区：插一对标记，光标停在中间
+    return {
+      text: text.slice(0, from) + marker + marker + text.slice(from),
+      selection: { from: from + length, to: from + length },
+    };
+  }
+  if (
+    from >= length &&
+    text.slice(from - length, from) === marker &&
+    text.slice(to, to + length) === marker
+  ) {
+    // 标记就在选区外两侧 → 去掉
+    return {
+      text: text.slice(0, from - length) + selected + text.slice(to + length),
+      selection: { from: from - length, to: to - length },
+    };
+  }
+  if (selected.length >= 2 * length && selected.startsWith(marker) && selected.endsWith(marker)) {
+    // 标记被一起选进来了 → 去掉
+    const inner = selected.slice(length, selected.length - length);
+    return {
+      text: text.slice(0, from) + inner + text.slice(to),
+      selection: { from, to: to - 2 * length },
+    };
+  }
+  return {
+    text: text.slice(0, from) + marker + selected + marker + text.slice(to),
+    selection: { from: from + length, to: to + length },
+  };
+}
+
+function applyLink(text: string, selection: TextSelection): FormatResult {
+  const { from, to } = selection;
+  const selected = text.slice(from, to);
+
+  if (from === to) {
+    const inserted = `[${LINK_PLACEHOLDER}](${LINK_URL})`;
+    return {
+      text: text.slice(0, from) + inserted + text.slice(from),
+      selection: { from: from + 1, to: from + 1 + LINK_PLACEHOLDER.length },
+    };
+  }
+  // 已经是链接 → 拆回纯文字（toggle），避免层层套链接
+  const existing = /^\[([^\]]*)\]\(([^)]*)\)$/.exec(selected);
+  if (existing) {
+    const label = existing[1] ?? "";
+    return {
+      text: text.slice(0, from) + label + text.slice(to),
+      selection: { from, to: from + label.length },
+    };
+  }
+  const inserted = `[${selected}](${LINK_URL})`;
+  const urlStart = from + selected.length + 3; // "[" + 文字 + "]("
+  return {
+    text: text.slice(0, from) + inserted + text.slice(to),
+    selection: { from: urlStart, to: urlStart + LINK_URL.length },
+  };
+}
+
+function applyLinePrefix(
+  text: string,
+  selection: TextSelection,
+  rule: LineRule,
+): FormatResult {
+  const { start, end } = coveredLines(text, selection);
+  const lines = text.slice(start, end).split("\n");
+  const filled = lines.filter((line) => line.trim() !== "");
+  const allHavePrefix = filled.length > 0 && filled.every((line) => rule.has(line));
+
+  let index = 0;
+  const next = lines.map((line) => {
+    if (line.trim() === "") return line;
+    if (allHavePrefix) return rule.strip(line);
+    if (rule.has(line)) {
+      index += 1;
+      return line;
+    }
+    const prefixed = rule.prefix(index) + line;
+    index += 1;
+    return prefixed;
+  });
+
+  const block = next.join("\n");
+  return { text: text.slice(0, start) + block + text.slice(end), selection: { from: start, to: start + block.length } };
+}
+
+function applyCodeBlock(text: string, selection: TextSelection): FormatResult {
+  const { from, to } = selection;
+  if (from === to) {
+    const inserted = `${CODE_FENCE}\n\n${CODE_FENCE}`;
+    return {
+      text: text.slice(0, from) + inserted + text.slice(from),
+      selection: { from: from + CODE_FENCE.length + 1, to: from + CODE_FENCE.length + 1 },
+    };
+  }
+  const { start, end } = coveredLines(text, selection);
+  const lines = text.slice(start, end).split("\n");
+  const first = lines[0] ?? "";
+  const last = lines[lines.length - 1] ?? "";
+  const fences = lines.filter((line) => line.trim().startsWith(CODE_FENCE)).length;
+
+  // 已包在围栏里 → 去掉首尾两条围栏（中间内容一字不动）
+  if (fences === 2 && first.trim().startsWith(CODE_FENCE) && last.trim().startsWith(CODE_FENCE)) {
+    const inner = lines.slice(1, -1).join("\n");
+    return { text: text.slice(0, start) + inner + text.slice(end), selection: { from: start, to: start + inner.length } };
+  }
+
+  /*
+    选区只盖住围栏**里面**的内容时也去掉围栏——与成对标记的「标记就在选区外两侧」同一语义。
+    不加这一条，用户选中围栏内的代码再点「代码块」会得到嵌套围栏（``` 套 ```），那不是他想要的。
+  */
+  const inner = lines.join("\n");
+  const prevLine = lineBefore(text, start);
+  const nextLine = lineAfter(text, end);
+  if (
+    prevLine !== null &&
+    nextLine !== null &&
+    prevLine.trim().startsWith(CODE_FENCE) &&
+    nextLine.trim().startsWith(CODE_FENCE)
+  ) {
+    const prevStart = start - prevLine.length - 1; // 前一行的行首（含它前面的换行符）
+    const nextEnd = end + 1 + nextLine.length;
+    return {
+      text: text.slice(0, prevStart) + inner + text.slice(nextEnd),
+      selection: { from: prevStart, to: prevStart + inner.length },
+    };
+  }
+
+  const block = `${CODE_FENCE}\n${inner}\n${CODE_FENCE}`;
+  return {
+    text: text.slice(0, start) + block + text.slice(end),
+    selection: { from: start + CODE_FENCE.length + 1, to: start + CODE_FENCE.length + 1 + inner.length },
+  };
+}
+
+/** 取 `at` 这一行**前面**那一行的文本；没有前一行（在文首）时返回 null。 */
+function lineBefore(text: string, at: number): string | null {
+  if (at <= 0) return null;
+  const end = at - 1; // 前一行的换行符位置
+  if (text[end] !== "\n") return null;
+  return text.slice(text.lastIndexOf("\n", end - 1) + 1, end);
+}
+
+/** 取 `at` 这一行**后面**那一行的文本；没有后一行（在文末）时返回 null。 */
+function lineAfter(text: string, at: number): string | null {
+  if (at >= text.length) return null;
+  if (text[at] !== "\n") return null;
+  const start = at + 1;
+  const end = text.indexOf("\n", start);
+  return text.slice(start, end === -1 ? text.length : end);
+}
+
+/**
+ * 执行一条格式命令。纯函数：同样的入参永远得到同样的结果，不改动入参。
+ */
+export function applyFormatCommand(
+  text: string,
+  selection: TextSelection,
+  command: FormatCommandId,
+): FormatResult {
+  const marker = PAIR_MARKERS[command];
+  if (marker) return applyPair(text, selection, marker);
+  if (command === "link") return applyLink(text, selection);
+  if (command === "code-block") return applyCodeBlock(text, selection);
+  return applyLinePrefix(text, selection, LINE_RULES[command]);
+}
+
+/** 命令的中文名（菜单与提示共用，避免两处各写一份）。 */
+export const FORMAT_COMMAND_LABELS: Record<FormatCommandId, string> = {
+  bold: "加粗",
+  italic: "斜体",
+  "bullet-list": "无序列表",
+  "ordered-list": "有序列表",
+  quote: "引用",
+  "inline-code": "行内代码",
+  link: "链接",
+  heading: "标题",
+  "code-block": "代码块",
+  "task-list": "任务清单",
+};
+
+/** 快捷输入的基础命令集（`/标题`、`/代码块`、`/任务清单` 不进快捷输入）。 */
+export const QUICK_FORMAT_COMMANDS: readonly FormatCommandId[] = [
+  "bold",
+  "italic",
+  "bullet-list",
+  "ordered-list",
+  "quote",
+  "inline-code",
+  "link",
+];

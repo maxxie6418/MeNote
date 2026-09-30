@@ -64,6 +64,8 @@ export interface NotebookPanelProps {
   showItems?: boolean;
   itemsByFolder?: Readonly<Record<string, LocalItem[]>>;
   onOpenItem?: (itemId: string) => void;
+  /** 正文区当前打开的那一篇（树里给这一行选中底色；2026-10-01 问题 5） */
+  selectedItemId?: string | null;
 }
 
 export function NotebookPanel({
@@ -79,6 +81,7 @@ export function NotebookPanel({
   showItems = false,
   itemsByFolder,
   onOpenItem,
+  selectedItemId = null,
 }: NotebookPanelProps) {
   const [creatingIn, setCreatingIn] = useState<{ parentId: string | null } | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -218,6 +221,7 @@ export function NotebookPanel({
         showItems={showItems}
         itemsByFolder={itemsByFolder}
         onOpenItem={onOpenItem}
+        selectedItemId={selectedItemId}
         vault={
           vault
             ? {

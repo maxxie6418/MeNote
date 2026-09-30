@@ -209,6 +209,7 @@ export default function App() {
     // 树里列条目（B2 批）：开关来自设置；点条目＝让分栏浏览让位再打开它
     showItems: userSettings.settings.notebook.show_items,
     onOpenItem: (itemId) => { setBrowse(null); void workspace.open(itemId); },
+    selectedItemId: workspace.selectedId,
     onOpenVaultFolder: (folderId) => {
       setBrowse(null);
       workspace.setView({ kind: "notebook", folderId: folderId ?? workspace.vault.id });

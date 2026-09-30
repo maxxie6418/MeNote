@@ -70,27 +70,27 @@ describe("笔记本树的折叠与引导线", () => {
 
   it("有子夹的父项给折叠按钮，没有子夹的不给（不给点了没反应的入口）", () => {
     renderTree();
-    expect(screen.getByRole("button", { name: "收起「工作」里的子文件夹" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /「生活」里的子文件夹/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "收起「工作」里的内容" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /「生活」里的内容/ })).toBeNull();
   });
 
   it("点折叠按钮：子层收起、`aria-expanded` 变 false，父项本身还在（不影响选中）", () => {
     const container = renderTree();
-    const toggle = screen.getByRole("button", { name: "收起「工作」里的子文件夹" });
+    const toggle = screen.getByRole("button", { name: "收起「工作」里的内容" });
 
     fireEvent.click(toggle);
 
     expect(childBlock(container)).toBeNull();
     expect(screen.queryByText("本周")).toBeNull();
     expect(screen.getByText("工作")).toBeTruthy();
-    const collapsed = screen.getByRole("button", { name: "展开「工作」里的子文件夹" });
+    const collapsed = screen.getByRole("button", { name: "展开「工作」里的内容" });
     expect(collapsed.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("再点一次展开回来（同一个入口双向）", () => {
     const container = renderTree();
-    fireEvent.click(screen.getByRole("button", { name: "收起「工作」里的子文件夹" }));
-    fireEvent.click(screen.getByRole("button", { name: "展开「工作」里的子文件夹" }));
+    fireEvent.click(screen.getByRole("button", { name: "收起「工作」里的内容" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开「工作」里的内容" }));
 
     expect(childBlock(container)).not.toBeNull();
     expect(screen.getByText("本周")).toBeTruthy();

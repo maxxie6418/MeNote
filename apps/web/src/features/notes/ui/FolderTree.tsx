@@ -6,8 +6,18 @@
  *    合法动作，所以根本不出现）；
  * 2. 节点上带条目计数，一眼看出每个文件夹里有多少条。
  *
- * 2026-09-28（用户要求"界面上要能看出层级结构"）：父节点加**折叠三角**、子层加**引导线**——
- * 层级不再只靠 16px 缩进表达。折叠状态只在本组件内（纯展示状态，不进数据）。
+ * 2026-09-28（用户要求"界面上要能看出层级结构"）：父节点加**折叠三角**、子层加**引导线**。
+ * 折叠状态只在本组件内（纯展示状态，不进数据）。
+ *
+ * 2026-10-01（用户反馈问题 5："文件夹和文档看起来不够区分明显，结构也不明显"）三处结构性修正
+ * （设计稿 `docs/modules/Menote-笔记本树两档模式与层级-设计-v1.md` §三）：
+ * 1. **文档行搬进 `.tree__children` 那一块**——与子文件夹**共用同一条引导线**、缩进也与文件夹名对齐。
+ *    此前文档挂在 `.tree-items` 自己的缩进里、没有引导线，看着像另一套层级（"谁属于谁读不出来"）；
+ *    顺带定下**顺序：先子文件夹、后文档**（结构在前、内容在后）。
+ * 2. **折叠 = 收起该夹的全部内容（子夹 + 文档）**。此前三角只控制子文件夹，一个夹里 50 条文档
+ *    照样铺在树上；现在**有文档也算"可折叠"**（否则没有子夹、只有文档的夹根本收不起来）。
+ * 3. **当前打开的文档给选中反馈**（`selectedItemId` → `aria-current`）：此前树里只有"选中的文件夹"
+ *    有底色，点开的文档在树上毫无痕迹。
  *
  * 每个节点带"更多"菜单：重命名 / 移动到… / 新建子文件夹（仅第 1 层）。菜单项禁用时都带原因。
  * 放在 `features/notes/`（不是 `app/fnbar/`）：功能栏只是容器，由 `App` 把本组件作为插槽传进去，
@@ -65,6 +75,8 @@ export interface FolderTreeProps {
   showItems?: boolean;
   itemsByFolder?: Readonly<Record<string, LocalItem[]>>;
   onOpenItem?: (itemId: string) => void;
+  /** 正文区当前打开的那一篇（树里给这一行选中底色；不传就没有选中反馈） */
+  selectedItemId?: string | null;
 }
 
 /** 每个文件夹下最多列这么多条，超出给「还有 N 条…」（避免 2000 篇把树撑爆） */
@@ -84,6 +96,7 @@ export function FolderTree({
   showItems = false,
   itemsByFolder,
   onOpenItem,
+  selectedItemId = null,
 }: FolderTreeProps) {
   /**
    * 折叠起来的文件夹 id（2026-09-28 加入：用户要求"界面上要能看出层级结构"）。
@@ -105,6 +118,9 @@ export function FolderTree({
     folders
       .filter((folder) => folder.parent_id === parentId)
       .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+  /** 这一夹要列的条目：开关与打开动作都给齐了才算（加密空间那棵树两个都不给） */
+  const itemsOf = (folderId: string): LocalItem[] =>
+    showItems && onOpenItem ? (itemsByFolder?.[folderId] ?? []) : [];
 
   const nodeProps = (folder: LocalFolder) => ({
     folder,
@@ -116,35 +132,103 @@ export function FolderTree({
     onCreateChild,
     vault,
     onDelete,
-    showItems,
-    items: itemsByFolder?.[folder.id] ?? [],
-    onOpenItem,
   });
 
-  return (
-    <ul className="tree">
-      {roots.map((folder) => {
-        const children = childrenOf(folder.id);
-        const isCollapsed = collapsed.includes(folder.id);
-        return (
-          <li key={folder.id}>
-            {/* 有子夹的父节点才出现折叠三角（没子夹就不给一个点了没反应的入口） */}
-            <FolderNode
-              {...nodeProps(folder)}
-              collapsible={children.length > 0}
-              collapsed={isCollapsed}
-              onToggleCollapse={() => toggle(folder.id)}
-            />
-            {children.length > 0 && !isCollapsed ? (
-              <div className="tree__children">
-                {children.map((child) => (
-                  <FolderNode key={child.id} {...nodeProps(child)} />
-                ))}
-              </div>
+  /**
+   * 渲染一个文件夹行 + 它的内容块。两层限制：第 2 层没有子夹，但**两层都可以有文档**。
+   *
+   * 内容块的顺序是**先子文件夹、后文档**（结构在前、内容在后），两者共用同一个 `.tree__children`
+   * （同一条引导线）；收起时两块一起收（2026-10-01）。
+   */
+  const renderFolder = (folder: LocalFolder, level: 1 | 2): React.ReactElement => {
+    const children = level === 1 ? childrenOf(folder.id) : [];
+    const items = itemsOf(folder.id);
+    const isCollapsed = collapsed.includes(folder.id);
+    const hasContent = children.length > 0 || items.length > 0;
+    return (
+      <li key={folder.id}>
+        <FolderNode
+          {...nodeProps(folder)}
+          collapsible={hasContent}
+          collapsed={isCollapsed}
+          onToggleCollapse={() => toggle(folder.id)}
+        />
+        {hasContent && !isCollapsed ? (
+          <div className="tree__children">
+            {children.length > 0 ? (
+              <ul className="tree">{children.map((child) => renderFolder(child, 2))}</ul>
             ) : null}
+            {items.length > 0 && onOpenItem ? (
+              <TreeItemList
+                folderId={folder.id}
+                items={items}
+                selectedItemId={selectedItemId}
+                onOpenItem={onOpenItem}
+                onSelect={onSelect}
+              />
+            ) : null}
+          </div>
+        ) : null}
+      </li>
+    );
+  };
+
+  return <ul className="tree">{roots.map((folder) => renderFolder(folder, 1))}</ul>;
+}
+
+/**
+ * 一个文件夹下的文档行（每夹上限 `TREE_ITEMS_LIMIT` 条，超出给一行「还有 N 条…」→
+ * **切到那个文件夹**，把中间列当全量视图看，树只做"认路"）。
+ *
+ * 不再套自己的缩进容器：它挂在 `.tree__children` 里，与子文件夹共用同一条引导线（2026-10-01）。
+ */
+function TreeItemList({
+  folderId,
+  items,
+  selectedItemId,
+  onOpenItem,
+  onSelect,
+}: {
+  folderId: string;
+  items: readonly LocalItem[];
+  selectedItemId: string | null;
+  onOpenItem: (itemId: string) => void;
+  onSelect: (folderId: string) => void;
+}) {
+  const rest = items.length - TREE_ITEMS_LIMIT;
+  return (
+    <ul className="tree-items">
+      {items.slice(0, TREE_ITEMS_LIMIT).map((item) => {
+        const title = item.title ?? "未命名";
+        return (
+          <li key={item.id}>
+            <button
+              type="button"
+              className="tree-item"
+              // 正文区正打开的哪一篇：给这一行选中底色（`aria-current` 也把状态告诉了读屏）
+              aria-current={selectedItemId === item.id}
+              aria-label={title}
+              onClick={() => onOpenItem(item.id)}
+              title={title}
+            >
+              <Icon name={item.type === "table" ? "table" : "note"} size={13} />
+              <span className="nav-item__label">{title}</span>
+            </button>
           </li>
         );
       })}
+      {rest > 0 ? (
+        <li>
+          <button
+            type="button"
+            className="tree-item tree-item--more"
+            aria-label={`还有 ${rest} 条，切到这个文件夹`}
+            onClick={() => onSelect(folderId)}
+          >
+            还有 {rest} 条…
+          </button>
+        </li>
+      ) : null}
     </ul>
   );
 }
@@ -159,14 +243,10 @@ interface FolderNodeProps {
   onCreateChild: (folder: LocalFolder) => void;
   vault?: FolderTreeProps["vault"];
   onDelete?: (folder: LocalFolder) => void;
-  /** 有子文件夹时才给：折叠 / 展开这一支 */
+  /** 有子夹或（树里列条目时）有文档才给：折叠 / 展开这一支的全部内容 */
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
-  /** 树里列条目（B2 批）：开关 + 这一夹直接包含的条目 + 点开动作 */
-  showItems?: boolean;
-  items?: LocalItem[];
-  onOpenItem?: (itemId: string) => void;
 }
 
 function FolderNode({
@@ -182,9 +262,6 @@ function FolderNode({
   collapsible = false,
   collapsed = false,
   onToggleCollapse,
-  showItems = false,
-  items = [],
-  onOpenItem,
 }: FolderNodeProps) {
   // 第 2 层不出现"新建子文件夹"入口（那个位置永远没有合法动作）
   const canCreateChild = canCreateChildFolder(folder);
@@ -201,7 +278,7 @@ function FolderNode({
           type="button"
           className="tree-row__toggle"
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? "展开" : "收起"}「${folder.name}」里的子文件夹`}
+          aria-label={`${collapsed ? "展开" : "收起"}「${folder.name}」里的内容`}
           title={collapsed ? "展开" : "收起"}
           onClick={onToggleCollapse}
         >
@@ -226,36 +303,6 @@ function FolderNode({
         {folder.pending ? <span className="nav-item__count">待上传</span> : null}
         <span className="nav-item__count">{count}</span>
       </button>
-
-      {/*
-        树里列条目（B2 批；默认关，由设置 › 通用 打开）。
-        每夹最多 `TREE_ITEMS_LIMIT` 条，超出给一行「还有 N 条…」→ **切到那个文件夹**
-        （把中间列当全量视图看，树只做"认路"）。
-      */}
-      {showItems && onOpenItem && items.length > 0 ? (
-        <ul className="tree-items">
-          {items.slice(0, TREE_ITEMS_LIMIT).map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                className="tree-item"
-                onClick={() => onOpenItem(item.id)}
-                title={item.title ?? "未命名"}
-              >
-                <Icon name={item.type === "table" ? "table" : "note"} size={13} />
-                <span className="nav-item__label">{item.title ?? "未命名"}</span>
-              </button>
-            </li>
-          ))}
-          {items.length > TREE_ITEMS_LIMIT ? (
-            <li>
-              <button type="button" className="tree-item tree-item--more" onClick={() => onSelect(folder.id)}>
-                还有 {items.length - TREE_ITEMS_LIMIT} 条…
-              </button>
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
 
       <div className="tree-row__menu">
         <DropdownMenu

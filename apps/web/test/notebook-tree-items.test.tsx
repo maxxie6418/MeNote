@@ -112,7 +112,8 @@ describe("笔记本树里列条目", () => {
     const labels = [...container.querySelectorAll(".tree-item")].map((entry) =>
       entry.textContent?.trim(),
     );
-    expect(labels).toEqual(["周报", "本周待办"]);
+    // 结构在前、内容在后：先出现子文件夹「本周」下的文档，再出现根文件夹「工作」下的文档
+    expect(labels).toEqual(["本周待办", "周报"]);
 
     fireEvent.click(screen.getByRole("button", { name: "本周待办" }));
     expect(onOpenItem).toHaveBeenCalledWith("n2");
@@ -138,6 +139,21 @@ describe("笔记本树里列条目", () => {
 
     fireEvent.click(entries.at(-1) as HTMLElement);
     expect(onSelect).toHaveBeenCalledWith("f1");
+  });
+
+  it("当前打开的文档行带选中反馈，收起文件夹时文档一起隐藏", () => {
+    const container = renderTree({
+      showItems: true,
+      selectedItemId: "n1",
+      itemsByFolder: { f1: [item("n1", "周报", "f1")] },
+      onOpenItem: NOOP,
+    });
+
+    const row = container.querySelector<HTMLButtonElement>('.tree-item[aria-current="true"]');
+    expect(row?.textContent).toContain("周报");
+
+    fireEvent.click(screen.getByRole("button", { name: "收起「工作」里的内容" }));
+    expect(container.querySelectorAll(".tree-item")).toHaveLength(0);
   });
 
   it("没给 onOpenItem 时不列条目（加密空间那棵树就是不给——列标题等于泄露内容）", () => {

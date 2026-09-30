@@ -3758,8 +3758,10 @@ button.chip--tag:hover {
 
 /* 第 2 层：引导线 + 缩进，让层级一眼看得出（2026-09-28；此前只有 16px 缩进） */
 .tree__children {
-  margin-left: var(--sp-2);
-  padding-left: var(--sp-3);
+  display: block;
+  list-style: none;
+  margin: 0 0 0 var(--sp-2);
+  padding: 0 0 0 var(--sp-3);
   border-left: 1px solid var(--line);
 }
 
@@ -3808,7 +3810,8 @@ button.chip--tag:hover {
   width: 100%;
   padding: var(--sp-1) var(--sp-5) var(--sp-1) var(--sp-2);
   border-radius: var(--radius-sm);
-  color: var(--text-2);
+  color: var(--text);
+  font-weight: 500;
   font-size: var(--fs-small);
   text-align: left;
 }
@@ -5425,7 +5428,7 @@ button.chip--tag:hover {
 .tree-items {
   list-style: none;
   margin: 0;
-  padding: 0 0 var(--sp-1) var(--sp-4);
+  padding: 0 0 var(--sp-1);
 }
 
 .tree-item {
@@ -5440,9 +5443,19 @@ button.chip--tag:hover {
   text-align: left;
 }
 
+.tree-item .ic {
+  color: var(--muted);
+}
+
 .tree-item:hover {
   background: var(--panel-2);
   color: var(--text);
+}
+
+.tree-item[aria-current="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
 }
 
 .tree-item--more {

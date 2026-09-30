@@ -43,6 +43,8 @@ export interface NavPanelsInput {
   showItems: boolean;
   /** 点树里的条目：打开它（`App` 负责先让分栏浏览让位） */
   onOpenItem: (itemId: string) => void;
+  /** 正文区当前打开的条目（树内文档的选中反馈） */
+  selectedItemId: string | null;
 }
 
 export interface FnBarWiringInput {
@@ -164,6 +166,7 @@ export function navPanels(input: NavPanelsInput): {
       showItems={input.showItems}
       itemsByFolder={workspace.itemsByFolder}
       onOpenItem={input.onOpenItem}
+      selectedItemId={input.selectedItemId}
     />
   );
 

@@ -263,6 +263,30 @@ button {
   margin-top: 6px;
 }
 
+/*
+  `/` 命令菜单（编辑拓展阶段 B / Task B2）：复用 `.menu` 的外观，只补放置与「向上弹出」
+  ——录入框在窗口底部，向下弹会被视口裁掉。
+*/
+.cmd-menu {
+  left: 0;
+  bottom: calc(100% + 6px);
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cmd-menu__item.is-active {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+
+.cmd-menu__empty {
+  padding: 7px 9px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+}
+
 /* 采用盒式分段控件（与浏览三段的下划线页签刻意区分，DESIGN.md §2.5-4）
    取值照原型 `.seg`（2026-09-28 补齐）：**浅灰外壳 + 选中为白底浮起块**、按钮 25px / `--fs-body`、
    选中图标转主色。此前我们写的是"白底 + 灰选中 + 11px 小字"，与原型明显不同——页头的

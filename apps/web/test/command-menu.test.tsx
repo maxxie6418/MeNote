@@ -169,6 +169,50 @@ describe("命令菜单：键盘", () => {
     expect(onChoose).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("挂上与撤下的 `document` 监听次数成对（开合 20 次不积累）", async () => {
+    /*
+      上一条验的是"关了就不响应键盘"，但漏挂 **removeEventListener** 时它照样绿
+      ——那种泄漏表现为每开一次菜单就多一个 document 监听，正文里敲一下 Enter 会被处理十几次。
+      `apps/web/src/features/editor-lab` 的读数只数编辑器自己的更新监听（计划 Task C1 Step 3
+      明确不统计 document 监听），所以这条守卫放在菜单自己的用例里。
+    */
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    const user = userEvent.setup();
+    const { onChoose, onClose, view } = setup();
+
+    const keydownAdds = (): number =>
+      added.mock.calls.filter(([type]) => type === "keydown").length;
+    const keydownRemoves = (): number =>
+      removed.mock.calls.filter(([type]) => type === "keydown").length;
+
+    for (let index = 0; index < 20; index += 1) {
+      view.rerender(
+        <CommandMenu
+          open={false}
+          query=""
+          commands={["bold", "bullet-list", "quote"]}
+          onChoose={onChoose}
+          onClose={onClose}
+        />,
+      );
+      view.rerender(
+        <CommandMenu
+          open
+          query=""
+          commands={["bold", "bullet-list", "quote"]}
+          onChoose={onChoose}
+          onClose={onClose}
+        />,
+      );
+    }
+    await user.keyboard("{Escape}");
+
+    expect(keydownRemoves()).toBeGreaterThanOrEqual(keydownAdds() - 1);
+    added.mockRestore();
+    removed.mockRestore();
+  });
 });
 
 describe("命令菜单：过滤后高亮回到有效项", () => {

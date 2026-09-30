@@ -18,7 +18,6 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState, type RefObject } 
 import { CommandMenu } from "../editor/CommandMenu";
 import {
   QUICK_FORMAT_COMMANDS,
-  applyFormatCommand,
   type FormatCommandId,
   type TextSelection,
 } from "../editor/format-commands";
@@ -27,6 +26,7 @@ import {
   type QuickAttributeHost,
   type QuickAttributeId,
 } from "./quick-attributes";
+import { applyFormatAt, triggerAt as matchTrigger } from "../editor/trigger";
 
 const MarkdownPreview = lazy(async () => {
   const mod = await import("../editor/MarkdownPreview");
@@ -72,31 +72,14 @@ interface Trigger {
   caret: number;
 }
 
-/** 代码围栏内不触发：`/` 与 `@` 在代码块里是正文内容，不是命令。 */
-function insideCodeFence(text: string, caret: number): boolean {
-  let fences = 0;
-  for (const line of text.slice(0, caret).split("\n")) {
-    if (/^\s*(```|~~~)/.test(line)) fences += 1;
-  }
-  return fences % 2 === 1;
-}
-
 /**
- * 光标处是否正在输入命令：`/` 或 `@` 出现在**行首或空白后**，且到光标之间没有空白。
- * 返回触发词与已经输入的内容（`/加` 的 query 是「加」）。
+ * 光标处是否正在输入命令。
+ *
+ * 判定规则不在这里：和正文编辑器共用 `editor/trigger.ts`（行首或空白后、触发词到光标之间无空白、
+ * 代码围栏内不算）。**导出**是为了能单独测这条边界。
  */
 export function triggerAt(text: string, caret: number): Trigger | null {
-  if (caret <= 0 || caret > text.length) return null;
-  if (insideCodeFence(text, caret)) return null;
-  const before = text.slice(0, caret);
-  const index = Math.max(before.lastIndexOf("/"), before.lastIndexOf("@"));
-  if (index === -1) return null;
-  const char = before[index];
-  if (char !== "/" && char !== "@") return null;
-  if (index > 0 && !/\s/.test(before[index - 1] ?? "")) return null;
-  const query = before.slice(index + 1);
-  if (/\s/.test(query)) return null;
-  return { kind: char, query, start: index, caret };
+  return matchTrigger(text, caret, ["/", "@"]);
 }
 
 export function QuickComposer({
@@ -196,8 +179,8 @@ export function QuickComposer({
   }
 
   function applyCommand(id: FormatCommandId): void {
-    const base = stripTrigger();
-    const result = applyFormatCommand(base.text, { from: base.caret, to: base.caret }, id);
+    // 触发段由共享的 `applyFormatAt()` 吃掉——三个宿主（正文、这里、试验页）只有这一份实现
+    const result = applyFormatAt(value, selectionRef.current, id, ["/", "@"]);
     pendingSelection.current = result.selection;
     setTrigger(null);
     onChange(result.text);

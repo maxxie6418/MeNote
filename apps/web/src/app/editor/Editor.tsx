@@ -13,14 +13,21 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view";
 import { useEffect, useRef, useState } from "react";
+import { type FormatCommandId } from "./format-commands";
 import { livePreview } from "./live-preview";
+import { applyFormatAt, triggerAt } from "./trigger";
 
-/** 交给外部的编辑器句柄：读、在光标处插入、按标记替换 */
+/** 交给外部的编辑器句柄：读、在光标处插入、按标记替换、执行格式命令 */
 export interface EditorHandle {
   read(): string;
   insert(text: string): void;
   /** 把正文里的 `marker` 换成 `text`；找不到标记时按"插入"兜底 */
   replace(marker: string, text: string): void;
+  /**
+   * 在当前选区执行一条格式命令（`format-commands.ts` 是唯一的 Markdown 拼装处）。
+   * 命令菜单选中之后由宿主调用——编辑器不认识菜单。
+   */
+  applyFormat(command: FormatCommandId): void;
 }
 
 export interface EditorProps {
@@ -42,6 +49,15 @@ export interface EditorProps {
    * 上传与占位替换在 `features/attachments` 里——编辑器不该知道附件怎么传。
    */
   onFiles?: (files: File[]) => void;
+  /**
+   * `/` 触发词上报（编辑拓展阶段 B / Task B3）：光标前是**行首或空白后的 `/`**、
+   * 且 `/` 到光标之间没有空白时，上报 `/` 后面的文本（刚打完 `/` 时是空串）；
+   * 其余情况（含光标处不是触发词、选区非空、只读、即时渲染、输入法组合中）上报 `null`。
+   *
+   * 编辑器**不渲染菜单**：菜单长什么样、选中后写到哪里，都是宿主的事——
+   * 正文与快捷输入共用同一套命令，但它们的宿主不是同一个。
+   */
+  onSlashQuery?: (query: string | null) => void;
   className?: string;
   ariaLabel?: string;
 }
@@ -57,6 +73,17 @@ export function filesFromDataTransfer(data: DataTransfer | null): File[] {
   return [...data.files];
 }
 
+/**
+ * 光标前那个 `/` 触发词的查询文本；不在触发位置时返回 `null`。
+ *
+ * 判定规则只有一份（`trigger.ts`，与快捷输入共用）：正文这里只要 `/`，录入框还要 `@`。
+ */
+export function slashQueryAt(text: string, caret: number): string | null {
+  return triggerAt(text, caret, ["/"])?.query ?? null;
+}
+
+export { applyFormatAt };
+
 export function Editor({
   initialValue,
   onChange,
@@ -64,6 +91,7 @@ export function Editor({
   live = false,
   onReady,
   onFiles,
+  onSlashQuery,
   className,
   ariaLabel,
 }: EditorProps) {
@@ -72,6 +100,11 @@ export function Editor({
   const onChangeRef = useRef(onChange);
   const onReadyRef = useRef(onReady);
   const onFilesRef = useRef(onFiles);
+  const onSlashQueryRef = useRef(onSlashQuery);
+  /** 即时渲染开关的当前值：视图只创建一次，扩展里的回调必须读 ref 才知道现在是不是渲染档 */
+  const liveRef = useRef(live);
+  /** 上一次上报的触发词（`null` 也算一次）：不变就不重复打扰宿主 */
+  const lastSlashRef = useRef<string | null>(null);
   const [readOnlyCompartment] = useState(() => new Compartment());
   /** 即时渲染 / 行号那一档扩展（见 `EditorProps.live`） */
   const [viewModeCompartment] = useState(() => new Compartment());
@@ -88,6 +121,33 @@ export function Editor({
   useEffect(() => {
     onFilesRef.current = onFiles;
   }, [onFiles]);
+  useEffect(() => {
+    onSlashQueryRef.current = onSlashQuery;
+  }, [onSlashQuery]);
+
+  /**
+   * 当前状态下该上报的触发词。
+   *
+   * 三种情况一律报 `null`：组合输入中（`/` 常常只是候选词的一部分）、只读、即时渲染
+   * ——渲染档里光标那一行是源码，但菜单会盖住正在看的渲染结果，宿主也没法给它定位。
+   */
+  function nextSlashQuery(view: EditorView): string | null {
+    if (view.composing || liveRef.current || view.state.readOnly) return null;
+    const selection = view.state.selection.main;
+    if (!selection.empty) return null;
+    return slashQueryAt(view.state.doc.toString(), selection.head);
+  }
+
+  /**
+   * 上报触发词。`updateListener` 对**每一次事务**都会跑（打字、移光标、只读与模式重配置），
+   * 所以这里得自己去重：不然宿主会被同一份查询反复通知，菜单也跟着反复重开。
+   */
+  function reportSlash(view: EditorView | null): void {
+    const next = view ? nextSlashQuery(view) : null;
+    if (next === lastSlashRef.current) return;
+    lastSlashRef.current = next;
+    onSlashQueryRef.current?.(next);
+  }
 
   useEffect(() => {
     const host = hostRef.current;
@@ -138,6 +198,7 @@ export function Editor({
           }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+            reportSlash(update.view);
           }),
         ],
       }),
@@ -150,6 +211,8 @@ export function Editor({
     return () => {
       view.destroy();
       viewRef.current = null;
+      // 视图没了：宿主要把命令菜单一并收起来，别留一个指向死视图的菜单
+      reportSlash(null);
     };
     // 只在挂载时创建：initialValue 的变化不应重建文档（架构 §3.3）
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,8 +229,10 @@ export function Editor({
     即时渲染开关同理：**重配置而不重建文档**。
     这一条不能省——"仅编辑 ↔ 即时渲染"在 React 树里的位置相同，不会重新挂载编辑器，
     少了它就会"点了模式按钮没反应"。
+    `liveRef` 先改：紧接着那次重配置会触发 `updateListener`，触发词上报要按**新的**档位判。
   */
   useEffect(() => {
+    liveRef.current = live;
     viewRef.current?.dispatch({
       effects: viewModeCompartment.reconfigure(viewModeExtensions(live)),
     });
@@ -196,7 +261,7 @@ function viewModeExtensions(live: boolean): Extension {
   return live ? [livePreview()] : [lineNumbers()];
 }
 
-/** 句柄：读 / 插入 / 按标记替换——三者都直接落在 `EditorView` 上，不持有全局状态 */
+/** 句柄：读 / 插入 / 按标记替换 / 执行格式命令——都直接落在 `EditorView` 上，不持有全局状态 */
 function makeHandle(view: EditorView): EditorHandle {
   const insert = (text: string): void => {
     const position = view.state.selection.main.head;
@@ -218,6 +283,19 @@ function makeHandle(view: EditorView): EditorHandle {
         return;
       }
       view.dispatch({ changes: { from: index, to: index + marker.length, insert: text } });
+    },
+    applyFormat: (command) => {
+      const text = view.state.doc.toString();
+      const { from, to } = view.state.selection.main;
+      const result = applyFormatAt(text, { from, to }, command);
+      /*
+        整篇换成新文本、并落回命令给出的选区。`onChange` 由同一条 `updateListener` 抛出去，
+        这里**不自己调回调**——两条路同时改文档，宿主读到的会是旧值。
+      */
+      view.dispatch({
+        changes: { from: 0, to: text.length, insert: result.text },
+        selection: { anchor: result.selection.from, head: result.selection.to },
+      });
     },
   };
 }

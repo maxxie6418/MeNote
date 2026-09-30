@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  EditorLifecycleCounter,
   attributeLongTask,
   retainRecentLongTasks,
   summarizeLongTasks,
@@ -38,5 +39,30 @@ describe("试验页性能归因", () => {
       maxMs: 70,
       latest: tasks[2],
     });
+  });
+});
+
+describe("编辑器生命周期计数", () => {
+  it("建/毁、挂/撤成对上报时，快照回到基线", () => {
+    const counter = new EditorLifecycleCounter();
+    expect(counter.snapshot()).toEqual({ activeEditors: 0, activeListeners: 0 });
+
+    expect(counter.editorCreated()).toEqual({ activeEditors: 1, activeListeners: 0 });
+    expect(counter.listenerAttached()).toEqual({ activeEditors: 1, activeListeners: 1 });
+    expect(counter.listenerDetached()).toEqual({ activeEditors: 1, activeListeners: 0 });
+    expect(counter.editorDestroyed()).toEqual({ activeEditors: 0, activeListeners: 0 });
+  });
+
+  it("连开两个编辑器各报一次，卸掉一个后还剩一个", () => {
+    const counter = new EditorLifecycleCounter();
+    counter.editorCreated();
+    counter.editorCreated();
+    expect(counter.editorDestroyed().activeEditors).toBe(1);
+  });
+
+  it("多撤一次不会数成负数（漏报要显形，但不能变成负的活跃数）", () => {
+    const counter = new EditorLifecycleCounter();
+    expect(counter.editorDestroyed().activeEditors).toBe(0);
+    expect(counter.listenerDetached().activeListeners).toBe(0);
   });
 });

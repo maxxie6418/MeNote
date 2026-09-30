@@ -47,6 +47,55 @@ export function attributeLongTask(actions: readonly LabAction[], taskStartedAt: 
   return best?.label ?? null;
 }
 
+/**
+ * 编辑器生命周期读数（编辑拓展阶段 B / Task B3）。
+ *
+ * 为什么不用 `querySelectorAll("[data-editor]")`：那只说明 DOM 里**看起来**有几个宿主，
+ * 看不出视图有没有真的建好、卸载时有没有把监听撤干净——而"连续切换后计数回不到基线"
+ * 正是要抓的那类泄漏。所以由宿主在建/毁、挂/撤的那一刻显式上报，读数就是发生的事。
+ */
+export interface LabLifecycleSnapshot {
+  activeEditors: number;
+  activeListeners: number;
+}
+
+/** 纯计数器：不知道谁在报，只保证成对上报时回到基线。 */
+export class EditorLifecycleCounter {
+  private editors = 0;
+  private listeners = 0;
+
+  /** 编辑器视图真的建好了 */
+  editorCreated(): LabLifecycleSnapshot {
+    this.editors += 1;
+    return this.snapshot();
+  }
+
+  /**
+   * 编辑器视图真的销毁了。
+   * 少配一次 `editorCreated` 也不数成负数——负的活跃数会掩盖漏报，比不报更糟。
+   */
+  editorDestroyed(): LabLifecycleSnapshot {
+    this.editors = Math.max(0, this.editors - 1);
+    return this.snapshot();
+  }
+
+  /** 宿主真的把监听挂上了（例如命令菜单打开时挂在 `document` 上的那一组） */
+  listenerAttached(): LabLifecycleSnapshot {
+    this.listeners += 1;
+    return this.snapshot();
+  }
+
+  /** 宿主真的把监听撤掉了 */
+  listenerDetached(): LabLifecycleSnapshot {
+    this.listeners = Math.max(0, this.listeners - 1);
+    return this.snapshot();
+  }
+
+  snapshot(): LabLifecycleSnapshot {
+    return { activeEditors: this.editors, activeListeners: this.listeners };
+  }
+}
+
 /** 调用方先把窗口外的任务丢掉。这里只汇总手里这份，渲染期不再读时钟。 */
 export function summarizeLongTasks(tasks: readonly LabLongTask[]): {
   count: number;

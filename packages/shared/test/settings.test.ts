@@ -56,14 +56,14 @@ describe("待办筛选条形态（v0.5.2；定稿：两种都留，用户自选�
  * 编辑模式改成"开关组"（用户 2026-09-29 拍板：设置里改成可开关显示的，至少留一个）。
  *
  * 契约这一侧要钉住四件事：
- * ①老行/旧客户端不带 `editor_modes` 时补成**生产清单**（编辑拓展阶段 A 起是"仅编辑 / 仅预览"；
- *   双栏与即时渲染**读得进来、出不去**）；
+ * ①老行/旧客户端不带 `editor_modes` 时补成**生产清单**（编辑拓展阶段 C 起是"仅编辑 / 即时渲染 /
+ *   仅预览"；双栏**读得进来、出不去**）；
  * ②`editor_mode` 仍在、且被解读为"首次初始值"（老用户升级后第一次打开不换档）；
  * ③归一化把非法/重复/空一次收口——空数组兜成产品清单全集，绝不让"一个档都没有"流到界面上，
- *   也绝不让已退出产品的 `split` / `live` 漏到渲染层；
+ *   也绝不让已退出产品的 `split` 漏到渲染层；
  * ④**只留一份产品清单**：`DEFAULT_EDITOR_MODES` 就是 `PRODUCT_EDITOR_MODES`（改一处不再漏两处）。
  */
-describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛为产品清单）", () => {
+describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛，v0.6.2 加回即时渲染）", () => {
   const base = {
     start_view: "home",
     timezone: "Asia/Shanghai",
@@ -81,10 +81,11 @@ describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛为产品清�
   });
 
   it("归一化：用户开着的档 ∩ 生产清单，按规范顺序排（不依赖存储里的顺序）", () => {
-    // 老行里存着四档 → 界面上只剩产品允许的两档（双栏 / 即时渲染静默退出）
+    // 老行里存着四档 → 界面上只剩产品允许的三档（双栏静默退出）
     expect(normalizeEditorModes(["live", "split", "edit", "preview", "live"])).toEqual([
       "edit",
       "preview",
+      "live",
     ]);
     // 老行只开了「仅预览」→ 就只给它一档，不擅自把它没开的档塞回来
     expect(normalizeEditorModes(["preview"])).toEqual(["preview"]);
@@ -106,8 +107,9 @@ describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛为产品清�
     expect(EDITOR_MODES).toEqual(["split", "edit", "preview", "live"]);
   });
 
-  it("产品清单只有一份来源，且阶段 A 就是「仅编辑 / 仅预览」", () => {
-    expect(PRODUCT_EDITOR_MODES).toEqual(["edit", "preview"]);
+  it("产品清单只有一份来源，且阶段 C 起就是「仅编辑 / 仅预览 / 即时渲染」", () => {
+    // 顺序跟 `EDITOR_MODES` 的规范顺序（edit → preview → live）：界面先后只此一处来源
+    expect(PRODUCT_EDITOR_MODES).toEqual(["edit", "preview", "live"]);
     expect(DEFAULT_EDITOR_MODES).toEqual(PRODUCT_EDITOR_MODES);
     // 默认值也不再是双栏：新用户的第一次打开不再落到"双栏"
     expect(DEFAULT_USER_SETTINGS.editor_mode).toBe("edit");
@@ -116,8 +118,9 @@ describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛为产品清�
 
   it("`isProductEditorMode` 是写「上次用的那一档」前的唯一收口", () => {
     expect(isProductEditorMode("edit")).toBe(true);
+    expect(isProductEditorMode("live")).toBe(true);
     expect(isProductEditorMode("preview")).toBe(true);
+    // 双栏仍留在产品外：读得进来，写不出去，界面上也不会出现
     expect(isProductEditorMode("split")).toBe(false);
-    expect(isProductEditorMode("live")).toBe(false);
   });
 });

@@ -27,10 +27,11 @@ export type StartView = v.InferOutput<typeof StartViewSchema>;
  * （见 `editor_modes`）；打开笔记时用**哪一档**由本机记住的"上次用的那档"决定，
  * `editor_mode` 退为**首次初始值**（见 `UserSettingsSchema` 里该字段的说明）。
  *
- * 【2026-09-29 二轮收敛 · 编辑拓展阶段 A】生产只让用户切到 {@link PRODUCT_EDITOR_MODES}
- * （仅编辑 / 仅预览）：**双栏从产品里移除**，即时渲染暂时退出生产（实现保留，阶段 C 验完再回到
- * 产品清单）。本 schema 仍收四值——旧行、旧客户端整份 PUT、本机旧记忆都要读得进来，**删值才是
- * 兼容事故**（会被 422、或让老用户升级后第一次打开就换档）。所以：**读兼容四档，写只写产品档**。
+ * 【2026-09-29 三轮扩档 · 编辑拓展阶段 C】用户验收即时渲染后，生产清单回到
+ * {@link PRODUCT_EDITOR_MODES} = 仅编辑 / 即时渲染 / 仅预览：**双栏仍留在产品外**（四档里
+ * 只有它没回来）。本 schema 仍收四值——旧行、旧客户端整份 PUT、本机旧记忆都要读得进来，
+ * **删值才是兼容事故**（会被 422、或让老用户升级后第一次打开就换档）。所以：**读兼容四档，
+ * 写只写产品档**。
  */
 export const EditorModeSchema = v.picklist(["split", "edit", "preview", "live"]);
 export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
@@ -39,14 +40,22 @@ export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
 export const EDITOR_MODES: readonly EditorMode[] = ["split", "edit", "preview", "live"];
 
 /**
- * **生产允许用户切到的档**——唯一的"产品清单"（阶段 A = 仅编辑 / 仅预览）。
+ * **生产允许用户切到的档**——唯一的"产品清单"（阶段 C = 仅编辑 / 即时渲染 / 仅预览）。
  *
  * 只留一份的理由：此前差点变成 `EDITOR_MODES` + `DEFAULT_EDITOR_MODES` + 新的 `PRODUCT_*`
  * 三份清单，改一处漏两处就是漂移。现在 `DEFAULT_EDITOR_MODES` 直接指向它，设置页开关、
- * 正文区切换条、schema 默认值**全部**由它推导；阶段 C 把 `"live"` 加回这里即可，
- * 不需要再动第二个常量。
+ * 正文区切换条、schema 默认值**全部**由它推导。
+ *
+ * 扩档时**不要**顺手改 `DEFAULT_USER_SETTINGS.editor_mode`：那是"首次初始值"，不是"默认档"
+ * （打开笔记用哪一档由本机记住的上次那一档决定，见 `editor-mode.ts`）。这里的扩档只影响
+ * "新用户能切到哪几档"。
+ *
+ * 顺序按 {@link EDITOR_MODES} 的规范顺序写（`edit` → `preview` → `live`），不另立一套：
+ * 界面上的先后由规范顺序决定（`normalizeEditorModes()` 也照它排），这里若写成别的次序，
+ * 就会出现"清单顺序"和"显示顺序"两份答案。即时渲染因此**排在最后**——它是编辑与预览的
+ * 混合态，追加在末尾不打扰已经记住前两档位置的用户。
  */
-export const PRODUCT_EDITOR_MODES = ["edit", "preview"] as const;
+export const PRODUCT_EDITOR_MODES = ["edit", "preview", "live"] as const;
 export type ProductEditorMode = (typeof PRODUCT_EDITOR_MODES)[number];
 
 const PRODUCT_MODE_SET: ReadonlySet<string> = new Set(PRODUCT_EDITOR_MODES);
@@ -59,8 +68,9 @@ export function isProductEditorMode(mode: EditorMode): mode is ProductEditorMode
 /**
  * 「显示哪些档」的默认值 = 生产清单。
  *
- * 变的是"默认发哪两档"，不是 schema：`editor_modes` 仍是 optional + 默认值，老行与旧客户端
- * PUT 不带它时补的就是这两档（旧值 `split` / `live` 因此**自然退出**生产，不需要迁移）。
+ * 变的是"默认发哪几档"，不是 schema：`editor_modes` 仍是 optional + 默认值，老行与旧客户端
+ * PUT 不带它时补的就是这几档（旧值 `split` 因此**自然退出**生产，不需要迁移；`live` 则回到
+ * 默认全开的清单里）。
  */
 export const DEFAULT_EDITOR_MODES: readonly ProductEditorMode[] = PRODUCT_EDITOR_MODES;
 

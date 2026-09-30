@@ -63,12 +63,18 @@ describe("本机记住的编辑模式", () => {
     expect(initialEditorMode(["edit"], undefined)).toBe("edit");
   });
 
-  it("老记忆 + 已收敛的可用清单：split / live 都回落到产品档，正文不会卡住", () => {
-    for (const legacy of ["split", "live"] as const) {
+  it("老记忆 + 已收敛的可用清单：产品外的 split 回落到产品档，正文不会卡住", () => {
+    for (const legacy of ["split"] as const) {
       window.localStorage.setItem(LAST_EDITOR_MODE_KEY, legacy);
-      expect(initialEditorMode(["edit", "preview"], "edit"), legacy).toBe("edit");
-      expect(initialEditorMode(["edit", "preview"], "live"), legacy).toBe("edit");
-      expect(initialEditorMode(["edit", "preview"], undefined), legacy).toBe("edit");
+      expect(initialEditorMode(["edit", "preview", "live"], "edit"), legacy).toBe("edit");
+      expect(initialEditorMode(["edit", "preview", "live"], "live"), legacy).toBe("live");
+      expect(initialEditorMode(["edit", "preview", "live"], undefined), legacy).toBe("edit");
     }
+  });
+
+  it("阶段 C 起：本机记着 live 且它还在可用清单里，就照用（不再被回落）", () => {
+    window.localStorage.setItem(LAST_EDITOR_MODE_KEY, "live");
+
+    expect(initialEditorMode(["edit", "preview", "live"], "edit")).toBe("live");
   });
 });

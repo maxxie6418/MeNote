@@ -15,9 +15,11 @@ import type { EditorMode, ProductEditorMode } from "@menote/shared";
 export const LAST_EDITOR_MODE_KEY = "menote:editor:last-mode";
 
 /**
- * 认识**全部四档**（含已退出产品的 `split` / `live`）——旧版本写下的记忆要读得回来，
+ * 认识**全部四档**（含仍在产品外的 `split`）——旧版本写下的记忆要读得回来，
  * 再由 {@link initialEditorMode} 因为"不在可用清单里"静默回落。删掉旧值只会让老用户
  * 升级后第一次打开时莫名其妙换档。
+ *
+ * 【阶段 C】`live` 回到产品清单后，记忆里的 `live` 不再被回落，直接照用。
  */
 const KNOWN_MODES: readonly EditorMode[] = ["split", "edit", "preview", "live"];
 
@@ -40,8 +42,9 @@ export function readLastEditorMode(): EditorMode | null {
  * 记下"这次用的是哪一档"；写不进去也不影响切换本身。
  *
  * **参数收窄为产品档**（编辑拓展阶段 A）：写进去的东西下一次会被当"用户偏好"读回来，
- * 所以只能在**产品清单里**取值——`split` / `live` 写进来等于给下个版本埋一个自己都读不懂的偏好。
- * 阶段 C 把 `live` 加回产品清单时，这里**不用改**（类型跟着 `PRODUCT_EDITOR_MODES` 走）。
+ * 所以只能在**产品清单里**取值——仍在产品外的 `split` 写进来等于给下个版本埋一个
+ * 自己都读不懂的偏好。阶段 C 把 `live` 加回产品清单时，这里**一行都不用改**
+ * （类型跟着 `PRODUCT_EDITOR_MODES` 走，这正是当初收窄参数的目的）。
  */
 export function writeLastEditorMode(mode: ProductEditorMode): void {
   try {
@@ -64,5 +67,7 @@ export function initialEditorMode(
   const last = readLastEditorMode();
   if (last && available.includes(last)) return last;
   if (seed && available.includes(seed)) return seed;
-  return available[0] ?? "split";
+  // `available` 由 `normalizeEditorModes` 保证非空，所以这行取不到；兜底值给产品第一档
+  // （`split` 还在产品外，不该拿它当兜底）
+  return available[0] ?? "edit";
 }

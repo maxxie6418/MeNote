@@ -91,12 +91,14 @@ const START_VIEW_OPTIONS: ReadonlyArray<{ id: StartView; label: string }> = [
  * 用 `Record<ProductEditorMode, …>` 收口：契约里加一档（例如阶段 C 把 `live` 放回产品清单）而这里
  * 忘了写文案，TypeScript 直接报错——不是等界面上少一个开关才发现（与 `TASK_FILTER_FORM_LABELS` 同做法）。
  *
- * **双栏（`split`）已退出产品**（编辑拓展阶段 A），不再出现在设置里；旧行里存着的 `split` 只做读兼容，
- * 由契约的 `normalizeEditorModes` 静默滤掉。
+ * **双栏（`split`）已退出产品**（编辑拓展阶段 A，阶段 C 也没让它回来），不再出现在设置里；
+ * 旧行里存着的 `split` 只做读兼容，由契约的 `normalizeEditorModes` 静默滤掉。
+ * **即时渲染（`live`）在阶段 C 回到产品清单**：用户验收过试验页之后才加的这一档。
  */
 const EDITOR_MODE_COPY: Record<ProductEditorMode, { label: string; desc: string }> = {
   edit: { label: "仅编辑", desc: "只显示编辑区" },
   preview: { label: "仅预览", desc: "只显示预览区" },
+  live: { label: "即时渲染", desc: "边写边渲染，代码块与表格回到源码" },
 };
 
 const EDITOR_MODE_OPTIONS: ReadonlyArray<{

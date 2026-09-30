@@ -474,8 +474,8 @@ export function NoteWorkspace({
             /*
               「仅编辑」与「即时渲染」共用这一个位置（都是单栏编辑器），差别只在 `live` 这个开关
               ——它在 `Editor` 里走 `Compartment` 重配置，所以两档互切**不重建文档**。
-              阶段 A 里 `live` 已不在产品清单，走不到这个分支；实现与分支都保留，
-              阶段 C 验完只需把它加回 `PRODUCT_EDITOR_MODES`。
+              阶段 A 曾把 `live` 移出产品清单（分支与实现都留着），**阶段 C 用户验收后已加回**
+              `PRODUCT_EDITOR_MODES`；双栏仍然留在产品外，这里也不再恢复 `split` 分支。
 
               用 `previewSource`（实时文本）而不是 `initialBody`（打开时的快照）：
               切模式会让编辑器重新挂载，用快照初始化会把中间敲的内容显示回旧版本，

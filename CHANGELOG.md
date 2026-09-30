@@ -4,6 +4,7 @@
 
 ## 2026-09-29
 
+- v0.6.0 / 2a6b85c — **编辑拓展阶段 A**：正文生产模式收敛为「仅编辑 / 仅预览」，双栏移除、即时渲染暂退（实现保留，阶段 C 验完加回产品清单）。契约侧新增 `PRODUCT_EDITOR_MODES`（+ `isProductEditorMode`），`DEFAULT_EDITOR_MODES` 指向它，`normalizeEditorModes()` 收紧为「用户开着 ∩ 生产允许，空兜产品全集」（只有一个归一化函数），`DEFAULT_USER_SETTINGS.editor_mode` 由 `split` 改 `edit`；`EditorModeSchema` / `EDITOR_MODES` 仍收四值做读兼容（旧行、本机旧记忆、旧客户端）。`NoteWorkspace` 删掉双栏分支、渲染前一步归一化、`writeLastEditorMode()` 参数收窄为产品档；设置 › 编辑器的开关组改为按产品清单渲染，并修掉「老行只剩 `live` 时两档都显示为关、点一下就全开」的怪状态。顺带修 `EditorLabPage.tsx` 的 `event.isComposing` 类型错误（改用 `event.nativeEvent.isComposing`），它一直挡着 `pnpm typecheck`。新增 `note-workspace-modes.test.tsx`（5）与 `settings-editor-modes.test.tsx`（5），改写 `note-workspace.test.tsx` 的丢数据回归与 shared `settings.test.ts`。验证：lint 0 error、typecheck 0 error、全量 1304 通过（shared 71 / mdcore 65 / web 958 / worker 210）。已知状态：与 `wiki/` 四档定稿的冲突期已登记在案，回写待单独授权。
 - v0.5.30 — 修订编辑拓展实施计划为 v2（**生效**）：按评审 19 条逐条落实——文档状态与阶段 A 确认口径、版本策略自 **v0.6.0** 起（代码提交时升位）、`check:size` 与局部测试的构建前置、两个归一化函数合并为 `normalizeEditorModes`、点名会改红的既有用例与类型边界落点、验收矩阵与 B6 对齐、C2 可判定红/绿门、阶段编号重排（E→D，D1/D2）、全局守卫与图标口径、`/图片` 与 `@tags` 记为不做/遗留；并新增「已知冲突：代码与定稿的冲突期（登记在案）」，wiki 回写仍以单独授权为门槛。
 - v0.5.30 — 调整编辑拓展设计 v3.1：只补充长期产品目标，不把当前实现范围和前置能力写入设计稿；明确 `@` 属性、快捷输入即时渲染、附件动作与表格方向的产品边界。
 - v0.5.30 — 再修订编辑拓展实施计划 v1：补齐 Memo 标签 / 笔记目录暂无写入通道、首屏动态导入、录入框布局守卫、既有即时渲染实现与验收清单、真实测试文件和 `/` 命令边界；表格继续暂缓。

@@ -124,6 +124,19 @@ pnpm --filter @menote/shared build && pnpm --filter @menote/mdcore build && pnpm
 
 ### Task A1：冻结并测试正文模式收敛规则
 
+> **执行记录（2026-09-29，已完成，提交 `2a6b85c`）**：Step 1–9 全部落地，与本计划一致。
+> 落点：`packages/shared/src/settings.ts`（`PRODUCT_EDITOR_MODES` / `ProductEditorMode` /
+> `isProductEditorMode` / `DEFAULT_EDITOR_MODES` 指向产品集 / `normalizeEditorModes` 收紧为
+> 「用户开着 ∩ 生产允许，空兜产品全集」；`DEFAULT_USER_SETTINGS.editor_mode` 由 `split` 改 `edit`）、
+> `packages/shared/test/settings.test.ts`、`apps/web/src/features/notes/editor-mode.ts`
+> （`writeLastEditorMode(mode: ProductEditorMode)`；`readLastEditorMode()` 仍认四值）、
+> `apps/web/src/features/notes/ui/NoteWorkspace.tsx`、`apps/web/test/editor-mode.test.ts`、
+> `apps/web/test/note-workspace.test.tsx`、新建 `apps/web/test/note-workspace-modes.test.tsx`。
+> 偏差两处：①版本动作按用户「版本号从 0.6.0 开始」的口径**一次升到 v0.6.0**（未按每 Step +0.0.1）；
+> ②顺带修了 `EditorLabPage.tsx` 的 `event.isComposing` 类型错误（`@types/react` 的合成事件类型没有它，
+> 改用 `event.nativeEvent.isComposing`）——它一直让 `pnpm typecheck` 变红，属既有缺陷。
+> 实测：`pnpm lint` 0 error、`pnpm typecheck` 0 error、全量 1304 条通过（shared 71 / mdcore 65 / web 958 / worker 210）。
+
 **Files:**
 - Modify: `packages/shared/src/settings.ts`
 - Modify: `packages/shared/test/settings.test.ts`
@@ -327,6 +340,14 @@ pnpm --filter @menote/web test -- editor-mode.test.ts note-workspace.test.tsx no
 暂存仅本任务代码与测试；根 `package.json` 的 `version` 从 `0.5.30` 提到 `0.6.0`（本次专项的起点），并在 `CHANGELOG.md` 的同日小标题下加一条 `- v0.6.0 — …`（见 §0「版本策略」）。将提交信息写入 `.git/COMMIT_MSG.txt`，内容：`feat(editor): 收敛正文基础编辑与预览模式`。提交后运行 `git log -1 --format="%s"` 核对，再推送。
 
 ### Task A2：更新用户设置入口与回归测试
+
+> **执行记录（2026-09-29，已完成，提交 `2a6b85c`）**：设置面板的开关组改为按
+> `PRODUCT_EDITOR_MODES` 渲染（文案用 `Record<ProductEditorMode, …>` 收口），开关状态与写回都按
+> **归一化后的产品档**算——顺手修掉一个怪状态：老行只剩 `live` 时，原实现会让两档都显示为关、
+> 点一下却把两档一起打开。计划的偏差一处：断言**没有**留在 `apps/web/test/ui.test.tsx`，
+> 而是拆到新建的 `apps/web/test/settings-editor-modes.test.tsx`（5 条）——原文件加这几条会撞
+> ESLint `max-lines`（测试目录里非空非注释行数上限 500）；`ui.test.tsx` 只留一条指向新文件的注释。
+> `apps/web/test/app-navigation.test.tsx` 不需要动（没有新增 props）。
 
 **阶段 A 已获用户确认（用户 2026-09-29「以此执行计划」），本计划状态已改为「生效」；本任务照此实施。**设置仍保留“编辑模式”开关组，但本阶段只列“仅编辑”和“仅预览”；至少保留一个。旧四档设置值只做读兼容，不再由阶段 A UI 写回 `split` / `live`。
 

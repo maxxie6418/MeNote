@@ -28,8 +28,8 @@ export type StartView = v.InferOutput<typeof StartViewSchema>;
  * `editor_mode` 退为**首次初始值**（见 `UserSettingsSchema` 里该字段的说明）。
  *
  * 【2026-09-29 三轮扩档 · 编辑拓展阶段 C】用户验收即时渲染后，生产清单回到
- * {@link PRODUCT_EDITOR_MODES} = 仅编辑 / 即时渲染 / 仅预览：**双栏仍留在产品外**（四档里
- * 只有它没回来）。本 schema 仍收四值——旧行、旧客户端整份 PUT、本机旧记忆都要读得进来，
+ * {@link PRODUCT_EDITOR_MODES} = 仅编辑 / 仅预览 / 即时渲染（顺序即规范顺序）：**双栏仍留在产品外**
+ * （四档里只有它没回来）。本 schema 仍收四值——旧行、旧客户端整份 PUT、本机旧记忆都要读得进来，
  * **删值才是兼容事故**（会被 422、或让老用户升级后第一次打开就换档）。所以：**读兼容四档，
  * 写只写产品档**。
  */
@@ -40,7 +40,7 @@ export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
 export const EDITOR_MODES: readonly EditorMode[] = ["split", "edit", "preview", "live"];
 
 /**
- * **生产允许用户切到的档**——唯一的"产品清单"（阶段 C = 仅编辑 / 即时渲染 / 仅预览）。
+ * **生产允许用户切到的档**——唯一的"产品清单"（阶段 C = 仅编辑 / 仅预览 / 即时渲染）。
  *
  * 只留一份的理由：此前差点变成 `EDITOR_MODES` + `DEFAULT_EDITOR_MODES` + 新的 `PRODUCT_*`
  * 三份清单，改一处漏两处就是漂移。现在 `DEFAULT_EDITOR_MODES` 直接指向它，设置页开关、
@@ -281,9 +281,12 @@ export const UserSettingsSchema = v.object({
    * **字段保留**：老行里存着用户当年选的档，直接拿掉会让升级后第一次打开悄悄换档（行为倒退）；
    * 旧客户端整份 PUT 仍会原样带上它，不构成兼容问题。
    *
-   * 默认值由 `split` 改为 `edit`（编辑拓展阶段 A：双栏退出产品，双栏不再是"新用户的第一屏"）。
+   * 默认值由 `split` 改为 `edit`（编辑拓展阶段 A：双栏退出产品，双栏不再是"新用户的第一屏"）；
+   * 2026-09-30 再由 `edit` 改为 **`live`**（用户验收后拍板：即时渲染是设计稿 §一-2 写的"最终默认与
+   * 重点打磨的写作形态"，`edit` 只是过渡期的保守选择——它让用户"感受不到这次改了什么"）。
    * 老行里存着的 `split` **不改写**——读侧 `initialEditorMode` 会因为它不在产品清单里而落到
-   * 产品第一档（仅编辑），效果一致，但不制造一次性迁移。
+   * 产品第一档（仅编辑），效果一致，但不制造一次性迁移；老行里存着 `edit` 的同样保留
+   * （用户当年选过的档优先于新默认值，想换一条 `设置 › 编辑器` 里改，或在切换条上切一次即记忆）。
    */
   editor_mode: EditorModeSchema,
   /**
@@ -330,7 +333,7 @@ export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   start_view: "home",
   timezone: "Asia/Shanghai",
-  editor_mode: "edit",
+  editor_mode: "live",
   editor_modes: [...DEFAULT_EDITOR_MODES],
   quick_menu: QUICK_MENU_FEATURES.filter((feature) => feature.defaultOn).map(
     (feature) => feature.id,

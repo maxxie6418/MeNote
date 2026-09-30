@@ -296,9 +296,45 @@ button {
   padding: 0;
 }
 
+/* 单块呈现沿用同一套排版（两条规则分开写：`layout-invariants.test.ts` 按第一条守不变量） */
+.quick-composer__block .markdown-body {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 /* 呈现内容里的段落与列表收紧（三行录入框里不该出现大段空白） */
 .quick-composer__view .markdown-body p {
   margin: 0 0 var(--sp-1);
+}
+
+.quick-composer__block .markdown-body p {
+  margin: 0 0 var(--sp-1);
+}
+
+/*
+  编辑态的块列表（v0.6.3 块级即时渲染）：已写完的块在这里呈现、当前块是 textarea。
+  重点是**不许把功能栏顶高**——三行 136px 是结构不变量，所以列表自己滚
+  （`DESIGN.md`：每层一个滚动容器），上限与 `.quick-composer__view` 一致取 180px。
+*/
+.quick-composer__blocks {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+/* 单块呈现：点一下回到这一块继续编辑，所以要有命中区；焦点环由全局 `:focus-visible` 给（不另立） */
+.quick-composer__block {
+  padding: 5px 1px;
+  border-radius: var(--radius-sm);
+  cursor: text;
+  line-height: 1.6;
+}
+
+/* 触屏命中区（DESIGN.md：可点元素留 44px）——单块呈现也是回到编辑的入口 */
+@media (pointer: coarse) {
+  .quick-composer__block {
+    min-height: 44px;
+  }
 }
 
 /* 触屏命中区（DESIGN.md：可点元素留 44px）——呈现态整体就是回到编辑的入口 */

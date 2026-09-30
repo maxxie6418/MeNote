@@ -314,3 +314,113 @@ describe("输入法、快捷键与多实例", () => {
     expect(recordB).toHaveBeenLastCalledWith("@");
   });
 });
+
+/*
+  块级即时渲染（v0.6.3）：用户 2026-09-30 验收时反馈"切换行之后样式不及时显示，除非退出编辑"、
+  "用 `/` 调用的样式不生效"。根因是当时只有**失焦整块呈现**这一种时机。这一组用例钉住新口径：
+  **打字过程中，已完成的块就呈现**，`/` 命令的结果不必离开录入框就能看到效果。
+*/
+describe("快捷输入：块级即时渲染（当前块源码、其余块即时呈现）", () => {
+  it("已完成的块在打字时就在呈现，不需要失焦", async () => {
+    render(<Harness initial={"- 第一项\n- 第二项"} />);
+    // 两块都是列表项 → 光标默认在最后一块（textarea），第一块当场呈现
+    expect((await screen.findByTestId("preview")).getAttribute("data-source")).toBe("- 第一项");
+    expect((screen.getByLabelText("快速录入") as HTMLTextAreaElement).value).toBe("- 第二项");
+  });
+
+  it("回车就呈现上一行：Enter 之后上一块变呈现块，textarea 只剩新块", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial="- 第一项" />);
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+
+    await user.type(input, "{Enter}");
+
+    expect((await screen.findByTestId("preview")).getAttribute("data-source")).toBe("- 第一项");
+    expect(input.value).toBe("");
+  });
+
+  it("段落里按回车也算提交；接着写第二行时会并回同一段（Markdown 的软换行语义）", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial="第一行" />);
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+
+    await user.type(input, "{Enter}");
+    // 文末那个空行自成一块 → 上一行当场呈现，光标落到新块
+    expect((await screen.findByTestId("preview")).getAttribute("data-source")).toBe("第一行");
+    expect(input.value).toBe("");
+
+    /*
+      接着写第二行：无标记的连续两行在 Markdown 里**是同一段**，所以两块并回一块、
+      呈现让位给源码（光标所在的那一段显示源码）。这是切块近似的已知表现，内容不受影响。
+    */
+    await user.type(input, "第二行");
+    expect(screen.queryByTestId("preview")).toBeNull();
+    expect(input.value).toBe("第一行\n第二行");
+  });
+
+  it("`/加粗` 的结果不必离开录入框就能看到效果", async () => {
+    const user = userEvent.setup();
+    const record = vi.fn();
+    render(<Harness initial="" record={record} />);
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+
+    /*
+      真实路径是"打 `/加粗` → 菜单回车 → 光标落在 `****` 中间 → 接着打字"。
+      **不能先选中文字再打命令**：打字会替换掉选区，那样只是在空选区上插了一对标记。
+    */
+    await user.type(input, "/加粗");
+    await user.keyboard("{Enter}");
+    expect(input.value).toBe("****");
+    await user.keyboard("买牛奶");
+    expect(input.value).toBe("**买牛奶**");
+
+    // 回车提交这一块：不点别处、不失焦整个录入框，效果就在面前呈现
+    await user.type(input, "{Enter}");
+    expect((await screen.findByTestId("preview")).getAttribute("data-source")).toBe("**买牛奶**");
+    expect(record).toHaveBeenLastCalledWith("**买牛奶**\n");
+  });
+
+  it("点已呈现的块回到编辑：那一块变回源码，全文逐字不变", async () => {
+    const user = userEvent.setup();
+    const record = vi.fn();
+    render(<Harness initial={"- 一\n- 二"} record={record} />);
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+
+    await user.click(screen.getByTestId("preview"));
+    expect(input.value).toBe("- 一");
+    // 换块不重建 textarea：焦点与输入法组合都靠这一个节点活着
+    expect(document.activeElement).toBe(input);
+    await user.type(input, "补");
+    expect(record).toHaveBeenLastCalledWith("- 一补\n- 二");
+  });
+
+  it("换块时 textarea 是同一个 DOM 节点（不重建，焦点与原生撤销都不丢）", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initial={"- 一\n- 二"} />);
+    const before = container.querySelector("textarea");
+    expect(before).not.toBeNull();
+
+    await user.click(screen.getByTestId("preview"));
+
+    expect(container.querySelector("textarea")).toBe(before);
+  });
+
+  it("失焦整块呈现仍是兜底：点回来继续编辑，内容一字不差", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Harness initial={"- 一\n- 二"} ariaLabel="快速录入" />
+        <button type="button">别处</button>
+      </>,
+    );
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+
+    // 先聚焦再点到别处，"失焦"才真的发生
+    await user.click(input);
+    await user.click(screen.getByRole("button", { name: "别处" }));
+
+    // 整块呈现只留一个入口，且呈现的是**全文**（编辑态下 textarea 只持有当前块，这里已经不是它）
+    const view = screen.getByRole("button", { name: "快速录入（点击继续编辑）" });
+    expect(within(view).getByTestId("preview").getAttribute("data-source")).toBe("- 一\n- 二");
+  });
+});

@@ -58,9 +58,9 @@ describe("快捷输入切块：空行是分隔符，但归前一块的尾部", (
     expect(shape("a\n\n\nb")).toEqual(["0-2", "3-3"]);
   });
 
-  it("只有空行的输入算一块（不是没有块）", () => {
-    expect(texts("\n")).toEqual(["\n"]);
-    expect(texts("\n\n")).toEqual(["\n\n"]);
+  it("只有空行的输入：文末那一行自成一块（那是光标所在的下一块）", () => {
+    expect(texts("\n")).toEqual(["", ""]);
+    expect(texts("\n\n")).toEqual(["\n", ""]);
   });
 });
 
@@ -80,6 +80,22 @@ describe("快捷输入切块：围栏内不切", () => {
 
   it("未闭合的围栏吃到文末", () => {
     expect(shape("```\na\nb")).toEqual(["0-2"]);
+  });
+});
+
+describe("快捷输入切块：文末的空行自成一块（回车就提交上一块）", () => {
+  it("列表项后面按下的那个空行是**独立一块**，上一项因此可以立刻呈现", () => {
+    expect(texts("- 第一项\n")).toEqual(["- 第一项", ""]);
+    expect(texts("# 标题\n")).toEqual(["# 标题", ""]);
+  });
+
+  it("中间的空行仍归前一块（与上面「空行归前块」的规则并存）", () => {
+    expect(texts("a\n\nb")).toEqual(["a\n", "b"]);
+    expect(texts("a\n\n")).toEqual(["a\n", ""]);
+  });
+
+  it("段落后面按回车也一样提交（Markdown 里这是软换行，但用户按的是 Enter）", () => {
+    expect(texts("第一行\n")).toEqual(["第一行", ""]);
   });
 });
 

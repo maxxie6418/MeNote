@@ -69,6 +69,20 @@ describe("功能栏录入框", () => {
     expect((screen.getByRole("textbox", { name: "快速录入" }) as HTMLTextAreaElement).value).toBe("开会");
   });
 
+  it("录入框里回车同样提交上一块：上一行当场呈现，textarea 只剩新块", async () => {
+    const user = userEvent.setup();
+    render(<Composer />);
+
+    const input = screen.getByRole("textbox", { name: "快速录入" }) as HTMLTextAreaElement;
+    await user.type(input, "/无序列表");
+    await user.keyboard("{Enter}");
+    await user.keyboard("第一项");
+    await user.type(input, "{Enter}");
+
+    expect((await screen.findByTestId("preview")).getAttribute("data-source")).toBe("- 第一项");
+    expect(input.value).toBe("");
+  });
+
   it("Memo 档没有可写属性：`@` 不出菜单", async () => {
     const user = userEvent.setup();
     render(<Composer />);
@@ -137,6 +151,30 @@ describe("添加内容窗口", () => {
     await user.type(input, "/引用");
     await user.keyboard("{Enter}");
     expect(input.value).toBe("> ");
+  });
+
+  it("窗口里回车同样提交上一块：上一行当场呈现，textarea 只剩新块", async () => {
+    const user = userEvent.setup();
+    render(
+      <AddEntryDialog
+        open
+        kind="memo"
+        onClose={vi.fn()}
+        onPublishMemo={vi.fn()}
+        onPublishTask={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "添加 Memo的内容" }) as HTMLTextAreaElement;
+    await user.type(input, "/无序列表");
+    await user.keyboard("{Enter}");
+    await user.keyboard("第一项");
+    await user.type(input, "{Enter}");
+
+    expect((await screen.findByTestId("preview")).getAttribute("data-source")).toBe(
+      "- 第一项",
+    );
+    expect(input.value).toBe("");
   });
 
   it("kind=task：`@` 与录入框落到同一个字段，`@` 不进正文", async () => {

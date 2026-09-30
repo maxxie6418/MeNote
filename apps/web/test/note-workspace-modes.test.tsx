@@ -170,6 +170,41 @@ describe("正文产品模式：阶段 C 起是「仅编辑 / 即时渲染 / 仅�
     split.unmount();
   });
 
+  it("首次打开（本机没有记忆）落「即时渲染」：2026-09-30 起这是设置的默认初始值", async () => {
+    // `App.tsx` 把 `userSettings.settings.editor_mode` 传成 `initialMode`；没有本机记忆时它就是落档
+    const { DEFAULT_USER_SETTINGS } = await import("@menote/shared");
+    expect(DEFAULT_USER_SETTINGS.editor_mode).toBe("live");
+    const first = render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        initialMode={DEFAULT_USER_SETTINGS.editor_mode}
+        availableModes={[...DEFAULT_USER_SETTINGS.editor_modes]}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "即时渲染" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    first.unmount();
+    // 记忆优先于初始值：用过一次「仅编辑」之后，下次打开不该被初始值拽回即时渲染
+    window.localStorage.setItem("menote:editor:last-mode", "edit");
+    render(
+      <NoteWorkspace
+        item={item("a")}
+        initialBody="正文"
+        snapshot={null}
+        initialMode={DEFAULT_USER_SETTINGS.editor_mode}
+        availableModes={[...DEFAULT_USER_SETTINGS.editor_modes]}
+        onInput={noop}
+        onTitleChange={noop}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "仅编辑" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("即时渲染进入切换条并可作为当前档，Markdown 编辑始终仍可选", () => {
     render(
       <NoteWorkspace

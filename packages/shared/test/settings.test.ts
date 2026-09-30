@@ -111,8 +111,9 @@ describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛，v0.6.2 加�
     // 顺序跟 `EDITOR_MODES` 的规范顺序（edit → preview → live）：界面先后只此一处来源
     expect(PRODUCT_EDITOR_MODES).toEqual(["edit", "preview", "live"]);
     expect(DEFAULT_EDITOR_MODES).toEqual(PRODUCT_EDITOR_MODES);
-    // 默认值也不再是双栏：新用户的第一次打开不再落到"双栏"
-    expect(DEFAULT_USER_SETTINGS.editor_mode).toBe("edit");
+    // 2026-09-30：首次初始值由 `edit` 改 `live`（即时渲染是设计稿写的"最终主写作形态"；
+    // `edit` 只是过渡期的保守选择，用户验收时反馈"感受不到这次改了什么"）
+    expect(DEFAULT_USER_SETTINGS.editor_mode).toBe("live");
     expect(DEFAULT_USER_SETTINGS.editor_modes).toEqual([...PRODUCT_EDITOR_MODES]);
   });
 

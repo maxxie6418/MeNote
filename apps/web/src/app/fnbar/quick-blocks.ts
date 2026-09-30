@@ -105,7 +105,18 @@ export function splitQuickBlocks(text: string): QuickBlock[] {
       start = index;
     }
   }
-  if (start < lines.length) push(lines.length - 1);
+  /*
+    **文末的空行自成一块**（"光标所在的那一行"）：用户按 Enter 之后文本变成 `…\n`，
+    那一行就是他正要写的下一块——不这么切，列表里回车就不会把上一项交出去呈现
+    （这正是用户 2026-09-30 反馈"切换行之后样式不及时显示"的场景）。
+    中间的空行仍归前一块（见上面的 boundary 规则），两者不冲突。
+  */
+  const last = lines.length - 1;
+  if (start < last && isBlank(lines[last] ?? "")) {
+    push(last - 1);
+    start = last;
+  }
+  if (start < lines.length) push(last);
   return blocks;
 }
 

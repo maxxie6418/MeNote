@@ -309,7 +309,13 @@ export const FORMAT_COMMAND_LABELS: Record<FormatCommandId, string> = {
   "task-list": "任务清单",
 };
 
-/** 快捷输入的基础命令集（`/标题`、`/代码块`、`/任务清单` 不进快捷输入）。 */
+/**
+ * 快捷输入的**基础命令集**：加粗 / 斜体 / 无序 / 有序 / 引用 / 行内代码 / 链接。
+ *
+ * `格式能力的产品边界`（设计 v3 §三-2）里快捷输入这一列：标题＝否、代码块＝暂不作为首期要求；
+ * **任务清单＝"按 Memo / 待办场景需要提供"**，所以它不在这个基础集里，而由
+ * {@link quickFormatCommandsFor} 按场景追加。
+ */
 export const QUICK_FORMAT_COMMANDS: readonly FormatCommandId[] = [
   "bold",
   "italic",
@@ -319,3 +325,21 @@ export const QUICK_FORMAT_COMMANDS: readonly FormatCommandId[] = [
   "inline-code",
   "link",
 ];
+
+/** 哪些快捷输入场景要"任务清单"（设计 v3 §三-2：按 Memo / 待办场景需要提供） */
+const TASK_LIST_HOSTS: ReadonlySet<QuickFormatHost> = new Set(["memo", "task"]);
+
+/** 快捷输入宿主：`memo` / `task` / `note`（与 `quick-attributes.ts` 的宿主口径一致） */
+export type QuickFormatHost = "memo" | "task" | "note";
+
+/**
+ * 某个快捷输入场景能用的 `/` 命令：基础集 +（Memo / 待办）任务清单。
+ *
+ * 与 `attributeCommandsFor(host)` 同一个路子：**按场景给命令**，不在组件里写 if。
+ * 笔记快捷录入是长内容的草稿入口，首期不给任务清单（设计 §三-2 那一格只写了 Memo / 待办）。
+ */
+export function quickFormatCommandsFor(host: QuickFormatHost): readonly FormatCommandId[] {
+  return TASK_LIST_HOSTS.has(host)
+    ? [...QUICK_FORMAT_COMMANDS, "task-list"]
+    : QUICK_FORMAT_COMMANDS;
+}

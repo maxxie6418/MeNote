@@ -12,7 +12,12 @@
  *    行前缀命令（列表 / 引用 / 标题 / 任务清单）在所有非空行都已有前缀时统一去掉，否则只给缺的行补。
  */
 import { describe, expect, it } from "vitest";
-import { FORMAT_COMMANDS, applyFormatCommand } from "../src/app/editor/format-commands";
+import {
+  FORMAT_COMMANDS,
+  QUICK_FORMAT_COMMANDS,
+  applyFormatCommand,
+  quickFormatCommandsFor,
+} from "../src/app/editor/format-commands";
 
 describe("成对标记：包裹选区并把选区留在标记内", () => {
   it("加粗", () => {
@@ -198,5 +203,33 @@ describe("注册表与守卫", () => {
       expect(text, command).not.toMatch(/style=|color:|font-|rgb\(/i);
       expect(text, command).not.toContain("<u>");
     }
+  });
+
+  /*
+    设计 v3 §三-2 的「格式能力的产品边界」表：快捷输入那一列里，标题＝否、代码块＝暂不作为首期
+    要求，而**任务清单＝"按 Memo / 待办场景需要提供"**。所以任务清单不在基础集里，按场景追加。
+  */
+  it("快捷输入基础集就是表里那几个「是」：加粗 / 斜体 / 无序 / 有序 / 引用 / 行内代码 / 链接", () => {
+    expect([...QUICK_FORMAT_COMMANDS]).toEqual([
+      "bold",
+      "italic",
+      "bullet-list",
+      "ordered-list",
+      "quote",
+      "inline-code",
+      "link",
+    ]);
+    // 表里写「否」与「暂不作为首期要求」的两条不许混进来
+    expect(QUICK_FORMAT_COMMANDS).not.toContain("heading");
+    expect(QUICK_FORMAT_COMMANDS).not.toContain("code-block");
+    expect(QUICK_FORMAT_COMMANDS).not.toContain("task-list");
+  });
+
+  it("任务清单按「Memo / 待办」场景追加，笔记快捷录入不给", () => {
+    expect(quickFormatCommandsFor("memo")).toEqual([...QUICK_FORMAT_COMMANDS, "task-list"]);
+    expect(quickFormatCommandsFor("task")).toEqual([...QUICK_FORMAT_COMMANDS, "task-list"]);
+    expect(quickFormatCommandsFor("note")).toEqual([...QUICK_FORMAT_COMMANDS]);
+    // 追加的那条与正文同名命令是同一个 id：语义、名称、图标都只有一份
+    expect(applyFormatCommand("", { from: 0, to: 0 }, "task-list").text).toBe("- [ ] ");
   });
 });

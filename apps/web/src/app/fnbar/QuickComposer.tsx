@@ -37,7 +37,7 @@ import {
 } from "react";
 import { CommandMenu } from "../editor/CommandMenu";
 import {
-  QUICK_FORMAT_COMMANDS,
+  quickFormatCommandsFor,
   type FormatCommandId,
   type TextSelection,
 } from "../editor/format-commands";
@@ -416,7 +416,7 @@ export function QuickComposer({
         <CommandMenu
           open
           query={trigger.query}
-          commands={QUICK_FORMAT_COMMANDS}
+          commands={quickFormatCommandsFor(mode)}
           onChoose={applyCommand}
           onClose={() => setTrigger(null)}
         />

@@ -408,6 +408,27 @@ describe("快捷输入：块级即时渲染（当前块源码、其余块即时�
     ).toContain("- 一");
   });
 
+  it("任务清单按场景给：待办 / Memo 有「任务清单」，笔记快捷录入没有（设计 v3 §三-2）", async () => {
+    const user = userEvent.setup();
+    const memo = render(<Harness mode="memo" initial="" />);
+    await user.type(screen.getByLabelText("快速录入"), "/任务");
+    expect(screen.getByRole("option", { name: "任务清单" })).toBeTruthy();
+    memo.unmount();
+
+    const task = render(<Harness mode="task" initial="" attributes={TASK_ATTRIBUTES} />);
+    const taskInput = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+    await user.type(taskInput, "/任务");
+    await user.keyboard("{Enter}");
+    // 与正文同名命令同一个语义：插 `- [ ] `，光标留在后面接着写
+    expect(taskInput.value).toBe("- [ ] ");
+    expect(taskInput.selectionStart).toBe(6);
+    task.unmount();
+
+    render(<Harness mode="note" initial="" />);
+    await user.type(screen.getByLabelText("快速录入"), "/任务");
+    expect(screen.queryByRole("option", { name: "任务清单" })).toBeNull();
+  });
+
   it("点已呈现的块回到编辑：那一块变回源码，全文逐字不变", async () => {
     const user = userEvent.setup();
     const record = vi.fn();

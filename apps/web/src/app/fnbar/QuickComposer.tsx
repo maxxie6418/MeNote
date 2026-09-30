@@ -137,6 +137,20 @@ export function QuickComposer({
    * 用行号而不是下标：`value` 一变（打字、回车、删除）下标会错位，行号才是稳定的锚。
    */
   const [activeFrom, setActiveFrom] = useState<number | null>(null);
+  /**
+   * 输入法组合开始时**冻结**的块布局 + "当前块在全文里的字符区间"。
+   *
+   * 为什么用 state 而不是 ref：它要参与渲染（`blocks` 派生自它），而 React Compiler 的规则
+   * 明确禁止 render 期读 ref（`Cannot access refs during render`）。组合期间**不重算块**——
+   * 组合出的换行或块标记若当场重排，会把用户正在组合的文字从输入框挪到呈现区。
+   */
+  const [composingBase, setComposingBase] = useState<{
+    value: string;
+    blocks: QuickBlock[];
+    from: number;
+    start: number;
+    end: number;
+  } | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   /** 内部要读选区、外部（添加内容窗口）要能聚焦：两边都收到同一个节点 */
@@ -160,11 +174,25 @@ export function QuickComposer({
   /*
     切块是**派生**的：`value` 变了就重算，不额外维护一份"块的副本"。
     空串没有块，补一个空块，保证永远有一个可编辑的当前块。
+
+    **组合期间例外**：用组合开始时冻结的块布局，只把当前块换成实时文本——中文输入法的
+    候选词上屏过程中既不动焦点/选区，也不让已写完的块跟着重排。
   */
   const blocks = useMemo(() => {
+    if (composingBase) {
+      const prefix = composingBase.value.slice(0, composingBase.start);
+      const suffix = composingBase.value.slice(composingBase.end);
+      const live = value.slice(
+        prefix.length,
+        Math.max(prefix.length, value.length - suffix.length),
+      );
+      return composingBase.blocks.map((block) =>
+        block.from === composingBase.from ? { ...block, text: live } : block,
+      );
+    }
     const list = splitQuickBlocks(value);
     return list.length > 0 ? list : [EMPTY_BLOCK];
-  }, [value]);
+  }, [composingBase, value]);
 
   const activeBlock = useMemo(() => {
     const last = blocks[blocks.length - 1] ?? EMPTY_BLOCK;
@@ -240,19 +268,17 @@ export function QuickComposer({
   }
 
   /**
-   * 块被改动之后：先算光标落在**哪一块的哪一行**，再决定当前块是谁。
+   * 把"当前块"钉到**光标所在的那一块**上：回车切块、点别的块、组合结束都走这一条。
    *
    * 这条是"回车就呈现上一行"的关键：回车在列表里切出新块，光标随之落到新块，
    * 当前块跟着切过去，原来那一行当场变成呈现块。段落内的软换行不会切块，所以不会乱跳。
+   *
+   * **输入法组合期间绝对不许调用**（设计 v3 §一-3 末句：不得打断中文输入）：
+   * 那时动焦点与选区会把候选词打断。组合结束后再补收口。
    */
-  function handleBlockChange(event: React.ChangeEvent<HTMLTextAreaElement>): void {
-    const node = event.target;
-    const nextBlockText = node.value;
-    const caret = node.selectionStart ?? nextBlockText.length;
-    const caretLine = lineOfOffset(nextBlockText, caret);
-    const column = columnOfOffset(nextBlockText, caret);
-    const nextValue = withActiveText(nextBlockText);
-    const globalLine = activeBlock.from + caretLine;
+  function reanchor(nextText: string, nextValue: string, caret: number): void {
+    const globalLine = activeBlock.from + lineOfOffset(nextText, caret);
+    const column = columnOfOffset(nextText, caret);
     const nextBlocks = splitQuickBlocks(nextValue);
     const target =
       nextBlocks.find((block) => globalLine >= block.from && globalLine <= block.to) ??
@@ -262,8 +288,21 @@ export function QuickComposer({
       setActiveFrom(target.from);
       pendingCaret.current = offsetOfLine(target.text, globalLine - target.from) + column;
     }
+  }
+
+  function handleBlockChange(event: React.ChangeEvent<HTMLTextAreaElement>): void {
+    const node = event.target;
+    const nextBlockText = node.value;
+    const caret = node.selectionStart ?? nextBlockText.length;
+    const nextValue = withActiveText(nextBlockText);
+
     syncTrigger(nextBlockText, node);
     onChange(nextValue);
+
+    // 组合期间只更新文本，不切块、不动光标（否则会打断中文输入）
+    const native = event.nativeEvent as { isComposing?: boolean };
+    if (composingRef.current || native.isComposing === true) return;
+    reanchor(nextBlockText, nextValue, caret);
   }
 
   /**
@@ -438,10 +477,23 @@ export function QuickComposer({
               }}
               onCompositionStart={() => {
                 composingRef.current = true;
+                // 冻结当前块布局：组合期间只更新文本，不重排块、不动焦点与选区
+                setComposingBase({
+                  value,
+                  blocks,
+                  from: activeBlock.from,
+                  start: offsetOfLine(value, activeBlock.from),
+                  end: offsetOfLine(value, activeBlock.to + 1),
+                });
               }}
               onCompositionEnd={(event) => {
                 composingRef.current = false;
-                syncTrigger(event.currentTarget.value, event.currentTarget);
+                setComposingBase(null);
+                const node = event.currentTarget;
+                const nextBlockText = node.value;
+                syncTrigger(nextBlockText, node);
+                // 上屏结束后才补收口：这一刻切块/移光标是安全的
+                reanchor(nextBlockText, withActiveText(nextBlockText), node.selectionStart ?? 0);
               }}
               onKeyDown={(event) => {
                 if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {

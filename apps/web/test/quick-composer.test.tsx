@@ -380,6 +380,34 @@ describe("快捷输入：块级即时渲染（当前块源码、其余块即时�
     expect(record).toHaveBeenLastCalledWith("**买牛奶**\n");
   });
 
+  it("输入法组合期间不动焦点与选区（设计 v3 §一-3：不得打断中文输入），组合结束才补收口", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={"- 一\n- 二"} />);
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
+
+    // 先点到第一块上编辑：这时"当前块"不是最后一块，切块才会真的动焦点与选区
+    await user.click(screen.getByTestId("preview"));
+    const focusSpy = vi.spyOn(input, "focus");
+    const rangeSpy = vi.spyOn(input, "setSelectionRange");
+
+    /*
+      组合中文本出现了换行 + 新列表项——正常情况下这会把当前块切到下一块、并调 `focus()` /
+      `setSelectionRange()` 把光标放过去，那正是打断候选词的原因。组合期间这两件事都不许做。
+    */
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "- 一\n- 甲" } });
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(rangeSpy).not.toHaveBeenCalled();
+
+    // 上屏结束：这才收口，把当前块钉到光标所在的那一块
+    fireEvent.compositionEnd(input);
+    expect(input.value).toBe("- 甲");
+    expect(rangeSpy).toHaveBeenCalled();
+    expect(
+      screen.getAllByTestId("preview").map((element) => element.getAttribute("data-source")),
+    ).toContain("- 一");
+  });
+
   it("点已呈现的块回到编辑：那一块变回源码，全文逐字不变", async () => {
     const user = userEvent.setup();
     const record = vi.fn();

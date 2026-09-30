@@ -5,7 +5,7 @@
 | 文档性质 | 前端组件规划：**组件名、所属 feature / 落点、职责、props 约定、复用关系**，以及与界面原型的对应。是架构文档 §2.3.2「功能 → 代码落点对照表」在**组件层**的展开 |
 | 基准 | 需求文档 `wiki/Menote-设计文档-v7.4.md`（下称“需求文档”）；功能点编号与验收看 `wiki/Menote-功能拆解-v2.md`（下称“功能拆解”）；落点、分层与依赖方向看 `wiki/Menote-项目架构-v1.md`（下称“架构”）§2.3、§3.1；视觉与令牌看根目录 `DESIGN.md`（下称“视觉源”） |
 | 主要来源 | 界面原型 `prototype/menote-prototype.html`（高保真）与 `prototype/menote-framework.html`（线框评审页）。引用原型**只写元素名或选择器**（如 `#topAccount`、`.composer`、`.nav-seg`），不写行号——行号随原型改动会失效 |
-| 版本 | v6（文件名 `components.md` 不变，版本在修订记录内演进） |
+| 版本 | v7（文件名 `components.md` 不变，版本在修订记录内演进） |
 | 日期 | 2026-09-29 |
 | 状态 | 首稿。**代码尚未初始化**：组件名与 props 均为**约定名**，实现时如无充分理由不要改名；若实现中发现更合适的拆法，先回报本文再改 |
 | 不包含 | 颜色 / 字号 / 间距 / 圆角 / 阴影的具体数值（归 `DESIGN.md`，本文只写“走令牌”，不复制令牌值）；接口、表结构、同步算法（归架构文档）；功能规则与验收口径（归需求文档与功能拆解） |
@@ -30,6 +30,7 @@
 | v4 | 2026-09-27 | M4 收口回写【已定·用户确认 2026-09-27（授权两点之一，M4 设计 §九 第 8 行）】：新增第十五章「M4 落地后的组件与收敛记录」——①**M4 实际新增的组件**（实现名 + 落点 + props，含表格六个、版本两个、回收站两个）；②**界面稿 §十一 约定的 11 个组件逐条对账**：4 个按代码回写（props 名/形态有差，差异与理由逐条写）、**7 个"未独立成组件"**（职责落在既有组件里，拆出去会引入共享状态或空壳）；③**§十二 预留表的处置**：`VersionHistoryPanel` / `VersionDiff` / `TableColumnManager` / `AttachmentUploader` 等已实现的行标「M4 已实现，见 §15」；④**已知未实现 6 条**（拖动柄、标签 chip 编辑、自动降级提示条、版本列表"已保留 N 个"、附件引用集合对齐、`ConfirmDialog`/`InfoHint` 未做）；⑤明确 **`media.worker` 落点已删除**（缩略图浏览器端生成）。（应用版本 v0.4.25（M4 收口期间的写回；里程碑版本为 v0.5.0）；修改模型ID：deepseek-v4.1-flash） |
 | v5 | 2026-09-29 | 功能栏**标签区贴底固定**回写【已定·用户确认 2026-09-29】：①第六章开头的"由上到下"与第四章结构树补上标签区（`TagGroup` 现在是 `.fnbar__tags`，**贴底固定、与导航区并列**，不再排在笔记本树之后）；②6.6 `TagGroup` 增「位置约束」（`flex:none`、在导航区与加密空间之间、**不在滚动区里**、高度按底部 1/4～1/3 预留）与「形态」（chip 横向铺开自动换行、放不下本区自己滚）两行。`DESIGN.md` §2.1 / §2.7 同步至 v1.8。（应用版本 v0.5.22；修改模型ID：deepseek-flash） |
 | v6 | 2026-09-29 | 「添加」按钮改弹窗回写【已定·用户确认 2026-09-29】：①新增 **6.8 `AddEntryDialog` · 添加内容窗口**（一个 `Modal` 结构两种 `kind`、字段复用 `Composer` 的 `ModeExtras`/`TASK_ITEM_PATTERN`、发布回调复用 `fnbarWiring`、关窗先清空再 `onClose`）；②组件地图 FnBar 子树补 `AddEntryDialog`（文件在 `app/fnbar/`，由 App 经 `AddEntrySlot` 挂浮层位，**不在 FnBar 内渲染**）；③6.2 `Composer` 的「复用」行改为——「添加」**不再切 `mode`、不再聚焦**，改开 `AddEntryDialog`（`Composer` 仍须导出 `ModeExtras`/`TASK_ITEM_PATTERN` 作共享件；`mode` 仍由首页「记录 Memo / 新建待办」快捷操作外部驱动）。（应用版本 v0.5.26；修改模型ID：mimo-v2.6-flash） |
+| v7 | 2026-09-29 | 编辑拓展专项（阶段 A–C = v0.6.0 / v0.6.1 / v0.6.2）回写 **`Editor` 与 `DocModeSwitch` 的档位契约**【已定·用户确认 2026-09-29】：①7.2 的 `DocModeSwitch` 改为**只列设置里开着的档**、三档为 `仅编辑` / `仅预览` / `即时渲染`（顺序 `edit → preview → live`），**`分屏` 已从产品移除**（阶段 A / v0.6.0）；②`Editor` 行写明契约——档位不是 `Editor` 的 prop，`live?` 即"即时渲染"开关（与「仅编辑」共用同一个编辑器实例，走 `Compartment` 重配置、**不重建文档**），`readOnly?` 是**内部能力**（仅预览 / 锁定态复用）、**不是用户可见档位**，阅读态由「仅预览」承担；③7.2 不变量补「表格在即时渲染与编辑下都保持源码」。`DESIGN.md`（v1.11）、`wiki/Menote-设计文档-v7.4.md`（内部 v7.5.5）、`wiki/Menote-功能拆解-v2.md`（v2.11）同批回写。（应用版本 v0.6.2；修改模型ID：deepseek-v4.1-flash） |
 
 ---
 
@@ -342,9 +343,9 @@ AppShell                                    app/
 | 组件 | 原型 | 职责 |
 |---|---|---|
 | `DocHead` | `.doc-head`（`.doc-title` + `.actions`） | 标题（可直接编辑）+ 右侧操作区。**正文头只有模式切换 + 「更多」菜单**（`#docMoreBtn`），其余操作全部收进更多菜单 |
-| `DocModeSwitch` | `#docMode`（`.seg`） | 编辑 / 分屏 / 预览三档，`ed-body` 上挂 `mode-edit` / `mode-split` / `mode-preview` |
+| `DocModeSwitch` | `#docMode`（`.seg`） | **只列设置里开着的档**（`editor_modes`）：三档为 `仅编辑` / `仅预览` / `即时渲染`（显示顺序 `edit → preview → live`），**`分屏` 已从产品移除**（阶段 A / v0.6.0）。原型那条 `#docMode` / `ed-body` 的 `mode-split` 未同步，按本行口径实现 |
 | `DocMoreMenu` | `.menu`（`#docMoreBtn` 触发） | 菜单项按类型区分：`加密此笔记`/`加密此表格`、`移动到…`、`版本历史`、`分享`、`收藏`、`删除`；**表格**多一项`降级为普通笔记` |
-| `Editor`（CodeMirror 6 封装） | `.ed-body` / `.ed-pane` / `#edSource` / `#edPreview` | 公共编辑器组件，**落 `app/editor/`**（架构 §2.3.2）。三 / 四种模式：双栏实时预览（默认）、仅编辑、仅预览、即时渲染 |
+| `Editor`（CodeMirror 6 封装） | `.ed-body` / `.ed-pane` / `#edSource` / `#edPreview` | 公共编辑器组件，**落 `app/editor/`**（架构 §2.3.2）。与档位相关的 props：`live?`（即时渲染开关）与 `readOnly?`（只读，**内部能力**）；其余 props（`initialValue` / `onChange` / `onReady?` / `onFiles?` / `onSlashQuery?` / `onLifecycle?` / `className?` / `ariaLabel?`，见 §15 与代码）。**档位不是 `Editor` 的 prop**：产品只有三档（仅编辑 / 仅预览 / 即时渲染，"显示哪几档"由 `NoteWorkspace` 按 `editor_modes` 决定，见 `DocModeSwitch`）；`live` 是**即时渲染**这个开关（走 `Compartment` 重配置，与「仅编辑」互切**不重建文档**）；`readOnly` 是**内部能力**（仅预览 / 锁定态复用），**不是用户可见档位**；`split` 已从产品移除 |
 | `MarkdownPreview` | `.md` | 预览渲染。渲染与安全按架构 §3.4（需 sanitize，禁裸 `innerHTML`） |
 | `DocStatusBar` | `.doc-status` | 底部状态栏：同步状态（`sync-tag`）、**加密状态 + 倒计时 + 立即锁定**、字数、大小（`size-tag`）。**加密状态条与尺寸提示条已并入此栏**，不再各占一条 |
 | `LockedDocPanel` | `lockedDocPanel()` / `docHeadOnly()` | 单篇加密 + 已锁定：标题保持明文可读，正文与附件不渲染，给解锁按钮 |
@@ -355,7 +356,9 @@ AppShell                                    app/
 **不变量**：
 - 正文区只有**正文头 + 底部状态栏**；加密用标题旁**锁形标识**（`.enc-mark`），加密状态/倒计时/立即锁定在状态栏。
 - 硬上限 1,900,000 字节时阻止保存；软上限 1 MB 时仅变色提示。颜色走令牌（`--amber` / `--red`）。
-- 即时渲染（`live`）的语法覆盖与交互细则【后续定】（§后续清单 8）。
+- 即时渲染（`live`）的语法覆盖与交互细则【后续定】（§后续清单 8）；它与「仅编辑」共用**同一个编辑器实例**（`live` 走 `Compartment` 重配置，撤销历史与光标不丢）。
+- **表格在即时渲染与编辑下都保持源码**（表格的就地编辑 / 锁定浏览另立设计）。
+- `readOnly` 是 `Editor` 的**内部能力**（仅预览 / 锁定态复用），**不新增**只读即时渲染入口；阅读态由「仅预览」承担（用户确认 2026-09-29）。
 
 ### 7.3 内容类视图
 

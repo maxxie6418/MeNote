@@ -9,11 +9,15 @@
 import { describe, expect, it } from "vitest";
 import * as v from "valibot";
 import {
+  DEFAULT_EDITOR_MODES,
   DEFAULT_TASK_VIEW_SETTINGS,
+  DEFAULT_USER_SETTINGS,
   EDITOR_MODES,
+  PRODUCT_EDITOR_MODES,
   TASK_FILTER_FORMS,
   TaskViewSettingsSchema,
   UserSettingsSchema,
+  isProductEditorMode,
   normalizeEditorModes,
 } from "../src/settings";
 
@@ -51,11 +55,15 @@ describe("待办筛选条形态（v0.5.2；定稿：两种都留，用户自选�
 /**
  * 编辑模式改成"开关组"（用户 2026-09-29 拍板：设置里改成可开关显示的，至少留一个）。
  *
- * 契约这一侧要钉住三件事：①老行/旧客户端不带 `editor_modes` 时补成**全开**（行为不变、不需要迁移）；
+ * 契约这一侧要钉住四件事：
+ * ①老行/旧客户端不带 `editor_modes` 时补成**生产清单**（编辑拓展阶段 A 起是"仅编辑 / 仅预览"；
+ *   双栏与即时渲染**读得进来、出不去**）；
  * ②`editor_mode` 仍在、且被解读为"首次初始值"（老用户升级后第一次打开不换档）；
- * ③归一化把非法/重复/空收口掉——空数组兜成全开，绝不让"一个档都没有"流到界面上。
+ * ③归一化把非法/重复/空一次收口——空数组兜成产品清单全集，绝不让"一个档都没有"流到界面上，
+ *   也绝不让已退出产品的 `split` / `live` 漏到渲染层；
+ * ④**只留一份产品清单**：`DEFAULT_EDITOR_MODES` 就是 `PRODUCT_EDITOR_MODES`（改一处不再漏两处）。
  */
-describe("编辑模式：显示哪几档（v0.5.19）", () => {
+describe("编辑模式：显示哪几档（v0.5.19；v0.6.0 收敛为产品清单）", () => {
   const base = {
     start_view: "home",
     timezone: "Asia/Shanghai",
@@ -63,21 +71,27 @@ describe("编辑模式：显示哪几档（v0.5.19）", () => {
     quick_menu: [],
   };
 
-  it("老行（没有 editor_modes）通过校验，输出补成**全开**，且老的 editor_mode 原样保留", () => {
+  it("老行（没有 editor_modes）通过校验，输出补成**生产清单**，且老的 editor_mode 原样保留", () => {
     const parsed = v.safeParse(UserSettingsSchema, { ...base, editor_mode: "live" });
 
     expect(parsed.success).toBe(true);
-    expect(parsed.success && parsed.output.editor_modes).toEqual([...EDITOR_MODES]);
-    // 它现在只是"首次初始值"：老用户升级后第一次打开笔记仍落到他当年选的那一档
+    expect(parsed.success && parsed.output.editor_modes).toEqual([...PRODUCT_EDITOR_MODES]);
+    // 它现在只是"首次初始值"：老用户升级后第一次打开笔记仍读得回这一档（是否可用由产品清单决定）
     expect(parsed.success && parsed.output.editor_mode).toBe("live");
   });
 
-  it("归一化：只留合法档、去重、按规范顺序排（不依赖存储里的顺序）", () => {
-    expect(normalizeEditorModes(["live", "split", "live"])).toEqual(["split", "live"]);
+  it("归一化：用户开着的档 ∩ 生产清单，按规范顺序排（不依赖存储里的顺序）", () => {
+    // 老行里存着四档 → 界面上只剩产品允许的两档（双栏 / 即时渲染静默退出）
+    expect(normalizeEditorModes(["live", "split", "edit", "preview", "live"])).toEqual([
+      "edit",
+      "preview",
+    ]);
+    // 老行只开了「仅预览」→ 就只给它一档，不擅自把它没开的档塞回来
     expect(normalizeEditorModes(["preview"])).toEqual(["preview"]);
-    // 空 / 缺省 → 兜成全开：宁可多显示，也不能出现"一个档都切不了"
-    expect(normalizeEditorModes([])).toEqual([...EDITOR_MODES]);
-    expect(normalizeEditorModes(undefined)).toEqual([...EDITOR_MODES]);
+    // 用户开着的档全被产品滤掉（例如老行只开了双栏）→ 空 → 兜成产品全集，不能让正文没得用
+    expect(normalizeEditorModes(["split"])).toEqual([...PRODUCT_EDITOR_MODES]);
+    expect(normalizeEditorModes([])).toEqual([...PRODUCT_EDITOR_MODES]);
+    expect(normalizeEditorModes(undefined)).toEqual([...PRODUCT_EDITOR_MODES]);
   });
 
   it("未知档位在 schema 层就被拒（归一化不负责纠错）", () => {
@@ -88,7 +102,22 @@ describe("编辑模式：显示哪几档（v0.5.19）", () => {
     expect(parsed.success).toBe(false);
   });
 
-  it("规范顺序稳定：设置页开关与正文区切换条都照它排", () => {
+  it("规范顺序稳定：设置页开关与正文区切换条都照它排（四值仍读兼容）", () => {
     expect(EDITOR_MODES).toEqual(["split", "edit", "preview", "live"]);
+  });
+
+  it("产品清单只有一份来源，且阶段 A 就是「仅编辑 / 仅预览」", () => {
+    expect(PRODUCT_EDITOR_MODES).toEqual(["edit", "preview"]);
+    expect(DEFAULT_EDITOR_MODES).toEqual(PRODUCT_EDITOR_MODES);
+    // 默认值也不再是双栏：新用户的第一次打开不再落到"双栏"
+    expect(DEFAULT_USER_SETTINGS.editor_mode).toBe("edit");
+    expect(DEFAULT_USER_SETTINGS.editor_modes).toEqual([...PRODUCT_EDITOR_MODES]);
+  });
+
+  it("`isProductEditorMode` 是写「上次用的那一档」前的唯一收口", () => {
+    expect(isProductEditorMode("edit")).toBe(true);
+    expect(isProductEditorMode("preview")).toBe(true);
+    expect(isProductEditorMode("split")).toBe(false);
+    expect(isProductEditorMode("live")).toBe(false);
   });
 });

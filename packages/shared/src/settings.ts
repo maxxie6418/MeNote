@@ -17,7 +17,7 @@ export const StartViewSchema = v.picklist(["home", "recent", "starred"]);
 export type StartView = v.InferOutput<typeof StartViewSchema>;
 
 /**
- * 编辑模式（M04-03）。四档：双栏（默认）/ 仅编辑 / 仅预览 / **即时渲染**。
+ * 编辑模式的**读兼容取值**（M04-03）。四档：双栏 / 仅编辑 / 仅预览 / **即时渲染**。
  *
  * 「即时渲染」于 2026-09-28 落地（wiki 设计文档 §7.1 的既定需求；首期覆盖范围见
  * `docs/modules/Menote-即时渲染-设计-v1.md`）。加这一档**只扩取值、不动字段**：
@@ -26,6 +26,11 @@ export type StartView = v.InferOutput<typeof StartViewSchema>;
  * 【2026-09-29 语义调整】设置页不再让用户"四选一当默认档"，改成**开关组选"显示哪几档"**
  * （见 `editor_modes`）；打开笔记时用**哪一档**由本机记住的"上次用的那档"决定，
  * `editor_mode` 退为**首次初始值**（见 `UserSettingsSchema` 里该字段的说明）。
+ *
+ * 【2026-09-29 二轮收敛 · 编辑拓展阶段 A】生产只让用户切到 {@link PRODUCT_EDITOR_MODES}
+ * （仅编辑 / 仅预览）：**双栏从产品里移除**，即时渲染暂时退出生产（实现保留，阶段 C 验完再回到
+ * 产品清单）。本 schema 仍收四值——旧行、旧客户端整份 PUT、本机旧记忆都要读得进来，**删值才是
+ * 兼容事故**（会被 422、或让老用户升级后第一次打开就换档）。所以：**读兼容四档，写只写产品档**。
  */
 export const EditorModeSchema = v.picklist(["split", "edit", "preview", "live"]);
 export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
@@ -33,20 +38,45 @@ export type EditorMode = v.InferOutput<typeof EditorModeSchema>;
 /** 四档的**规范顺序**：契约、设置页开关、正文区切换条都用它，顺序不随设置变 */
 export const EDITOR_MODES: readonly EditorMode[] = ["split", "edit", "preview", "live"];
 
-/** 「显示哪些档」的默认值：**全开**（与加这个字段之前的行为完全一致） */
-export const DEFAULT_EDITOR_MODES: readonly EditorMode[] = EDITOR_MODES;
+/**
+ * **生产允许用户切到的档**——唯一的"产品清单"（阶段 A = 仅编辑 / 仅预览）。
+ *
+ * 只留一份的理由：此前差点变成 `EDITOR_MODES` + `DEFAULT_EDITOR_MODES` + 新的 `PRODUCT_*`
+ * 三份清单，改一处漏两处就是漂移。现在 `DEFAULT_EDITOR_MODES` 直接指向它，设置页开关、
+ * 正文区切换条、schema 默认值**全部**由它推导；阶段 C 把 `"live"` 加回这里即可，
+ * 不需要再动第二个常量。
+ */
+export const PRODUCT_EDITOR_MODES = ["edit", "preview"] as const;
+export type ProductEditorMode = (typeof PRODUCT_EDITOR_MODES)[number];
+
+const PRODUCT_MODE_SET: ReadonlySet<string> = new Set(PRODUCT_EDITOR_MODES);
+
+/** 这个档当前在产品清单里吗？（写"上次用的那一档"前用它收口） */
+export function isProductEditorMode(mode: EditorMode): mode is ProductEditorMode {
+  return PRODUCT_MODE_SET.has(mode);
+}
 
 /**
- * 归一化「显示哪些档」：只留合法档、去重、按 {@link EDITOR_MODES} 的规范顺序排；
- * **空**则兜成全开。
+ * 「显示哪些档」的默认值 = 生产清单。
  *
- * 为什么兜底：UI 保证"至少开一个"，但设置是**整份 JSON**——可能被手改、被旧客户端整份覆盖成空，
- * 而空数组的后果是"正文区一个档都切不了、正文也没了"，兜成全开最不伤（宁可多显示，不可没得用）。
+ * 变的是"默认发哪两档"，不是 schema：`editor_modes` 仍是 optional + 默认值，老行与旧客户端
+ * PUT 不带它时补的就是这两档（旧值 `split` / `live` 因此**自然退出**生产，不需要迁移）。
+ */
+export const DEFAULT_EDITOR_MODES: readonly ProductEditorMode[] = PRODUCT_EDITOR_MODES;
+
+/**
+ * 归一化「显示哪些档」，**一步到位**：用户开着的档 ∩ 产品清单，按 {@link EDITOR_MODES} 的规范顺序
+ * 排；**空**则兜成产品清单全集。
+ *
+ * 两个边界都在这里收口，调用方（`NoteWorkspace` 渲染前、设置页写回前）不需要再写第二套过滤：
+ * - 设置是**整份 JSON**，可能被手改、被旧客户端整份覆盖成空 → 空数组的后果是"正文区一个档都切不了、
+ *   正文也没了"，兜成产品全集最不伤（宁可多显示，不可没得用）；
+ * - 旧值 `split` / `live` 仍在存储里 → 这里静默滤掉，界面拿到的永远是产品档。
  */
 export function normalizeEditorModes(value: readonly EditorMode[] | undefined): EditorMode[] {
   const wanted = new Set(value ?? []);
-  const kept = EDITOR_MODES.filter((mode) => wanted.has(mode));
-  return kept.length > 0 ? [...kept] : [...EDITOR_MODES];
+  const kept = EDITOR_MODES.filter((mode) => wanted.has(mode) && PRODUCT_MODE_SET.has(mode));
+  return kept.length > 0 ? [...kept] : [...PRODUCT_EDITOR_MODES];
 }
 
 /** 账户快捷菜单的可配置功能项（M18-03：第一版 5 个候选） */
@@ -240,6 +270,10 @@ export const UserSettingsSchema = v.object({
    * 本机还没记住过才用它；它被用户关掉了（不在 `editor_modes` 里）则落到开着的第一档。
    * **字段保留**：老行里存着用户当年选的档，直接拿掉会让升级后第一次打开悄悄换档（行为倒退）；
    * 旧客户端整份 PUT 仍会原样带上它，不构成兼容问题。
+   *
+   * 默认值由 `split` 改为 `edit`（编辑拓展阶段 A：双栏退出产品，双栏不再是"新用户的第一屏"）。
+   * 老行里存着的 `split` **不改写**——读侧 `initialEditorMode` 会因为它不在产品清单里而落到
+   * 产品第一档（仅编辑），效果一致，但不制造一次性迁移。
    */
   editor_mode: EditorModeSchema,
   /**
@@ -286,7 +320,7 @@ export type UserSettings = v.InferOutput<typeof UserSettingsSchema>;
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   start_view: "home",
   timezone: "Asia/Shanghai",
-  editor_mode: "split",
+  editor_mode: "edit",
   editor_modes: [...DEFAULT_EDITOR_MODES],
   quick_menu: QUICK_MENU_FEATURES.filter((feature) => feature.defaultOn).map(
     (feature) => feature.id,

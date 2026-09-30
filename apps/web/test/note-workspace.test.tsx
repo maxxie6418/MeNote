@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 /**
- * 正文区三种模式切换 + 切换条目的内容保持（M1-11 QA 补测）。
+ * 正文区模式切换 + 切换条目的内容保持（M1-11 QA 补测）。
  *
- * 为什么要单独测这条：编辑器在三档模式间切换时是**重新挂载**的（换布局必须重挂），
+ * 为什么要单独测这条：编辑器在模式间切换时是**重新挂载**的（换布局必须重挂），
  * 挂载时用哪个文本决定用户看到什么。用 `initialBody`（打开条目那一刻的快照）会让
  * "切到仅预览再切回来"把中间敲的内容显示回旧版本，用户再敲一个字就把旧内容写进草稿 —— 丢数据。
  * 同理，切换条目时若沿用上一个条目的文本，会出现 A 的内容显示在 B 上。
+ *
+ * 【2026-09-29 阶段 A】产品只留「仅编辑 / 仅预览」（双栏移除、即时渲染暂退），
+ * 所以下面这条回归改用 **仅编辑 ↔ 仅预览** 走同一条"重挂载要拿最新内容"的路径——
+ * 语义与原来一字不差（`NoteWorkspace` 里那段注释就是它的由来）。
  *
  * 这里把 CodeMirror 换成受控替身：能拿到 `initialValue` 并能主动触发 `onChange`，
  * 从而在 jsdom 里确定性地复现这两条路径（真实 CM6 依赖布局 API，不适合放进单测）。
@@ -79,7 +83,7 @@ function item(id: string, title = "笔记"): LocalItem {
 const noop = (): void => undefined;
 
 describe("正文区模式切换", () => {
-  it("切到仅预览再切回分屏，编辑器拿到的是最新内容而不是打开时的快照", async () => {
+  it("切到仅预览再切回仅编辑，编辑器拿到的是最新内容而不是打开时的快照", async () => {
     render(
       <NoteWorkspace
         item={item("a")}
@@ -95,17 +99,18 @@ describe("正文区模式切换", () => {
       "打开时的内容",
     );
 
-    // 用户在分屏里敲了字
+    // 用户在编辑区敲了字
     fireEvent.click(screen.getByRole("button", { name: "模拟输入" }));
-    expect(screen.getByTestId("preview").getAttribute("data-source")).toBe("改过的内容");
 
-    // 切到「仅预览」：编辑器卸载
+    // 切到「仅预览」：预览是**懒加载分包**，首次进来要等它到（阶段 A 起首帧是编辑档，
+    // 不再像双栏那样一开始就把预览一起渲染出来），到位后编辑器卸载
     fireEvent.click(screen.getByRole("button", { name: "仅预览" }));
+    expect(await screen.findByTestId("preview")).toBeTruthy();
     expect(screen.queryByTestId("editor")).toBeNull();
     expect(screen.getByTestId("preview").getAttribute("data-source")).toBe("改过的内容");
 
-    // 切回「分屏」：编辑器重新挂载，必须是改过的内容
-    fireEvent.click(screen.getByRole("button", { name: "分屏" }));
+    // 切回「仅编辑」：编辑器重新挂载，必须是改过的内容
+    fireEvent.click(screen.getByRole("button", { name: "仅编辑" }));
     expect((await screen.findByTestId("editor")).getAttribute("data-initial")).toBe(
       "改过的内容",
     );
@@ -144,7 +149,14 @@ describe("正文区模式切换", () => {
     );
     await screen.findByTestId("editor");
     fireEvent.click(screen.getByRole("button", { name: "模拟输入" }));
+    // 阶段 A 的默认档是「仅编辑」，要读到内容得先切到预览（预览与编辑是同一份文本）
+    fireEvent.click(screen.getByRole("button", { name: "仅预览" }));
+    expect(await screen.findByTestId("preview")).toBeTruthy();
     expect(screen.getByTestId("preview").getAttribute("data-source")).toBe("改过的内容");
+
+    // 回到编辑档（"上次用的那一档"会被记住，不回来的话下一篇会直接开在预览里）
+    fireEvent.click(screen.getByRole("button", { name: "仅编辑" }));
+    await screen.findByTestId("editor");
 
     // 切到另一篇：App 用 key={item.id} 重挂 NoteWorkspace
     rerender(

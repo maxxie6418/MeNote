@@ -5,7 +5,7 @@
  * 切换条目由 `key={item.id}` 重新挂载编辑器；切换编辑/预览模式**不重建文档**（架构 §3.3）。
  */
 import { Suspense, lazy, useMemo, useRef, useState } from "react";
-import { type EditorMode, normalizeEditorModes } from "@menote/shared";
+import { type EditorMode, isProductEditorMode, normalizeEditorModes } from "@menote/shared";
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
 import { Button } from "../../../app/ui/Controls";
 import { Modal } from "../../../app/ui/Modal";
@@ -40,6 +40,9 @@ const MarkdownPreview = lazy(async () => {
 /**
  * 正文区这一档的取值，与设置契约**同一个联合类型**（`DocMode` 只是本组件的别名）：
  * 契约里加一档时，下面的 `MODE_LABEL` 会因为缺键立刻报错，而不是界面上悄悄少一个按钮。
+ *
+ * 【2026-09-29 阶段 A】类型仍是四值（读兼容 + 阶段 C 复用），但**能切到哪几档由契约的产品清单
+ * 决定**：`availableModes` 经 `normalizeEditorModes` 出来只剩产品档，`split` 分支已从渲染里删掉。
  */
 export type DocMode = EditorMode;
 
@@ -161,7 +164,7 @@ export function NoteWorkspace({
   attachmentsMeta,
   onEditorReady,
 }: NoteWorkspaceProps) {
-  /** 用户在设置里**开着**的档（`editor_modes`）；切换条只列这些，顺序按契约的规范顺序 */
+  /** 用户在设置里**开着**的档（`editor_modes`）；这里同时收口"产品允许哪几档" */
   const available = useMemo(() => normalizeEditorModes(availableModes), [availableModes]);
   /**
    * 打开这篇时用哪一档：**本机记住的"上次用的那档"优先**，其次设置里的首次初始值
@@ -172,7 +175,8 @@ export function NoteWorkspace({
   /** 切档：顺手记进本机——"没有默认档"之后，这一档就是下次打开的依据 */
   function switchMode(next: DocMode): void {
     setMode(next);
-    writeLastEditorMode(next);
+    // 只记产品档：切换条本来就只列产品档，这里是"别把不可用的档写成用户偏好"的收口
+    if (isProductEditorMode(next)) writeLastEditorMode(next);
   }
 
   /** 「添加附件」代点的隐藏文件输入（M4-10） */
@@ -183,8 +187,17 @@ export function NoteWorkspace({
    * 实际渲染用的档：**当前档被设置关掉时**落到还开着的第一档（跨设备改设置的窗口期）。
    * 表格是例外——坏表格的「查看原文」是救援入口（`onViewSource`），那一档即使没开也要能切过去；
    * 表格本来也不渲染模式切换条，所以这里不担心"显示了没开的档"。
+   *
+   * 【2026-09-29 阶段 A】例外也要收在生产清单里：本机记忆里可能是老版本的 `split` / `live`
+   * （表格读取时绕过了 `available`），那种值现在没有分支可渲染，统一落到 `edit`（**查看原文**的语义）。
    */
-  const shownMode: DocMode = isTable || available.includes(mode) ? mode : available[0]!;
+  const shownMode: DocMode = isTable
+    ? isProductEditorMode(mode)
+      ? mode
+      : "edit"
+    : available.includes(mode)
+      ? mode
+      : available[0]!;
   const table = useTableDoc(initialBody);
   /** 主动降级的确认框（要改 `items.type`，属 API 变更 → 待拍板，见下面 Modal 的说明） */
   const [degradeOpen, setDegradeOpen] = useState(false);
@@ -457,31 +470,16 @@ export function NoteWorkspace({
             ) : null}
 
             <Suspense fallback={<div className="docpane__center">编辑器加载中…</div>}>
-            {shownMode === "split" ? (
-            <div className="doc-split">
-              <div className="doc-split__pane">
-                {/*
-                  用 `previewSource`（实时文本）而不是 `initialBody`（打开时的快照）：
-                  切模式会让编辑器重新挂载，用快照初始化会把中间敲的内容显示回旧版本，
-                  用户再敲一个字就把旧内容写进草稿（M1-11 QA 实测）。
-                */}
-                <Editor
-                  key={item.id}
-                  initialValue={previewSource}
-                  onChange={handleInput}
-                  onReady={onEditorReady}
-                  onFiles={onFiles}
-                  ariaLabel="正文"
-                />
-              </div>
-              <div className="doc-split__pane">
-                <MarkdownPreview source={previewSource} attachments={attachmentsMeta} />
-              </div>
-            </div>
-          ) : shownMode === "edit" || shownMode === "live" ? (
+            {shownMode === "edit" || shownMode === "live" ? (
             /*
               「仅编辑」与「即时渲染」共用这一个位置（都是单栏编辑器），差别只在 `live` 这个开关
               ——它在 `Editor` 里走 `Compartment` 重配置，所以两档互切**不重建文档**。
+              阶段 A 里 `live` 已不在产品清单，走不到这个分支；实现与分支都保留，
+              阶段 C 验完只需把它加回 `PRODUCT_EDITOR_MODES`。
+
+              用 `previewSource`（实时文本）而不是 `initialBody`（打开时的快照）：
+              切模式会让编辑器重新挂载，用快照初始化会把中间敲的内容显示回旧版本，
+              用户再敲一个字就把旧内容写进草稿（M1-11 QA 实测）。
             */
             <div className="doc-split__pane">
               <Editor

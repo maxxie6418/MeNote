@@ -223,7 +223,9 @@ export function EditorLabPage() {
               ref={stageRef}
               className="docpane__body"
               onKeyDown={(event) => {
-                if (event.repeat || event.isComposing) return;
+                // `isComposing` 只在**原生** KeyboardEvent 上（React 的合成事件类型里没有它）；
+                // 输入法组合期间不算"用户按键"，否则读数会被候选词翻页污染
+                if (event.repeat || event.nativeEvent.isComposing) return;
                 if (event.ctrlKey || event.metaKey || event.altKey) return;
                 if (event.key === "Shift") return;
                 beginAction("按键");

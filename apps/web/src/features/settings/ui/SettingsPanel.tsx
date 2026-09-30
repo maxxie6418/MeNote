@@ -5,8 +5,8 @@
  * 「实例管理」仅 owner 可见。
  */
 import { useState, type FormEvent, type ReactNode } from "react";
-import type { EditorMode, StartView, TaskFilterForm, UserSettings } from "@menote/shared";
-import { TASK_FILTER_FORMS, normalizeEditorModes } from "@menote/shared";
+import type { EditorMode, ProductEditorMode, StartView, TaskFilterForm, UserSettings } from "@menote/shared";
+import { PRODUCT_EDITOR_MODES, TASK_FILTER_FORMS, normalizeEditorModes } from "@menote/shared";
 import { Button, Field } from "../../../app/ui/Controls";
 import { InfoHint } from "../../../app/ui/InfoHint";
 import type { ThemeMode } from "../../../app/theme/useTheme";
@@ -85,16 +85,25 @@ const START_VIEW_OPTIONS: ReadonlyArray<{ id: StartView; label: string }> = [
   { id: "starred", label: "收藏" },
 ];
 
-const EDITOR_MODE_OPTIONS: ReadonlyArray<{ id: EditorMode; label: string; desc: string }> = [
-  { id: "split", label: "双栏", desc: "左编辑右预览" },
-  { id: "edit", label: "仅编辑", desc: "只显示编辑区" },
-  { id: "preview", label: "仅预览", desc: "只显示预览区" },
-  {
-    id: "live",
-    label: "即时渲染",
-    desc: "正文直接呈现渲染样式，光标所在行显示 Markdown 源码（M5 首期：文本级元素）",
-  },
-];
+/**
+ * 编辑模式的**产品清单文案**：取值与顺序都来自契约的 `PRODUCT_EDITOR_MODES`，这里只给标签与说明。
+ *
+ * 用 `Record<ProductEditorMode, …>` 收口：契约里加一档（例如阶段 C 把 `live` 放回产品清单）而这里
+ * 忘了写文案，TypeScript 直接报错——不是等界面上少一个开关才发现（与 `TASK_FILTER_FORM_LABELS` 同做法）。
+ *
+ * **双栏（`split`）已退出产品**（编辑拓展阶段 A），不再出现在设置里；旧行里存着的 `split` 只做读兼容，
+ * 由契约的 `normalizeEditorModes` 静默滤掉。
+ */
+const EDITOR_MODE_COPY: Record<ProductEditorMode, { label: string; desc: string }> = {
+  edit: { label: "仅编辑", desc: "只显示编辑区" },
+  preview: { label: "仅预览", desc: "只显示预览区" },
+};
+
+const EDITOR_MODE_OPTIONS: ReadonlyArray<{
+  id: ProductEditorMode;
+  label: string;
+  desc: string;
+}> = PRODUCT_EDITOR_MODES.map((id) => ({ id, ...EDITOR_MODE_COPY[id] }));
 
 /**
  * 待办筛选条的两形态（用户 2026-09-27 拍板：两种都留，在设置里自选——定稿原话如此）。
@@ -178,10 +187,13 @@ export function SettingsPanel({
    *
    * 两条纪律：①落库顺序一律走契约的规范顺序（`normalizeEditorModes`），不随点击次序漂；
    * ②**至少留一档**——UI 已经把"最后开着的那一个"禁用掉，这里再挡一次（一个不变式不靠单点保证；
-   * 注意这里**不能**直接用归一化的兜底，那会把"关掉最后一个"变成"四档全开"，与用户意图相反）。
+   * 注意这里**不能**直接用归一化的兜底，那会把"关掉最后一个"变成"产品档全开"，与用户意图相反）。
+   *
+   * 【阶段 A】起算点是**归一化后的产品档**，不是存储里的原始数组：老行里可能存着 `split` / `live`，
+   * 若拿原始数组算，会出现"界面上两档都显示为关，点一下却把两档一起打开"的怪状态。
    */
   function patchEditorModes(id: EditorMode, on: boolean): void {
-    const current = userSettings.editor_modes;
+    const current = normalizeEditorModes(userSettings.editor_modes);
     const next = on ? [...current, id] : current.filter((mode) => mode !== id);
     if (next.length === 0) return;
     onPatchSettings({ editor_modes: normalizeEditorModes(next) });
@@ -389,8 +401,10 @@ export function SettingsPanel({
               </InfoHint>
             </h3>
             {EDITOR_MODE_OPTIONS.map((option) => {
-              const on = userSettings.editor_modes.includes(option.id);
-              const lastOne = on && userSettings.editor_modes.length === 1;
+              // 同上：按**归一化后的产品档**判断开关状态，老行里的 split / live 不参与
+              const active = normalizeEditorModes(userSettings.editor_modes);
+              const on = active.includes(option.id);
+              const lastOne = on && active.length === 1;
               return (
                 <div className="setrow" key={option.id}>
                   <div className="setrow__label">

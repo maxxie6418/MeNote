@@ -9,11 +9,16 @@
  * 读出来的一律是"合法且当前还开着"的档；任何坏值（手改过、用户后来关掉了那一档）
  * 都静默回落到兜底档，绝不把正文卡住。
  */
-import type { EditorMode } from "@menote/shared";
+import type { EditorMode, ProductEditorMode } from "@menote/shared";
 
 /** 本机记住的键名（与 `menote:privacy:device-unlocked` 同一命名习惯） */
 export const LAST_EDITOR_MODE_KEY = "menote:editor:last-mode";
 
+/**
+ * 认识**全部四档**（含已退出产品的 `split` / `live`）——旧版本写下的记忆要读得回来，
+ * 再由 {@link initialEditorMode} 因为"不在可用清单里"静默回落。删掉旧值只会让老用户
+ * 升级后第一次打开时莫名其妙换档。
+ */
 const KNOWN_MODES: readonly EditorMode[] = ["split", "edit", "preview", "live"];
 
 function isEditorMode(value: string | null): value is EditorMode {
@@ -31,8 +36,14 @@ export function readLastEditorMode(): EditorMode | null {
   }
 }
 
-/** 记下"这次用的是哪一档"；写不进去也不影响切换本身 */
-export function writeLastEditorMode(mode: EditorMode): void {
+/**
+ * 记下"这次用的是哪一档"；写不进去也不影响切换本身。
+ *
+ * **参数收窄为产品档**（编辑拓展阶段 A）：写进去的东西下一次会被当"用户偏好"读回来，
+ * 所以只能在**产品清单里**取值——`split` / `live` 写进来等于给下个版本埋一个自己都读不懂的偏好。
+ * 阶段 C 把 `live` 加回产品清单时，这里**不用改**（类型跟着 `PRODUCT_EDITOR_MODES` 走）。
+ */
+export function writeLastEditorMode(mode: ProductEditorMode): void {
   try {
     globalThis.localStorage?.setItem(LAST_EDITOR_MODE_KEY, mode);
   } catch {

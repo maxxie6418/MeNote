@@ -1,11 +1,11 @@
-# Menote 编辑拓展实施计划 v1（文档版本 v2）
+# Menote 编辑拓展实施计划 v1（文档版本 v3）
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v2 |
-| 文档状态 | 生效（用户 2026-09-29 确认按本计划执行） |
+| 文档版本 | v3 |
+| 文档状态 | 生效（用户 2026-09-29 确认按本计划执行；阶段 A / B 已完成并推送） |
 | 目的和适用范围 | 将《Menote 编辑拓展设计 v3》拆成可单独验收、可逐步上线的实现计划：先收敛正文模式，再在隔离试验页验证快捷输入即时渲染与命令，最后验证并替换正文即时渲染；表格暂不纳入。 |
 | 权威级别 | 临时规则。产品边界以 `docs/modules/Menote-编辑拓展-设计-v3.md` 为准；与 `wiki/` 冲突时以 `wiki/` 为准。 |
 | 最后更新日期 | 2026-09-29 |
@@ -16,6 +16,7 @@
 |---|---|---|---|---|
 | v1 | v0.5.30 | 2026-09-29 | 按编辑拓展设计 v3 拆分阶段、文件落点、测试、验收线与提交边界。 | gpt-5.6-terra |
 | v2 | v0.6.0 | 2026-09-29 | 按评审清单 1–19（19 条）与用户 2026-09-29 决定修订：文档状态改「生效」、版本策略自 v0.6.0 起、确认「失焦才渲染」口径；登记 wiki 冲突期与回写授权门槛；修 `check:size` 与局部测试的构建前置；两个归一化函数合并为一个 `normalizeEditorModes`；点名会改红的既有用例与类型边界落点；补 B1/B2/B4/B5 示例、C2 可判定红绿、全局守卫与图标口径；重排阶段编号并合并重复的正文即时渲染替换描述；`/图片`、`@tags`、`@target-folder` 记为不做 / 遗留。 | deepseek-v4.1-flash |
+| v3 | v0.6.1 | 2026-09-29 | 记阶段 B 执行记录（B1–B6 + B3 各自的偏差与人工项）：共享命令与命令菜单、轻量即时渲染宿主与两个录入面接入（含 `QuickComposer` 三个新增可选入参、空文档行前缀语义修正、触发词规则合并为 `trigger.ts` 一份）；版本号与 `CHANGELOG.md` 改为同一条提交落地（避免像阶段 A 那样中间提交里版本与 CHANGELOG 不一致）。 | deepseek-v4.1-flash |
 
 **Goal:** 在不损害现有 Markdown 保存与同步可靠性的前提下，先交付“正文 Markdown 编辑 + 预览”的可用基线；再让快捷输入具备轻量即时渲染、基础 `/` 和仅限快捷输入的 `@`；最后验证并谨慎启用正文即时渲染。表格编辑 / 锁定暂不纳入本计划。
 
@@ -397,6 +398,14 @@ pnpm typecheck
 
 阶段 B 不依赖阶段 A 的设置迁移代码；但必须先确认阶段 A 已经把生产切换条收敛为 `edit` / `preview`，否则编辑试验页和生产页会出现两套互相矛盾的模式清单。阶段 B 仍不把候选即时渲染放进生产正文。
 
+> **执行记录（2026-09-29，B1 / B2 已完成，B3 见 Task B3 下的记录）**：`744b88b`（B1 共享命令）、`637f5ec`（B2 命令菜单）两次提交，已推送。
+> 与计划一致的部分：B1 的十条命令与 `QUICK_FORMAT_COMMANDS` 七条、B2 的菜单只在打开期间监听 `document` 且只消费 `↑↓/Enter/Esc`、`/` 的触发范围仍是宿主内（行首或空白后），都按计划落地。
+> 偏差与补充（逐条留痕）：
+> 1. **B1 的 `applyFormatCommand()` 在提交时有一个类型错误**（`LINE_RULES[command]` 未收窄，`744b88b` 只跑了 vitest、没跑 `pnpm typecheck`），已在 `aa5ff33` 里改成分支按 id 收窄的写法修掉；按「已推送的历史不追改」保留原提交。
+> 2. **B2 的菜单项点击要 `mousedown` 阻止默认行为**：否则点菜单先触发输入框 `blur` → 菜单被卸载 → 这一下点击落空。属于计划没写到、但必须有的实现细节。
+> 3. **B2 的高亮复位改为派生实现**（`epoch = 打开状态 + 过滤词`），不用"在 effect 里 `setHighlight(0)`"——`react-hooks/set-state-in-effect` 会拦，且那样多一轮渲染。`scrollIntoView` 改为可选调用（jsdom 与部分环境没有它）。
+> 4. **一行命令的空文本语义**：原实现在空文档上"没有行可加前缀"→整条命令静默无效；快捷输入的第一屏恰恰是 `/引用`、`/无序列表` 这些命令，所以改成插入前缀本身、光标落在前缀后（非空文本行为不变，见 `format-commands.test.ts`）。
+
 ### Task B1：以纯函数定义可复用的 Markdown 格式命令
 
 **Files:**
@@ -541,6 +550,17 @@ export interface CommandMenuProps {
 
 ### Task B3：在编辑试验页接入 `/`，验证且不触碰生产数据
 
+> **执行记录（2026-09-29，已完成，提交 `00f9554`）**：Step 1–6 全部落地，隔离边界与读数按计划实现。
+> 计划与实际的差异，逐条留痕：
+> 1. **接入面比计划更小**：计划写的是暴露 `onCommand` 给宿主；实际做法是 `EditorHandle.applyFormat(command)` + `EditorProps.onSlashQuery(query|null)`。宿主拿不到光标坐标，把"删掉 `/查询` 触发段"放在编辑器侧更省事，也避免每个宿主自己重算一次。替身因此扩成"受控 textarea + `onChange`/`onReady`/`onSlashQuery`/`applyFormat`"，并且**复用 `Editor` 导出的真纯函数**，替身里不另写规则。
+> 2. **生命周期读数不是数 DOM**：`activeEditors` 由编辑器外壳 effect 的挂 / 卸上报（比 `onReady` 多覆盖了卸载），`activeListeners` 定义为"这一页自己挂上又撤下的监听"＝命令菜单打开期间 `CommandMenu` 挂在 `document` 上的那组 keydown，由菜单外壳的挂 / 卸上报。用例按 20 次模式 / 样文切换断言两个读数回到基线。
+> 3. **触发词规则最终只有一份**：实现过程中一度存在三份（正文编辑器、快捷输入、试验页各一），复核时合并到新的 `apps/web/src/app/editor/trigger.ts`（`triggerAt()` 判定 + `applyFormatAt()` 吃触发段），三个宿主共用。`trigger.ts` 不依赖 CodeMirror，试验页与快捷输入引入它不会把编辑器拖进初始包。**顺带修掉一处规则不一致**：正文编辑器原先不认代码围栏，代码块里的 `/` 也会弹菜单。
+> 4. **菜单落点是已知局限**：正文区拿不到 CodeMirror 光标坐标，菜单锚在正文区左下角（未去猜行号）；快捷框锚在输入框上方。滚动 / 裁切与视觉落点留人工确认。为此新增了 3 条定位规则（`.editor-lab .docpane__body{position:relative}`、`.editor-lab__menu-anchor`、`.editor-lab__quick-input{position:relative}`），它们随 B5/B6 的提交一起进去了（提交信息归属略有出入，内容正确）。
+> 5. **`Esc` 语义加了去重**：Esc 关掉的触发词不会再被下一个按键弹回（只要查询前缀没变），删掉 `/` 重打才会重新触发——计划没写到，但不加就是"按了 Esc 等于没按"。
+> 6. **代码围栏内不弹菜单**（正文）：以规则实现（数光标前的围栏行），不是语法树判定；列表 / 引用里的行内代码不加判定。
+> 7. 追加的用例：`apps/web/test/trigger.test.ts`（10 条）与 `apps/web/test/editor-format-bridge.test.ts`（6 条）——替身之外的纯函数部分单独测。
+> **仍未验证**（计划 Step 5 的人工项）：真 CodeMirror 路径的组合输入抑制与整篇替换 `dispatch`、中文输入法手感、列表连续回车不丢焦点、菜单在浏览器里的落点。
+
 **现有测试替身约束：** `apps/web/test/editor-lab-page.test.tsx` 当前把 `Editor` mock 成只读 textarea，不能直接完成“正文输入 `/`”测试；Step 1 必须先扩展替身以暴露 `onChange` / `onCommand`，再写交互断言。
 
 **Files:**
@@ -593,6 +613,15 @@ pnpm --filter @menote/web test -- editor-lab-page.test.tsx editor-lab-perf.test.
 提交信息：`feat(editor-lab): 验证共享样式命令与生命周期`。
 
 ## 4. 阶段 B（续）：快捷输入轻量即时渲染与 `@` 属性
+
+> **执行记录（2026-09-29，B4 / B5 / B6 已完成）**：`f1f5659`（B4 属性契约）、`aa5ff33`（B5 轻量即时渲染宿主）、`9b4c0a9`（B6 两个录入面接入），已推送。
+> 与计划一致的部分：B4 的 `QuickAttributeHost = "memo" | "task" | "note"`（保留 `"note"`）与"命令自己声明宿主"的过滤方式；B5 的受控契约、`/` 与 `@` 的触发边界（行首或空白后、代码围栏内不触发、输入法组合中不触发）、命令与属性都不留在正文里；B6 的"属性只映射到已有的截止 / 优先级字段，不写进正文"。
+> 偏差与补充（逐条留痕）：
+> 1. **B5 的类名与焦点环**：输入态按计划保留 `.composer__input`；呈现态新增 `.quick-composer__view`。计划里"补一层焦点环"实际不需要——功能栏有 `.composer:focus-within`、添加窗口有 `.addentry__input:focus`，再加一层会叠出双层环，故未加。
+> 2. **B5 的呈现态用派生状态**：`editing` 只在"失焦"时置否，"内容是否可呈现"由 `!editing && value.trim() !== ""` 派生——发布清空后自动回到输入态，不需要在 effect 里 `setState`（会触发 `react-hooks/set-state-in-effect`）。
+> 3. **B6 给 `QuickComposer` 多加了三个可选入参**（计划只写了受控契约）：`inputClassName`（添加窗口沿用自己那套尺寸与焦点环，不套功能栏三行 40–180px）、`inputRef`（窗口打开时把焦点送回输入区）、`keepEditingWithin`（**同一录入面内部换焦点不收起输入态**）。最后一条是实测出来的：`@` 在"待办"档选完截止日期会把焦点移到日期控件，输入区立刻塌成只读呈现，用户想接着补字得先点回来；现在只有离开录入面才按"写完了"呈现。**仍待真机确认这个节奏**（"切档 / 切设置"仍会呈现，因为那确实离开了输入区）。
+> 4. **B6 的字段选择器只有一份**：`ATTRIBUTE_FOCUS_SELECTOR` 从 `Composer.tsx` 导出给 `AddEntryDialog` 复用，两个录入面的 `@` 落到同一个字段；没有为此改 `ModeExtras` 的公共契约。
+> 5. `@` 只在"待办"档有菜单（Memo / 笔记没有可写属性）——`@tags`、`@target-folder`、`/图片` 仍按计划记为不做 / 遗留，**没有**做成禁用假入口。
 
 ### Task B4：先定义快捷输入属性契约，不把属性写进 Markdown
 

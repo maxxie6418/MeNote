@@ -123,6 +123,19 @@ describe("行前缀命令：按被覆盖的整行展开", () => {
     );
   });
 
+  /*
+    空录入框里选「引用」「无序列表」是常见动作（快捷输入 `/` 命令的第一屏就是这些）。
+    没有内容时"没有行可加前缀"会变成**点了没反应**，所以这里插入前缀本身，光标落到前缀后。
+  */
+  it("空文档：插入前缀并把光标送到前缀之后，而不是没反应", () => {
+    const quoted = applyFormatCommand("", { from: 0, to: 0 }, "quote");
+    expect(quoted.text).toBe("> ");
+    expect(quoted.selection).toEqual({ from: 2, to: 2 });
+
+    expect(applyFormatCommand("", { from: 0, to: 0 }, "bullet-list").text).toBe("- ");
+    expect(applyFormatCommand("", { from: 0, to: 0 }, "ordered-list").text).toBe("1. ");
+  });
+
   it("toggle：所选非空行全都有前缀 → 去掉；只有一部分有 → 只补缺的", () => {
     expect(applyFormatCommand("- 甲\n- 乙", { from: 0, to: 7 }, "bullet-list").text).toBe("甲\n乙");
     expect(applyFormatCommand("- 甲\n乙", { from: 0, to: 6 }, "bullet-list").text).toBe(

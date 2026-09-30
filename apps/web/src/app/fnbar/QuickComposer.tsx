@@ -14,7 +14,7 @@
  * （`layout-invariants.test.ts` 按它守 40–180px 与 `resize: vertical`、`focus-visibility.test.ts`
  * 把它列进 outline 白名单），呈现态用 `.quick-composer__view`，外层 `.quick-composer`。
  */
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { CommandMenu } from "../editor/CommandMenu";
 import {
   QUICK_FORMAT_COMMANDS,
@@ -45,6 +45,22 @@ export interface QuickComposerProps {
   ariaLabel: string;
   /** 输入态的占位文字（不传就不显示） */
   placeholder?: string;
+  /**
+   * 输入态用的类名。默认 `.composer__input`（功能栏录入框：40–180px、`resize: vertical` 由
+   * `layout-invariants.test.ts` 守着）；添加内容窗口沿用自己那套 `.addentry__input`（更高、自带焦点环）。
+   * 注意 `.composer__input` 抹掉了 outline，**宿主必须自己给焦点环**（`.composer:focus-within` /
+   * `.addentry__input:focus` 都已提供）。
+   */
+  inputClassName?: string;
+  /** 让宿主能主动把焦点送回输入区（添加内容窗口打开时用） */
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
+  /**
+   * 这个容器里的元素拿到焦点时**不收起输入态**（一般是录入框自己的字段行）。
+   *
+   * 没有它的话，"待办"档 `@` 选完截止日期 → 焦点移到日期控件 → 输入区立刻塌成只读呈现，
+   * 用户想接着补两个字还得先点回来。同一录入面内部换焦点不算"写完了"。
+   */
+  keepEditingWithin?: RefObject<HTMLElement | null>;
 }
 
 interface Trigger {
@@ -92,6 +108,9 @@ export function QuickComposer({
   onSubmitShortcut,
   ariaLabel,
   placeholder,
+  inputClassName = "composer__input",
+  inputRef: externalInputRef,
+  keepEditingWithin,
 }: QuickComposerProps) {
   /*
     `editing` 从 true 起步：**打开就是输入态**（用户要能立刻打字），只有在"失焦且内容非空"之后
@@ -102,6 +121,11 @@ export function QuickComposer({
   const [attributeIndex, setAttributeIndex] = useState(0);
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  /** 内部要读选区、外部（添加内容窗口）要能聚焦：两边都收到同一个节点 */
+  const attachInput = (node: HTMLTextAreaElement | null): void => {
+    inputRef.current = node;
+    if (externalInputRef) externalInputRef.current = node;
+  };
   const composingRef = useRef(false);
   /** 从呈现态点回来时要补一次聚焦（此刻 textarea 还没挂载，focus() 会落空） */
   const wantFocus = useRef(false);
@@ -257,8 +281,8 @@ export function QuickComposer({
       ) : null}
 
       <textarea
-        ref={inputRef}
-        className="composer__input"
+        ref={attachInput}
+        className={inputClassName}
         aria-label={ariaLabel}
         placeholder={placeholder}
         value={value}
@@ -269,9 +293,15 @@ export function QuickComposer({
         onSelect={(event) => syncTrigger(value, event.currentTarget)}
         onClick={(event) => syncTrigger(value, event.currentTarget)}
         onFocus={() => setEditing(true)}
-        onBlur={() => {
+        onBlur={(event) => {
           composingRef.current = false;
           setTrigger(null);
+          /*
+            同一录入面内部换焦点（输入区 → 截止/优先级字段）不算"写完了"：
+            `relatedTarget` 在部分环境下为空，所以退一步看 `document.activeElement`（blur 时焦点已经移走）。
+          */
+          const next = (event.relatedTarget as Node | null) ?? document.activeElement;
+          if (next && keepEditingWithin?.current?.contains(next)) return;
           setEditing(false);
         }}
         onCompositionStart={() => {

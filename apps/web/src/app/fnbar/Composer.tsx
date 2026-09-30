@@ -14,10 +14,12 @@ import {
   TASK_PRIORITY_LABELS,
   type TaskPriority,
 } from "@menote/mdcore";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "../ui/Controls";
 import { Chip } from "../ui/Chip";
 import { SegmentedControl, type SegmentedOption } from "../ui/SegmentedControl";
+import { QuickComposer } from "./QuickComposer";
+import { attributeCommandsFor, type QuickAttributeId } from "./quick-attributes";
 
 export const COMPOSER_MODES = [
   { value: "memo", label: "Memo", icon: "clock" },
@@ -45,6 +47,19 @@ const MODE_DISABLED_REASON: Record<ComposerMode, string> = {
  * **导出**给 `AddEntryDialog` 复用——两个录入面（功能栏框 / 添加窗口）必须同一套判定。
  */
 export const TASK_ITEM_PATTERN = /^\s*[-*+]\s+\[[ xX]\]/m;
+
+/**
+ * `@` 属性命令点了以后聚焦哪儿（**不写正文**，只是把光标送到已经存在的受控字段上）。
+ *
+ * 用容器内查询而不是往 `ModeExtras` 里穿 ref：那个组件被两个录入面复用（字段只有一份实现），
+ * 为一次聚焦改它的公共契约不划算；选择器就是两个控件自己的可访问名。**导出**给
+ * `AddEntryDialog` 复用——同一个 `@` 在两个录入面必须落到同一个字段。
+ */
+export const ATTRIBUTE_FOCUS_SELECTOR: Record<QuickAttributeId, string> = {
+  due: '[aria-label="截止日期"]',
+  // 优先级是分段控件：聚焦当前生效的那一档才有意义（整组没有"选中"这个概念）
+  priority: '[aria-label="优先级"] button[aria-pressed="true"]',
+};
 
 /**
  * 模式附加项：内容随模式变，**容器高度恒定**（功能栏里那条 26px 不变量）。
@@ -187,6 +202,8 @@ export function Composer({
   const [taskDue, setTaskDue] = useState("");
   // M07-03 的默认优先级为"中"（原型里也是这么显示的）
   const [taskPriority, setTaskPriority] = useState<TaskPriority>("medium");
+  /** 附加项容器：`@` 选了属性后在这里找对应的受控字段聚焦 */
+  const fieldsRef = useRef<HTMLDivElement | null>(null);
 
   const hasTaskItem = TASK_ITEM_PATTERN.test(text);
   // 用户把 `- [ ]` 删掉后，清单标记自动作废（不靠 effect 同步状态）
@@ -222,23 +239,33 @@ export function Composer({
     }
   }
 
+  /** `@` 选了属性：把焦点送到既有的受控字段。**属性不写进正文**（设计 v3 §3.3）。 */
+  function focusAttribute(id: QuickAttributeId): void {
+    fieldsRef.current
+      ?.querySelector<HTMLElement>(ATTRIBUTE_FOCUS_SELECTOR[id])
+      ?.focus();
+  }
+
   return (
     <div className="composer">
-      <textarea
-        className="composer__input"
-        aria-label="快速录入"
-        placeholder="记点什么……  Ctrl+Enter 发布"
+      {/*
+        输入区换成语义可靠的轻量即时渲染宿主（编辑拓展阶段 B / Task B6）：
+        行内格式走共享纯函数，`/` 给快捷基础命令，`@` 只聚焦下面的受控字段。
+        class 仍是 `.composer__input`——三行 136px 的结构不变量就按它守。
+      */}
+      <QuickComposer
+        mode={mode}
         value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-            event.preventDefault();
-            publish();
-          }
-        }}
+        onChange={setText}
+        attributes={attributeCommandsFor(mode)}
+        onChooseAttribute={focusAttribute}
+        onSubmitShortcut={publish}
+        ariaLabel="快速录入"
+        placeholder="记点什么……  Ctrl+Enter 发布"
+        keepEditingWithin={fieldsRef}
       />
 
-      <div className="composer__extras" data-testid="composer-extras">
+      <div className="composer__extras" data-testid="composer-extras" ref={fieldsRef}>
         <ModeExtras
           mode={mode}
           showTaskPrompt={hasTaskItem}

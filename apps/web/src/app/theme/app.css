@@ -267,16 +267,13 @@ button {
   快捷输入的轻量即时渲染宿主（编辑拓展阶段 B / Task B5）。
   输入态沿用 `.composer__input`（40–180px、`resize: vertical`）——它由 `layout-invariants.test.ts`
   守着，是"三行 136px"结构不变量的一部分；这里只补呈现态与定位，不另立一套尺寸。
+
+  焦点环不在这里补：`.composer__input` 自己抹掉了 outline，宿主必须给补偿——功能栏是
+  `.composer:focus-within`、添加内容窗口是 `.addentry__input:focus`，两处都已存在。
+  在这里再加一层 `focus-within` 只会在窗口里叠出双层焦点环。
 */
 .quick-composer {
   position: relative; /* `/` 与 `@` 菜单锚在这里 */
-}
-
-/* `.composer__input` 抹掉了 outline：宿主自己给焦点环（同 `.composer:focus-within` 的补偿方式）。
-   QuickComposer 也可能独立于 `.composer` 外壳使用（添加内容窗口），所以补偿不能只靠外层。 */
-.quick-composer:focus-within {
-  border-radius: var(--radius-sm);
-  box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
 /*

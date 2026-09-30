@@ -22,7 +22,9 @@ import { useEffect, useRef, useState } from "react";
 import type { TaskPriority } from "@menote/mdcore";
 import { Button } from "../ui/Controls";
 import { Modal } from "../ui/Modal";
-import { ModeExtras, TASK_ITEM_PATTERN } from "./Composer";
+import { ModeExtras, ATTRIBUTE_FOCUS_SELECTOR, TASK_ITEM_PATTERN } from "./Composer";
+import { QuickComposer } from "./QuickComposer";
+import { attributeCommandsFor, type QuickAttributeId } from "./quick-attributes";
 
 export type AddEntryKind = "memo" | "task";
 
@@ -53,6 +55,8 @@ export function AddEntryDialog({
   const [taskDue, setTaskDue] = useState("");
   const [taskPriority, setTaskPriority] = useState<TaskPriority>("medium");
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  /** 附加项容器：`@` 选了属性后在这里找对应的受控字段聚焦 */
+  const fieldsRef = useRef<HTMLDivElement | null>(null);
 
   const hasTaskItem = TASK_ITEM_PATTERN.test(text);
   const asTask = taskRequested && hasTaskItem;
@@ -86,6 +90,13 @@ export function AddEntryDialog({
     close();
   }
 
+  /** `@` 选了属性：焦点送到既有的受控字段（**属性不写进正文**，与录入框同一份选择器） */
+  function focusAttribute(id: QuickAttributeId): void {
+    fieldsRef.current
+      ?.querySelector<HTMLElement>(ATTRIBUTE_FOCUS_SELECTOR[id])
+      ?.focus();
+  }
+
   return (
     <Modal
       open={open}
@@ -108,22 +119,22 @@ export function AddEntryDialog({
         </>
       }
     >
-      <textarea
-        ref={inputRef}
-        className="addentry__input"
-        aria-label={`${TITLE[kind]}的内容`}
-        placeholder="记点什么……  Ctrl+Enter 发布"
+      <QuickComposer
+        mode={kind}
         value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-            event.preventDefault();
-            publish();
-          }
-        }}
+        onChange={setText}
+        attributes={attributeCommandsFor(kind)}
+        onChooseAttribute={focusAttribute}
+        onSubmitShortcut={publish}
+        ariaLabel={`${TITLE[kind]}的内容`}
+        placeholder="记点什么……  Ctrl+Enter 发布"
+        // 窗口里的输入区沿用自己那套类名（更高、自带焦点环），不套功能栏的三行尺寸
+        inputClassName="addentry__input"
+        inputRef={inputRef}
+        keepEditingWithin={fieldsRef}
       />
       {/* 字段行：与录入框同族（随 kind 换内容）；容器不塌陷，避免发布时高度跳动 */}
-      <div className="addentry__extras">
+      <div className="addentry__extras" ref={fieldsRef}>
         <ModeExtras
           mode={kind}
           showTaskPrompt={hasTaskItem}

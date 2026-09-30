@@ -178,6 +178,15 @@ function applyLinePrefix(
   selection: TextSelection,
   rule: LineRule,
 ): FormatResult {
+  /*
+    空文档：没有"行"可加前缀，但命令**不能变成没反应**——用户是在空录入框里选了「引用」。
+    这时插入前缀本身，光标落在前缀之后（接着打字就是这一行的内容）。
+  */
+  if (text.trim() === "") {
+    const prefix = rule.prefix(0);
+    return { text: prefix, selection: { from: prefix.length, to: prefix.length } };
+  }
+
   const { start, end } = coveredLines(text, selection);
   const lines = text.slice(start, end).split("\n");
   const filled = lines.filter((line) => line.trim() !== "");

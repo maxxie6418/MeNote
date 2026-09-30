@@ -19,9 +19,10 @@ vi.mock("../src/app/editor/Editor", async (importOriginal) => {
   const { useEffect, useRef, useState } = await import("react");
 
   /**
-   * 替身只做真 `Editor` 在这几条用例里必须有的四件事：受控地把输入抛给宿主（`onChange`）、
+   * 替身只做真 `Editor` 在这几条用例里必须有的五件事：受控地把输入抛给宿主（`onChange`）、
    * 交出句柄（`onReady`，含 `applyFormat`）、按同一规则上报 `/` 触发词（`onSlashQuery`）、
-   * 让 `applyFormat` 落在自己的文本上。读数与菜单接线都在宿主那一侧，这里不替它做判断。
+   * 让 `applyFormat` 落在自己的文本上、按真 `Editor` 的时机上报生命周期事件。
+   * 读数与菜单接线都在宿主那一侧，这里不替它做判断。
    */
   function EditorStub({
     initialValue,
@@ -29,14 +30,22 @@ vi.mock("../src/app/editor/Editor", async (importOriginal) => {
     onChange,
     onReady,
     onSlashQuery,
+    onLifecycle,
+    live,
+    readOnly,
   }: EditorModule.EditorProps) {
     const [value, setValue] = useState(initialValue);
     const valueRef = useRef(value);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const onLifecycleRef = useRef(onLifecycle);
 
     useEffect(() => {
       valueRef.current = value;
     }, [value]);
+
+    useEffect(() => {
+      onLifecycleRef.current = onLifecycle;
+    }, [onLifecycle]);
 
     useEffect(() => {
       const apply = (next: string): void => {
@@ -57,6 +66,29 @@ vi.mock("../src/app/editor/Editor", async (importOriginal) => {
       // 真 Editor 也只在挂载时交一次句柄
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    /**
+     * 生命周期与真 `Editor` 对齐：`created` / `listenerAdded` 发生在视图建好那一刻，
+     * `destroyed` / `listenerRemoved` 发生在销毁，`modeReconfigured` 只随档位属性变化发生
+     * ——挂载时那两次是"按 props 配置"，不算重配置。
+     */
+    useEffect(() => {
+      onLifecycleRef.current?.("created");
+      onLifecycleRef.current?.("listenerAdded");
+      return () => {
+        onLifecycleRef.current?.("listenerRemoved");
+        onLifecycleRef.current?.("destroyed");
+      };
+    }, []);
+
+    const firstModeRun = useRef(true);
+    useEffect(() => {
+      if (firstModeRun.current) {
+        firstModeRun.current = false;
+        return;
+      }
+      onLifecycleRef.current?.("modeReconfigured");
+    }, [live, readOnly]);
 
     return (
       <textarea
@@ -82,7 +114,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** 读页面上的生命周期读数（如「本页编辑器实例：1」）。 */
+/** 读页面上的生命周期读数（如「本页编辑器实例：1」）；括号里的备注不参与取值。 */
 function reading(label: string): number {
   const line = screen.getByText(new RegExp(`^${label}：`));
   return Number(/：(\d+)/.exec(line.textContent ?? "")?.[1]);
@@ -181,8 +213,37 @@ describe("编辑试验页", () => {
     expect(screen.queryByRole("listbox", { name: "命令" })).toBeNull();
   });
 
+  it("同级档位连切 20 次只累计重配置，实例与监听不增", async () => {
+    render(<EditorLabPage />);
+
+    const body = await screen.findByLabelText("短文的试验正文");
+    await waitFor(() => {
+      expect(screen.queryByText(/^本页编辑器实例：1（档位重配置 0 次）$/)).not.toBeNull();
+    });
+
+    /*
+      「仅编辑 ↔ 即时渲染」在 React 树里是同一个位置、同一个 key，编辑器不会重挂，
+      所以这里切的是档位而不是实例。真 `Editor` 走 `Compartment` 重配置——重建文档的话
+      实例数会往上爬、撤销历史也会丢，那正是本读数要抓的。
+    */
+    for (let index = 0; index < 10; index += 1) {
+      fireEvent.click(screen.getByRole("button", { name: "即时渲染" }));
+      fireEvent.click(screen.getByRole("button", { name: "仅编辑" }));
+    }
+
+    await waitFor(() => {
+      const line = screen.getByText(/^本页编辑器实例：/);
+      expect(Number(/档位重配置 (\d+) 次/.exec(line.textContent ?? "")?.[1])).toBeGreaterThanOrEqual(20);
+    });
+    expect(reading("本页编辑器实例")).toBe(1);
+    // 监听数与实例数同步：编辑器视图自己的更新监听，档位切换不动它（Task C1 Step 3）
+    expect(reading("本页事件监听")).toBe(1);
+    // 同一个替身实例没被换掉：档位切换不该重建正文宿主
+    expect(screen.getByLabelText("短文的试验正文")).toBe(body);
+  });
+
   it(
-    "连续 20 次模式 / 样文切换后，两个生命周期读数回到基线",
+    "连续 20 次模式 / 样文切换后，实例与监听读数回到基线",
     async () => {
       const user = userEvent.setup();
       render(<EditorLabPage />);
@@ -190,13 +251,19 @@ describe("编辑试验页", () => {
       // 懒加载的编辑器先落地，读数才有意义
       await screen.findByLabelText("短文的试验正文");
       await waitFor(() => expect(reading("本页编辑器实例")).toBe(1));
-      expect(reading("本页事件监听")).toBe(0);
+      expect(reading("本页事件监听")).toBe(1);
 
-      // 菜单打开期间它把 keydown 挂在 document 上；关掉必须撤掉
+      /*
+        菜单打开期间它把 keydown 挂在 `document` 上，但这一栏**只数编辑器视图自己的监听**
+        （Task C1 Step 3），所以开菜单不该让读数动；关掉也不该动——数进去的话这里会变成
+        2 → 1，正好掩盖"视图销毁了、菜单监听还挂着"这类分岔。
+      */
       await user.type(screen.getByLabelText("Memo 快捷录入"), "/");
-      await waitFor(() => expect(reading("本页事件监听")).toBe(1));
+      await waitFor(() => expect(screen.getByRole("listbox", { name: "命令" })).toBeTruthy());
+      expect(reading("本页事件监听")).toBe(1);
       await user.keyboard("{Escape}");
-      await waitFor(() => expect(reading("本页事件监听")).toBe(0));
+      await waitFor(() => expect(screen.queryByRole("listbox", { name: "命令" })).toBeNull());
+      expect(reading("本页事件监听")).toBe(1);
 
       // 切到「仅预览」编辑器就卸了：读数要跟着掉，不然它只是个数 DOM 的
       fireEvent.click(screen.getByRole("button", { name: "仅预览" }));
@@ -214,7 +281,7 @@ describe("编辑试验页", () => {
       fireEvent.click(screen.getByRole("button", { name: "双栏" }));
 
       await waitFor(() => expect(reading("本页编辑器实例")).toBe(1));
-      expect(reading("本页事件监听")).toBe(0);
+      expect(reading("本页事件监听")).toBe(1);
     },
     20_000,
   );

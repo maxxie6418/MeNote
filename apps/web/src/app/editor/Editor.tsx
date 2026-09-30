@@ -30,6 +30,23 @@ export interface EditorHandle {
   applyFormat(command: FormatCommandId): void;
 }
 
+/**
+ * 编辑器自身的生命周期事件（编辑拓展阶段 C / Task C1）。
+ *
+ * 为什么由编辑器**自己**报，而不是宿主在 React 的挂/卸里猜：宿主 effect 与 `EditorView`
+ * 的建/毁通常同进同出，但"视图已经销毁、宿主还没卸"这种分岔一旦出现，宿主侧计数就会谎报，
+ * 而试验页要看的正是这种泄漏。所以事件发生在 `new EditorView`、`view.destroy()`、
+ * 挂/撤 `updateListener`、以及 `Compartment` 重配置的那一刻。
+ *
+ * 只报这五个事件，不把 `document` 上的监听混进来——那些是宿主自己挂的，编辑器不知道。
+ */
+export type EditorLifecycleEvent =
+  | "created"
+  | "destroyed"
+  | "listenerAdded"
+  | "listenerRemoved"
+  | "modeReconfigured";
+
 export interface EditorProps {
   initialValue: string;
   onChange: (value: string) => void;
@@ -58,6 +75,12 @@ export interface EditorProps {
    * 正文与快捷输入共用同一套命令，但它们的宿主不是同一个。
    */
   onSlashQuery?: (query: string | null) => void;
+  /**
+   * 生命周期上报开关（编辑拓展阶段 C / Task C1，**只有试验页传**）。
+   *
+   * 生产侧不传即不报：这里不做任何统计、不读时钟、不影响保存策略。
+   */
+  onLifecycle?: (event: EditorLifecycleEvent) => void;
   className?: string;
   ariaLabel?: string;
 }
@@ -92,6 +115,7 @@ export function Editor({
   onReady,
   onFiles,
   onSlashQuery,
+  onLifecycle,
   className,
   ariaLabel,
 }: EditorProps) {
@@ -101,10 +125,13 @@ export function Editor({
   const onReadyRef = useRef(onReady);
   const onFilesRef = useRef(onFiles);
   const onSlashQueryRef = useRef(onSlashQuery);
+  const onLifecycleRef = useRef(onLifecycle);
   /** 即时渲染开关的当前值：视图只创建一次，扩展里的回调必须读 ref 才知道现在是不是渲染档 */
   const liveRef = useRef(live);
   /** 上一次上报的触发词（`null` 也算一次）：不变就不重复打扰宿主 */
   const lastSlashRef = useRef<string | null>(null);
+  /** 首次挂载期间略过档位上报：那两次 effect 说的是"配置"，不是"用户换了档" */
+  const mountedRef = useRef(false);
   const [readOnlyCompartment] = useState(() => new Compartment());
   /** 即时渲染 / 行号那一档扩展（见 `EditorProps.live`） */
   const [viewModeCompartment] = useState(() => new Compartment());
@@ -124,6 +151,9 @@ export function Editor({
   useEffect(() => {
     onSlashQueryRef.current = onSlashQuery;
   }, [onSlashQuery]);
+  useEffect(() => {
+    onLifecycleRef.current = onLifecycle;
+  }, [onLifecycle]);
 
   /**
    * 当前状态下该上报的触发词。
@@ -147,6 +177,11 @@ export function Editor({
     if (next === lastSlashRef.current) return;
     lastSlashRef.current = next;
     onSlashQueryRef.current?.(next);
+  }
+
+  /** 生命周期上报（只有试验页传回调）。视图建/毁与重配置各报到点上。 */
+  function reportLifecycle(event: EditorLifecycleEvent): void {
+    onLifecycleRef.current?.(event);
   }
 
   useEffect(() => {
@@ -206,11 +241,17 @@ export function Editor({
     });
 
     viewRef.current = view;
+    reportLifecycle("created");
     onReadyRef.current?.(makeHandle(view));
+    // 更新监听是创建 state 时挂上去的，与视图同生；分开报是为了让读数能说清"谁还在"
+    reportLifecycle("listenerAdded");
 
     return () => {
       view.destroy();
       viewRef.current = null;
+      mountedRef.current = false;
+      reportLifecycle("listenerRemoved");
+      reportLifecycle("destroyed");
       // 视图没了：宿主要把命令菜单一并收起来，别留一个指向死视图的菜单
       reportSlash(null);
     };
@@ -223,6 +264,8 @@ export function Editor({
     viewRef.current?.dispatch({
       effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(readOnly)),
     });
+    // 首次运行是创建时已经配置好的那次，不是"重配置"；报出去会让读数凭空多一次
+    if (mountedRef.current) reportLifecycle("modeReconfigured");
   }, [readOnly, readOnlyCompartment]);
 
   /*
@@ -236,7 +279,20 @@ export function Editor({
     viewRef.current?.dispatch({
       effects: viewModeCompartment.reconfigure(viewModeExtensions(live)),
     });
+    // 首次运行是创建时已经配置好的那次，不是"重配置"；报出去会让读数凭空多一次
+    if (mountedRef.current) reportLifecycle("modeReconfigured");
   }, [live, viewModeCompartment]);
+
+  /*
+    挂载期在**上面两条重配置 effect 之后**结束：effect 按声明顺序跑，所以它们的首次运行
+    看到的是 false（那两次是"按 props 配置"，不是"用户换了档"）。此后每一次运行都是真的重配置。
+  */
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   return (
     <div

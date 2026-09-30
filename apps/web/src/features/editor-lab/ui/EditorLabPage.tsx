@@ -8,8 +8,8 @@
  * `app/editor/format-commands.ts` 那一套纯函数——命令结果只落进本页的试验存储，
  * 既不写 `menote:notes`，也没有任何发布通道。
  */
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { CommandMenu, type CommandMenuProps } from "../../../app/editor/CommandMenu";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { CommandMenu } from "../../../app/editor/CommandMenu";
 import {
   FORMAT_COMMANDS,
   QUICK_FORMAT_COMMANDS,
@@ -17,16 +17,17 @@ import {
   type TextSelection,
 } from "../../../app/editor/format-commands";
 import { applyFormatAt, triggerAt } from "../../../app/editor/trigger";
-import type { EditorHandle, EditorProps } from "../../../app/editor/Editor";
+import type { EditorHandle, EditorLifecycleEvent, EditorProps } from "../../../app/editor/Editor";
 import { SegmentedControl } from "../../../app/ui/SegmentedControl";
 import { Button } from "../../../app/ui/Controls";
 import { Icon } from "../../../app/ui/Icon";
 import {
-  EditorLifecycleCounter,
   attributeLongTask,
+  createEditorLabMeter,
   labNow,
   retainRecentLongTasks,
   summarizeLongTasks,
+  type EditorLabMeter,
   type LabAction,
   type LabLifecycleSnapshot,
   type LabLongTask,
@@ -114,8 +115,8 @@ export function EditorLabPage() {
     () => typeof PerformanceObserver !== "undefined",
   );
   const [slash, setSlash] = useState<LabSlash | null>(null);
-  const [counter] = useState(() => new EditorLifecycleCounter());
-  const [lifecycle, setLifecycle] = useState<LabLifecycleSnapshot>(() => counter.snapshot());
+  const [meter] = useState<EditorLabMeter>(() => createEditorLabMeter());
+  const [lifecycle, setLifecycle] = useState<LabLifecycleSnapshot>(() => meter.snapshot());
   const actionsRef = useRef(actions);
   const handleRef = useRef<EditorHandle | null>(null);
   /** Esc 关掉的那次触发词：查询没退化就不自动弹回（见 `updateSlash`） */
@@ -127,6 +128,38 @@ export function EditorLabPage() {
   useEffect(() => {
     actionsRef.current = actions;
   }, [actions]);
+
+  /**
+   * 生命周期读数（阶段 C / Task C1）。
+   *
+   * 事件来自**真的 `EditorView`**（建/毁、挂/撤监听、重配置），不是这一页的外壳 effect：
+   * 外壳与视图通常同进同出，但读数要抓的恰恰是它们分岔的那种泄漏。所以这里只做翻译，
+   * 不替编辑器判断"应该发生什么"。
+   *
+   * 菜单挂在 `document` 上的那条 `keydown` **不计入**这一栏（计划 Task C1 Step 3）：
+   * 它要回答的是"编辑器视图有没有把自己的监听撤干净"，混进页面的自定义监听就分不清是谁没撤。
+   */
+  const handleLifecycle = useCallback(
+    (event: EditorLifecycleEvent): void => {
+      switch (event) {
+        case "created":
+          setLifecycle(meter.created());
+          return;
+        case "destroyed":
+          setLifecycle(meter.destroyed());
+          return;
+        case "listenerAdded":
+          setLifecycle(meter.listenerAdded());
+          return;
+        case "listenerRemoved":
+          setLifecycle(meter.listenerRemoved());
+          return;
+        default:
+          setLifecycle(meter.modeReconfigured());
+      }
+    },
+    [meter],
+  );
 
   const stateRef = useRef(state);
   useEffect(() => {
@@ -342,8 +375,7 @@ export function EditorLabPage() {
                 <LabStage
                   note={selected}
                   mode={state.mode}
-                  counter={counter}
-                  onLifecycle={setLifecycle}
+                  onLifecycle={handleLifecycle}
                   onChange={editBody}
                   onHandle={(handle) => {
                     handleRef.current = handle;
@@ -355,9 +387,7 @@ export function EditorLabPage() {
               </Suspense>
               {slash?.target === "body" ? (
                 <div className="editor-lab__menu-anchor">
-                  <LabCommandMenu
-                    counter={counter}
-                    onReport={setLifecycle}
+                  <CommandMenu
                     open
                     query={slash.query}
                     commands={FORMAT_COMMANDS}
@@ -379,7 +409,9 @@ export function EditorLabPage() {
             ? `：${latest.label}，到下一帧 ${latest.paintMs} ms`
             : "：还没有。切换笔记或模式后这里会出毫秒数。"}
         </p>
-        <p className="editor-lab__stat">本页编辑器实例：{lifecycle.activeEditors}</p>
+        <p className="editor-lab__stat">
+          本页编辑器实例：{lifecycle.activeEditors}（档位重配置 {lifecycle.modeSwitches} 次）
+        </p>
         <p className="editor-lab__stat">本页事件监听：{lifecycle.activeListeners}</p>
         {longTaskSupported ? (
           <p className="editor-lab__stat">
@@ -418,9 +450,7 @@ export function EditorLabPage() {
                 }
               />
               {slash?.target === field.key ? (
-                <LabCommandMenu
-                  counter={counter}
-                  onReport={setLifecycle}
+                <CommandMenu
                   open
                   query={slash.query}
                   commands={QUICK_FORMAT_COMMANDS}
@@ -445,10 +475,17 @@ function excerptOf(body: string): string {
   return line.replace(/[*`]/g, "").slice(0, 42);
 }
 
+/**
+ * 正文区在四档之间的摆法。
+ *
+ * **四档必须让 `.doc-split__pane` 停在同一个位置**（阶段 C / Task C1）：React 认「元素类型 + 位置」，
+ * 编辑器那一侧一旦多包一层 `.doc-split`（或换掉外侧元素），整棵子树就会被卸载重建——
+ * 视图重建、撤销历史与光标全丢，而那正是"切换档位只重配置"要防的事。所以这里只改
+ * 有几个 pane、以及有没有预览，不改变 pane 的层级。
+ */
 function LabStage({
   note,
   mode,
-  counter,
   onLifecycle,
   onChange,
   onHandle,
@@ -456,92 +493,51 @@ function LabStage({
 }: {
   note: LabNote;
   mode: LabMode;
-  counter: EditorLifecycleCounter;
-  onLifecycle: (snapshot: LabLifecycleSnapshot) => void;
+  onLifecycle: (event: EditorLifecycleEvent) => void;
   onChange: (body: string) => void;
   onHandle: (handle: EditorHandle) => void;
   onSlashQuery: (query: string | null) => void;
 }) {
-  if (mode === "preview") {
-    return (
-      <div className="doc-split__pane">
-        <MarkdownPreview source={note.body} />
-      </div>
-    );
-  }
-  const editor = (
-    <LabBodyEditor
-      key={note.id}
-      initialValue={note.body}
-      onChange={onChange}
-      live={mode === "live"}
-      ariaLabel={`${note.title}的试验正文`}
-      counter={counter}
-      onLifecycle={onLifecycle}
-      onHandle={onHandle}
-      onSlashQuery={onSlashQuery}
-    />
+  const preview = (
+    <div className="doc-split__pane" key="preview">
+      <MarkdownPreview source={note.body} />
+    </div>
   );
-  if (mode === "split") {
-    return (
-      <div className="doc-split">
-        <div className="doc-split__pane">{editor}</div>
-        <div className="doc-split__pane">
-          <MarkdownPreview source={note.body} />
-        </div>
+  if (mode === "preview") return preview;
+
+  return (
+    <>
+      <div className="doc-split__pane" key="editor">
+        <LabBodyEditor
+          key={note.id}
+          initialValue={note.body}
+          onChange={onChange}
+          live={mode === "live"}
+          ariaLabel={`${note.title}的试验正文`}
+          onLifecycle={onLifecycle}
+          onHandle={onHandle}
+          onSlashQuery={onSlashQuery}
+        />
       </div>
-    );
-  }
-  return <div className="doc-split__pane">{editor}</div>;
+      {mode === "split" ? preview : null}
+    </>
+  );
 }
 
 /**
- * `/` 菜单的外壳：菜单打开时 `CommandMenu` 会把 `keydown` 挂到 `document` 上、关闭即撤，
- * 这一层把"挂上了 / 撤下了"报给计数器（与 `LabBodyEditor` 同一套做法）。
+ * 正文试验的编辑器外壳：只负责把 `Editor` 上报的真实生命周期事件转给页面。
  *
- * 宿主只在菜单打开期间渲染它，所以这一层 effect 的挂/卸**就是**那条监听的生命周期。
- */
-function LabCommandMenu({
-  counter,
-  onReport,
-  ...menuProps
-}: CommandMenuProps & {
-  counter: EditorLifecycleCounter;
-  onReport: (snapshot: LabLifecycleSnapshot) => void;
-}) {
-  useEffect(() => {
-    onReport(counter.listenerAttached());
-    return () => {
-      onReport(counter.listenerDetached());
-    };
-  }, [counter, onReport]);
-
-  return <CommandMenu {...menuProps} />;
-}
-
-/**
- * 正文试验的编辑器外壳：把"编辑器挂上了 / 卸掉了"变成这一页的读数。
- *
- * 上报放在 React 提交阶段（effect 的挂/卸）而不是等 `Editor` 的 `onReady`：`Editor` 只在挂载时
- * 创建视图，所以这一层 effect 与视图的建/毁一一对应，**卸载也会走到**——只报挂不报卸，
- * 切换几十次之后读数就再也回不到基线了。
+ * 本层**不**再自己数挂/卸（阶段 C / Task C1 的修正）：外壳 effect 与 `EditorView` 的
+ * 建/毁通常同进同出，但"视图已销毁而宿主还挂着"这种分岔正是读数要抓的，
+ * 由 React 层猜出来的数字会把那种泄漏盖掉。
  */
 function LabBodyEditor({
-  counter,
   onLifecycle,
   onHandle,
   ...editorProps
 }: EditorProps & {
-  counter: EditorLifecycleCounter;
-  onLifecycle: (snapshot: LabLifecycleSnapshot) => void;
+  onLifecycle: (event: EditorLifecycleEvent) => void;
   onHandle: (handle: EditorHandle) => void;
 }) {
-  useEffect(() => {
-    onLifecycle(counter.editorCreated());
-    return () => {
-      onLifecycle(counter.editorDestroyed());
-    };
-  }, [counter, onLifecycle]);
-
-  return <Editor {...editorProps} onReady={onHandle} />;
+  return <Editor {...editorProps} onLifecycle={onLifecycle} onReady={onHandle} />;
 }

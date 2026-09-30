@@ -38,16 +38,26 @@ export function CommandMenu({ open, query, commands, onChoose, onClose }: Comman
     [commands, normalized],
   );
 
-  const [highlight, setHighlight] = useState(0);
-  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /*
+    "打开 / 过滤结果变化 → 高亮回到第一项"用**派生**实现，不在 effect 里 setState
+    （在 effect 里同步 setState 会多一轮渲染，eslint 的 `set-state-in-effect` 也会拦）。
+    `epoch` 变化就表示"菜单重新开了一次"：此时旧的移动记录作废，高亮读回首项。
+  */
+  const epoch = `${open}|${normalized}|${commands.join(",")}`;
+  const [moved, setMoved] = useState<{ epoch: string; index: number }>({ epoch, index: 0 });
+  const highlight = moved.epoch === epoch ? moved.index : 0;
 
-  // 打开、或过滤结果变化时，高亮回到第一项（"默认高亮首项"是契约）
-  useEffect(() => {
-    setHighlight(0);
-  }, [open, normalized, commands]);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // 过滤结果可能变短，高亮索引要夹在有效范围内（否则 Enter 会选中 undefined）
   const active = filtered.length === 0 ? -1 : Math.min(highlight, filtered.length - 1);
+
+  function moveHighlight(delta: number): void {
+    setMoved((current) => {
+      const from = current.epoch === epoch ? Math.min(current.index, filtered.length - 1) : 0;
+      return { epoch, index: (from + delta + filtered.length) % filtered.length };
+    });
+  }
 
   useEffect(() => {
     if (!open) return undefined;
@@ -71,22 +81,20 @@ export function CommandMenu({ open, query, commands, onChoose, onClose }: Comman
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         if (filtered.length === 0) return;
         event.preventDefault();
-        const delta = event.key === "ArrowDown" ? 1 : -1;
-        setHighlight((current) => {
-          const from = Math.min(current, filtered.length - 1);
-          return (from + delta + filtered.length) % filtered.length;
-        });
+        moveHighlight(event.key === "ArrowDown" ? 1 : -1);
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, filtered, active, onChoose, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- moveHighlight 只依赖 epoch/filtered，已在 deps 里
+  }, [open, filtered, active, epoch, onChoose, onClose]);
 
-  // 高亮项滚进可视区（列表可能比菜单高）
+  // 高亮项滚进可视区（列表可能比菜单高）。
+  // `scrollIntoView` 用可选调用：jsdom 与部分老浏览器没有这个方法，缺了它高亮逻辑不该整条挂掉。
   useEffect(() => {
     if (!open || active < 0) return;
-    itemRefs.current[active]?.scrollIntoView({ block: "nearest" });
+    itemRefs.current[active]?.scrollIntoView?.({ block: "nearest" });
   }, [open, active, filtered.length]);
 
   if (!open) return null;
@@ -107,7 +115,12 @@ export function CommandMenu({ open, query, commands, onChoose, onClose }: Comman
             aria-selected={index === active}
             tabIndex={-1}
             className={`menu__item cmd-menu__item${index === active ? " is-active" : ""}`}
-            onMouseEnter={() => setHighlight(index)}
+            /*
+              `mousedown` 不让默认行为发生：宿主把焦点留在输入框里（用户要继续打字过滤），
+              否则点菜单会先触发输入框 `blur` → 菜单被卸载 → 这一下点击落空。
+            */
+            onMouseDown={(event) => event.preventDefault()}
+            onMouseEnter={() => setMoved({ epoch, index })}
             onClick={() => onChoose(id)}
           >
             {FORMAT_COMMAND_LABELS[id]}

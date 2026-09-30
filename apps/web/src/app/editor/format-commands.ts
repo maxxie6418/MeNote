@@ -35,11 +35,17 @@ export type TextSelection = { from: number; to: number };
 export type FormatResult = { text: string; selection: TextSelection };
 
 /** 成对标记：包在选区两侧，选区留在标记内（继续打字就是标记里的内容）。 */
-const PAIR_MARKERS: Partial<Record<FormatCommandId, string>> = {
+const PAIR_MARKERS = {
   bold: "**",
   italic: "*",
   "inline-code": "`",
-};
+} as const;
+
+type PairCommandId = keyof typeof PAIR_MARKERS;
+
+function isPairCommand(command: FormatCommandId): command is PairCommandId {
+  return command in PAIR_MARKERS;
+}
 
 /** 链接模板里的地址占位：给用户一个可以立刻替换的合法 URL，而不是空括号。 */
 const LINK_URL = "https://";
@@ -260,19 +266,24 @@ function lineAfter(text: string, at: number): string | null {
   return text.slice(start, end === -1 ? text.length : end);
 }
 
+/** 行前缀命令的 id 集合：`LINE_RULES` 的键就是它。 */
+type LineCommandId = keyof typeof LINE_RULES;
+
 /**
  * 执行一条格式命令。纯函数：同样的入参永远得到同样的结果，不改动入参。
+ *
+ * 分支顺序即分类：成对标记 → 链接 → 代码块 → 行前缀。最后一行的 `LINE_RULES[command]`
+ * 依赖类型收窄——**新加一个命令 id 却忘了在这里实现，TypeScript 会直接报错**（不是静默不改文本）。
  */
 export function applyFormatCommand(
   text: string,
   selection: TextSelection,
   command: FormatCommandId,
 ): FormatResult {
-  const marker = PAIR_MARKERS[command];
-  if (marker) return applyPair(text, selection, marker);
+  if (isPairCommand(command)) return applyPair(text, selection, PAIR_MARKERS[command]);
   if (command === "link") return applyLink(text, selection);
   if (command === "code-block") return applyCodeBlock(text, selection);
-  return applyLinePrefix(text, selection, LINE_RULES[command]);
+  return applyLinePrefix(text, selection, LINE_RULES[command satisfies LineCommandId]);
 }
 
 /** 命令的中文名（菜单与提示共用，避免两处各写一份）。 */

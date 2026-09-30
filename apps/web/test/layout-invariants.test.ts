@@ -110,6 +110,26 @@ describe("功能栏几何（DESIGN.md §2.5-2 不变量）", () => {
     expect(app).toMatch(/\.composer__modes\s*\{[^}]*display:\s*flex/);
   });
 
+  /*
+    轻量即时渲染宿主（编辑拓展阶段 B / Task B5）：输入态**继续用 `.composer__input`**，
+    所以上面那条三行结构不变量同时守住了它；这里补呈现态自己的约束——
+    Markdown 段距不能把录入框撑高（限高 + 内部滚动），否则三行 136px 的结构就不成立了。
+  */
+  it("快捷输入呈现态：限高 + 内部滚动，且不靠 hover 才能回到编辑", () => {
+    expect(rulePx(app, "\\.quick-composer__view", "max-height")).toBe(180);
+    expect(app).toMatch(/\.quick-composer__view\s*\{[^}]*overflow-y:\s*auto/);
+    // 呈现态是"点击继续编辑"的入口：触屏要有 44px 命中区（不是只有 hover 才算可点）
+    expect(app).toMatch(/@media\s*\(pointer:\s*coarse\)\s*\{[^}]*\.quick-composer__view\s*\{[^}]*min-height:\s*44px/);
+    // 呈现态里的 markdown 容器按录入框排版，不套阅读区的 740px 宽与 80px 底距
+    expect(app).toMatch(/\.quick-composer__view\s+\.markdown-body\s*\{[^}]*max-width:\s*none/);
+  });
+
+  it("快捷输入的命令菜单：向上弹出、限高滚动（录入框在窗口底部，向下弹会被裁掉）", () => {
+    expect(app).toMatch(/\.cmd-menu\s*\{[^}]*bottom:\s*calc\(100%\s*\+\s*6px\)/);
+    expect(rulePx(app, "\\.cmd-menu", "max-height")).toBe(232);
+    expect(app).toMatch(/\.cmd-menu\s*\{[^}]*overflow-y:\s*auto/);
+  });
+
   it("页面不滚动：滚动只发生在各栏内部（DESIGN.md §2.7）", () => {
     expect(app).toMatch(/body\s*\{[^}]*overflow:\s*hidden/);
     for (const selector of ["\\.fnbar__scroll", "\\.listpane__scroll", "\\.settings__body"]) {

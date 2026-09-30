@@ -246,27 +246,26 @@ describe("功能栏结构", () => {
   });
 });
 
-describe("录入框三档附加项", () => {
-  it("memo 档空容器占位；task 档截止+优先级；note 档首行作标题+根目录且无加密胶囊", async () => {
+describe("录入框两行（属性行已退出功能栏，2026-10-01）", () => {
+  it("三档切换只有输入区 + 模式行：不出现属性容器、截止/优先级、首行作标题、落点 chip", async () => {
     const user = userEvent.setup();
     render(<Composer onPublishNote={vi.fn()} />);
 
-    const extras = screen.getByTestId("composer-extras");
-    expect(extras.textContent).toBe(""); // memo：空容器，不塌陷（容器仍在）
+    // 属性行连同它的容器一起没了（原 `.composer__extras[data-testid="composer-extras"]`）
+    expect(screen.queryByTestId("composer-extras")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "待办" }));
-    // task 档是真实控件（M2-5）：原生日期输入 + 优先级三段
-    expect(screen.getByLabelText("截止日期")).toBeTruthy();
-    expect(extras.textContent).toContain("截止");
+    // task 档不再有可编辑属性：没有日期控件、没有优先级三段
+    expect(screen.queryByLabelText("截止日期")).toBeNull();
     for (const label of ["高", "中", "低"]) {
-      expect(screen.getByRole("button", { name: label })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: label })).toBeNull();
     }
 
     await user.click(screen.getByRole("button", { name: "笔记" }));
-    expect(extras.textContent).toContain("首行作标题");
-    expect(extras.textContent).toContain("根目录");
+    expect(screen.queryByText("首行作标题")).toBeNull();
+    expect(screen.queryByText("根目录")).toBeNull();
     // 需求 §8.7：输入框没有加密开关
-    expect(extras.textContent).not.toContain("加密");
+    expect(screen.queryByText("加密")).toBeNull();
   });
 
   it("笔记档 Ctrl+Enter 发布：首行作标题、其余为正文、发布后清空", async () => {
@@ -284,21 +283,24 @@ describe("录入框三档附加项", () => {
     expect(input.value).toBe("");
   });
 
-  it("未接入的档位按 Ctrl+Enter 不发布", async () => {
+  it("待办档发布用默认值：无截止 + 优先级「中」（属性去添加内容窗口设）", async () => {
     const user = userEvent.setup();
+    const onPublishTask = vi.fn();
     const onPublishNote = vi.fn();
-    render(<Composer onPublishNote={onPublishNote} />);
+    render(<Composer onPublishTask={onPublishTask} onPublishNote={onPublishNote} />);
 
     await user.click(screen.getByRole("button", { name: "待办" }));
-    const input = screen.getByLabelText("快速录入");
+    const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
     await user.click(input);
-    await user.keyboard("随手一记");
+    await user.keyboard("买牛奶");
     await user.keyboard("{Control>}{Enter}{/Control}");
 
+    expect(onPublishTask).toHaveBeenCalledWith("买牛奶", { due: null, priority: "medium" });
     expect(onPublishNote).not.toHaveBeenCalled();
+    expect(input.value).toBe("");
   });
 
-  it("Memo 档 Ctrl+Enter 发布：清空输入框、带上 asTask", async () => {
+  it("Memo 档 Ctrl+Enter 发布：清空输入框、asTask 恒为 false", async () => {
     const user = userEvent.setup();
     const onPublishMemo = vi.fn();
     render(<Composer onPublishMemo={onPublishMemo} />);
@@ -312,29 +314,19 @@ describe("录入框三档附加项", () => {
     expect(input.value).toBe("");
   });
 
-  it("写了 - [ ] 才提示「设为清单？」：点了才带清单标记，删掉清单项则自动作废", async () => {
+  it("写了 - [ ] 也不会自动标清单：功能栏录入框不再给「设为清单？」入口（`asTask` 恒 false）", async () => {
     const user = userEvent.setup();
     const onPublishMemo = vi.fn();
     render(<Composer onPublishMemo={onPublishMemo} />);
 
     const input = screen.getByLabelText("快速录入") as HTMLTextAreaElement;
-    const extras = screen.getByTestId("composer-extras");
-
-    // 普通 Memo：不出现提示（不自动改语义）
     await user.click(input);
-    await user.type(input, "普通一条");
-    expect(extras.textContent).not.toContain("设为清单");
-
-    // 写了 - [ ] 才出现（user.type 会把 [ 当特殊键，所以直接赋值）
+    // user.type 会把 [ 当特殊键，所以直接赋值
     fireEvent.change(input, { target: { value: "普通一条\n- [ ] 买牛奶" } });
-    expect(extras.textContent).toContain("设为清单？");
-
-    // 点一下才带上标记（点按钮会移走焦点，发布前先点回输入框）
-    await user.click(screen.getByRole("button", { name: /设为清单/ }));
-    expect(extras.textContent).toContain("已设为清单");
+    expect(screen.queryByRole("button", { name: /设为清单/ })).toBeNull();
 
     await user.click(input);
     await user.keyboard("{Control>}{Enter}{/Control}");
-    expect(onPublishMemo).toHaveBeenCalledWith("普通一条\n- [ ] 买牛奶", { asTask: true });
+    expect(onPublishMemo).toHaveBeenCalledWith("普通一条\n- [ ] 买牛奶", { asTask: false });
   });
 });

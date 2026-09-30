@@ -3,10 +3,12 @@
  * 两个录入面接入轻量即时渲染宿主（编辑拓展阶段 B / Task B6）。
  *
  * 这一层验的是**接线**，不是命令语义（后者在 `format-commands.test.ts`）：
- * 功能栏录入框与添加内容窗口都换成 `QuickComposer`，`/` 用共享命令表，`@` 只把焦点送到
- * 既有受控字段（**不进正文**），两处用同一套字段选择器；发布仍走各自原有的回调。
+ * 功能栏录入框与添加内容窗口都换成 `QuickComposer`，`/` 用共享命令表；发布仍走各自原有的回调。
+ *
+ * `@` 属性只在**添加内容窗口**里出现（2026-10-01 用户反馈问题 1：功能栏录入框的属性行退出，
+ * `attributes` 传空表 → 不弹菜单），窗口那个 `@` 只把焦点送到既有受控字段、**不进正文**。
  */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -91,7 +93,7 @@ describe("功能栏录入框", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("待办档 `@` → 截止日期：焦点落到既有的日期字段，`@` 不进正文", async () => {
+  it("待办档也没有 `@` 属性菜单：属性行退出功能栏后，`@` 只是普通字符", async () => {
     const user = userEvent.setup();
     const onPublishTask = vi.fn();
     render(<Composer onPublishTask={onPublishTask} />);
@@ -99,35 +101,39 @@ describe("功能栏录入框", () => {
     await user.click(screen.getByRole("button", { name: "待办" }));
     const input = screen.getByRole("textbox", { name: "快速录入" }) as HTMLTextAreaElement;
     await user.type(input, "交周报 @");
-    expect(within(screen.getByRole("listbox", { name: "属性" })).getByRole("option", { name: "截止日期" })).toBeTruthy();
 
-    await user.keyboard("{Enter}");
-
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("截止日期");
-    // 同一录入面内换焦点：输入态**不**塌成呈现，文本就地更新（`@` 已被吃掉）
-    expect(input.value).toBe("交周报 ");
-    expect(screen.queryByTestId("preview")).toBeNull();
+    // 属性选择只在「添加内容窗口」有（2026-10-01 用户反馈问题 1）
     expect(screen.queryByRole("listbox")).toBeNull();
+    // `@` 是用户自己写的内容，原样保留
+    expect(input.value).toBe("交周报 @");
 
-    // 发布仍然只用受控字段的值（属性没有变成正文）
-    onPublishTask.mockClear();
     await user.click(screen.getByRole("button", { name: "发布" }));
-    expect(onPublishTask).toHaveBeenCalledWith("交周报 ", { due: null, priority: "medium" });
+    // 发布只用默认属性（无截止、优先级「中」），正文不掺任何属性
+    expect(onPublishTask).toHaveBeenCalledWith("交周报 @", { due: null, priority: "medium" });
   });
 
-  it("待办档 `@` → 优先级：聚焦当前生效的那一档", async () => {
+  it("待办档不再有可编辑属性：截止日期与优先级控件都不在", async () => {
     const user = userEvent.setup();
     render(<Composer />);
 
     await user.click(screen.getByRole("button", { name: "待办" }));
-    const input = screen.getByRole("textbox", { name: "快速录入" });
-    await user.type(input, "@");
-    await user.keyboard("{ArrowDown}{Enter}");
+    expect(screen.queryByLabelText("截止日期")).toBeNull();
+    expect(screen.queryByRole("button", { name: "中" })).toBeNull();
+  });
 
-    const focused = document.activeElement as HTMLElement;
-    expect(focused.getAttribute("aria-pressed")).toBe("true");
-    expect(focused.closest('[aria-label="优先级"]')).toBeTruthy();
-    expect((input as HTMLTextAreaElement).value).toBe("");
+  it("`/` 菜单带上宿主量出来的方向与限高（不再写死向上弹）", async () => {
+    const user = userEvent.setup();
+    render(<Composer />);
+
+    await user.type(screen.getByRole("textbox", { name: "快速录入" }), "/");
+    const menu = screen.getByRole("listbox", { name: "命令" }) as HTMLElement;
+    /*
+      jsdom 没有排版引擎：锚点矩形全是 0、边界退到视口（`menuBoundsFor` 找不到 `overflow` 非
+      visible 的祖先）→ 下方空间充足 → 向下弹 + 满限高。
+      真实浏览器里功能栏录入框同样是"向下"；方向判定本身在 `menu-placement.test.ts` 里逐条覆盖。
+    */
+    expect(menu.className).toContain("cmd-menu--down");
+    expect(menu.style.maxHeight).toBe("232px");
   });
 });
 

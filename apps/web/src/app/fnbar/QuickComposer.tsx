@@ -54,6 +54,11 @@ import {
   type QuickAttributeId,
 } from "./quick-attributes";
 import { applyFormatAt, triggerAt as matchTrigger } from "../editor/trigger";
+import {
+  MENU_MAX_HEIGHT,
+  menuBoxForNode,
+  type MenuBox,
+} from "../editor/menu-placement";
 
 const MarkdownPreview = lazy(async () => {
   const mod = await import("../editor/MarkdownPreview");
@@ -132,6 +137,16 @@ export function QuickComposer({
   const [editing, setEditing] = useState(true);
   const [trigger, setTrigger] = useState<Trigger | null>(null);
   const [attributeIndex, setAttributeIndex] = useState(0);
+  /**
+   * 菜单往哪边弹 + 限高多少。**打开菜单时量一次**（`menuBoxForNode`）：
+   * 功能栏录入框在功能栏顶部（下方有空间 → 向下），编辑器试验页那类锚点在页面底部（向上），
+   * 添加内容窗口里 `.modal` 是 `overflow: hidden` 的真正边界（量的是它，不是视口）。
+   * 见 `menu-placement.ts`；用户 2026-10-01 反馈的问题 3 就是"一律向上弹、内容出框看不见"。
+   */
+  const [menuBox, setMenuBox] = useState<MenuBox>({
+    placement: "down",
+    maxHeight: MENU_MAX_HEIGHT,
+  });
   /**
    * 当前块的**首行行号**。`null` = 还没点过任何块，跟随最后一块（正常打字的默认路径）。
    * 用行号而不是下标：`value` 一变（打字、回车、删除）下标会错位，行号才是稳定的锚。
@@ -263,7 +278,10 @@ export function QuickComposer({
     if (composingRef.current) return;
     const next = triggerAt(nextText, caret);
     // 这个宿主没有可写的属性命令时，`@` 不进菜单（不然会留一个"按键没反应"的状态）
-    setTrigger(next?.kind === "@" && attributes.length === 0 ? null : next);
+    const resolved = next?.kind === "@" && attributes.length === 0 ? null : next;
+    // 菜单要开了才量空间：量的是这一帧的锚点位置（滚动、切屏之后重新触发会重量）
+    if (resolved) setMenuBox(menuBoxForNode(node));
+    setTrigger(resolved);
     setAttributeIndex(0);
   }
 
@@ -419,11 +437,18 @@ export function QuickComposer({
           commands={quickFormatCommandsFor(mode)}
           onChoose={applyCommand}
           onClose={() => setTrigger(null)}
+          placement={menuBox.placement}
+          maxHeight={menuBox.maxHeight}
         />
       ) : null}
 
       {trigger?.kind === "@" ? (
-        <div className="menu cmd-menu" role="listbox" aria-label="属性">
+        <div
+          className={`menu cmd-menu${menuBox.placement === "down" ? " cmd-menu--down" : ""}`}
+          role="listbox"
+          aria-label="属性"
+          style={{ maxHeight: menuBox.maxHeight }}
+        >
           {filteredAttributes.length === 0 ? (
             <div className="cmd-menu__empty">没有匹配的属性</div>
           ) : (

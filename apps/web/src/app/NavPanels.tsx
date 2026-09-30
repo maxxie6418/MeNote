@@ -72,14 +72,6 @@ export interface FnBarWiringInput {
  */
 export function fnbarWiring(input: FnBarWiringInput): FnBarProps {
   const { workspace, goNotes, toast } = input;
-  /*
-    「笔记」档的落点提示：与 `createNote` 的判定**同一口径**——只有「笔记本」视图有笔记本上下文，
-    最近编辑 / 收藏 / 标签落根目录。这里只负责显示，写入路径在 `useNoteCreation`。
-  */
-  const noteFolderId = input.view.kind === "notebook" ? (input.view.folderId ?? null) : null;
-  const noteTargetLabel = noteFolderId
-    ? (workspace.folders.find((folder) => folder.id === noteFolderId)?.name ?? "根目录")
-    : "根目录";
 
   /**
    * 切分栏浏览（首页 / Memo / 待办）：`null` = 回到笔记双栏。
@@ -135,7 +127,6 @@ export function fnbarWiring(input: FnBarWiringInput): FnBarProps {
     showHome: input.showHome,
     composerMode: input.composerMode,
     onComposerModeChange: input.onComposerModeChange,
-    noteTargetLabel,
     notebookPanel: input.notebookPanel,
     vault: input.vault,
   };

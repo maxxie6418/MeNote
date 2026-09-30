@@ -1,9 +1,10 @@
 /**
  * 功能栏（DESIGN.md §2.2：宽 294px；§2.7 的滚动归属见下）。
  *
- * 结构与间距照抄原型，以保住「新建按钮 38px + 录入框 136px → 导航区顶部 y = 252」的
- * 结构不变量（DESIGN.md §2.5-2）：
- *   54(顶栏) + 12(padding) + 38(按钮) + 12(录入框上边距) + 136(录入框) = 252
+ * 结构与间距照抄原型，以保住「新建按钮 38px + 录入框两行 → 导航区顶部 y」的结构不变量
+ * （`DESIGN.md` §2.5-2；录入框自 2026-10-01 起不再有"模式附加项"那一行，默认高由 136px 降为
+ * 由两行内容决定的值）：
+ *   54(顶栏) + 12(padding) + 38(按钮) + 12(录入框上边距) + 录入框默认高
  *
  * 组成（自上而下）：
  * 1. `.fnbar__top`——新建按钮 + 快速录入框（固定，不滚）；
@@ -51,8 +52,6 @@ export interface FnBarProps {
   /** 录入框模式受控（M2-8 首页的「记录 Memo / 新建待办」要切档） */
   composerMode?: ComposerMode;
   onComposerModeChange?: (mode: ComposerMode) => void;
-  /** 「笔记」档的落点提示（当前笔记本名；缺省「根目录」）——见 `Composer.noteTargetLabel` */
-  noteTargetLabel?: string;
 }
 
 export function FnBar({
@@ -70,7 +69,6 @@ export function FnBar({
   showHome = true,
   composerMode,
   onComposerModeChange,
-  noteTargetLabel,
 }: FnBarProps) {
   return (
     <aside className="fnbar">
@@ -85,7 +83,6 @@ export function FnBar({
           onPublishTask={onPublishTask}
           mode={composerMode}
           onModeChange={onComposerModeChange}
-          noteTargetLabel={noteTargetLabel}
         />
       </div>
 

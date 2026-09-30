@@ -148,7 +148,7 @@ describe("顶栏块位（DESIGN.md §2.5-1）", () => {
 });
 
 describe("功能栏与录入框占位", () => {
-  it("三档模式可切换、附加项容器恒在、发布按钮禁用且说明原因", async () => {
+  it("三档模式可切换、录入框只有两行（无属性容器）、发布按钮禁用且说明原因", async () => {
     const user = userEvent.setup();
     render(
       <FnBar
@@ -171,30 +171,27 @@ describe("功能栏与录入框占位", () => {
       />,
     );
 
-    // 结构不变量：新建按钮 + 录入框三行
+    // 结构不变量：新建按钮 + 录入框两行（输入区 / 模式行）
     expect(screen.getByRole("button", { name: /新建笔记/ })).toBeTruthy();
     const input = screen.getByLabelText("快速录入");
     expect(input).toBeTruthy();
-
-    const extras = screen.getByTestId("composer-extras");
-    expect(extras).toBeTruthy();
+    // 属性行已按用户 2026-10-01 反馈退出功能栏录入框：容器与字段都不在
+    expect(screen.queryByTestId("composer-extras")).toBeNull();
 
     const memo = screen.getByRole("button", { name: "Memo" });
     const task = screen.getByRole("button", { name: "待办" });
     const noteMode = screen.getByRole("button", { name: "笔记" });
 
     expect(memo.getAttribute("aria-pressed")).toBe("true");
-    expect(extras.textContent).toBe(""); // memo 模式：空容器占位，不塌陷
 
     await user.click(task);
     expect(task.getAttribute("aria-pressed")).toBe("true");
-    expect(extras.textContent).toContain("截止");
+    // 待办档不再有可编辑属性（截止 / 优先级去「添加内容窗口」设）
+    expect(screen.queryByLabelText("截止日期")).toBeNull();
+    expect(screen.queryByRole("button", { name: "中" })).toBeNull();
 
     await user.click(noteMode);
-    expect(extras.textContent).toContain("首行作标题");
-
-    // 容器始终存在（切换模式不换高度靠 CSS 固定 26px，这里断言容器没被移除）
-    expect(screen.getByTestId("composer-extras")).toBeTruthy();
+    expect(screen.queryByText("首行作标题")).toBeNull();
 
     // 笔记档已可用：禁用原因是"还没写内容"，不再是"M2 未提供"
     const publish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
@@ -212,7 +209,6 @@ describe("功能栏与录入框占位", () => {
     const taskPublish = screen.getByRole("button", { name: "发布" }) as HTMLButtonElement;
     expect(taskPublish.disabled).toBe(true);
     expect(taskPublish.title).toContain("先写点内容");
-    expect(screen.getByLabelText("截止日期")).toBeTruthy();
   });
 });
 

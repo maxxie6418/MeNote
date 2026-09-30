@@ -13,6 +13,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FORMAT_COMMAND_LABELS, type FormatCommandId } from "./format-commands";
+import type { MenuPlacement } from "./menu-placement";
 
 export interface CommandMenuProps {
   open: boolean;
@@ -21,6 +22,14 @@ export interface CommandMenuProps {
   commands: readonly FormatCommandId[];
   onChoose: (id: FormatCommandId) => void;
   onClose: () => void;
+  /**
+   * 弹出方向：**默认 `up`**（编辑器试验页的锚点都在页面底部，向下的空间留给读数卡）。
+   * 宿主量到下方放得下时传 `"down"`——功能栏录入框在功能栏顶部，一律向上弹会顶出视口
+   * （用户 2026-10-01 反馈的问题 3）。量法与判定在 `menu-placement.ts`。
+   */
+  placement?: MenuPlacement;
+  /** 菜单限高（px）：宿主按锚点可用空间压出来的值；不传就用 CSS 里的 232px */
+  maxHeight?: number;
 }
 
 /**
@@ -31,7 +40,15 @@ function matches(id: FormatCommandId, query: string): boolean {
   return id.includes(query) || FORMAT_COMMAND_LABELS[id].includes(query);
 }
 
-export function CommandMenu({ open, query, commands, onChoose, onClose }: CommandMenuProps) {
+export function CommandMenu({
+  open,
+  query,
+  commands,
+  onChoose,
+  onClose,
+  placement = "up",
+  maxHeight,
+}: CommandMenuProps) {
   const normalized = query.replace(/^\//, "").trim().toLowerCase();
   const filtered = useMemo(
     () => commands.filter((id) => matches(id, normalized)),
@@ -100,7 +117,12 @@ export function CommandMenu({ open, query, commands, onChoose, onClose }: Comman
   if (!open) return null;
 
   return (
-    <div className="menu cmd-menu" role="listbox" aria-label="命令">
+    <div
+      className={`menu cmd-menu${placement === "down" ? " cmd-menu--down" : ""}`}
+      role="listbox"
+      aria-label="命令"
+      style={maxHeight === undefined ? undefined : { maxHeight }}
+    >
       {filtered.length === 0 ? (
         <div className="cmd-menu__empty">没有匹配的命令</div>
       ) : (

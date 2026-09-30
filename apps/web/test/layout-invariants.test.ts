@@ -82,38 +82,61 @@ describe("结构尺寸令牌（DESIGN.md §2.2【已定】）", () => {
 });
 
 describe("功能栏几何（DESIGN.md §2.5-2 不变量）", () => {
-  it("54 + 12 + 38 + 12 + 136 = 252：导航区顶部 y=252 的算式不能变", () => {
+  it("录入框两行高 95px → 导航区顶部 y = 211（54 + 12 + 38 + 12 + 95）", () => {
     const topbar = tokenPx("topbar-h");
     const fnTopPadding = rulePx(app, "\\.fnbar__top", "padding");
     const newButton = rulePx(app, "\\.btn-new", "height");
     const composerMargin = rulePx(app, "\\.composer", "margin-top");
-    const composerHeight = 136; // 由录入框三行内容决定，原型实测值
+
+    /*
+      录入框默认高由**声明的两行**加出来，不再写死"原型实测 136"——
+      2026-10-01 用户反馈问题 1：属性行（`display:none` 之外的那条 26px 附加项）退出功能栏录入框，
+      默认高 136 → 95，导航区顶部 y 252 → 211。
+
+        上下边框 1×2 + 上下内边距 9×2 + 输入区 min-height 40 + 模式行 margin-top 6 + 模式行 29
+        模式行 29 = `.segmented` 的 padding 2×2 + border 1×2 + 紧凑档按钮 23（发布按钮 27 更矮）
+    */
+    const composerHeight =
+      rulePx(app, "\\.composer", "border") * 2 +
+      rulePx(app, "\\.composer", "padding") * 2 +
+      rulePx(app, "\\.composer__input", "min-height") +
+      rulePx(app, "\\.composer__modes", "margin-top") +
+      rulePx(app, "\\.segmented", "padding") * 2 +
+      rulePx(app, "\\.segmented", "border") * 2 +
+      rulePx(app, "\\.segmented--compact \\.segmented__item", "height");
 
     expect(topbar).toBe(54);
     expect(fnTopPadding).toBe(12);
     expect(newButton).toBe(38);
     expect(composerMargin).toBe(12);
-    expect(topbar + fnTopPadding + newButton + composerMargin + composerHeight).toBe(252);
+    expect(composerHeight).toBe(95);
+    expect(topbar + fnTopPadding + newButton + composerMargin + composerHeight).toBe(211);
   });
 
-  it("录入框三行结构：输入区 40–180 可纵向 resize、附加项固定 26 且不换行、模式行同排", () => {
+  it("录入框两行结构：输入区 40–180 可纵向 resize、模式行同排；属性行不得回到功能栏", () => {
     expect(rulePx(app, "\\.composer__input", "min-height")).toBe(40);
     expect(rulePx(app, "\\.composer__input", "max-height")).toBe(180);
     expect(app).toMatch(/\.composer__input\s*\{[^}]*resize:\s*vertical/);
 
-    // 附加项容器：固定高度 + nowrap，禁用 display:none 塌陷（DESIGN.md §2.5-2）
-    expect(rulePx(app, "\\.composer__extras", "height")).toBe(26);
-    expect(app).toMatch(/\.composer__extras\s*\{[^}]*flex-wrap:\s*nowrap/);
-    expect(app).not.toMatch(/\.composer__extras[^{]*\{[^}]*display:\s*none/);
-
     // 模式行：左模式切换 + 右发布按钮，同一行
     expect(app).toMatch(/\.composer__modes\s*\{[^}]*display:\s*flex/);
+
+    /*
+      **属性行禁止回到功能栏录入框**（2026-10-01 用户反馈问题 1：没编辑时看着是一大块输入区，
+      真开始打字可写的地方只有 40px）。规则块整个删掉，回来就红（注释里提到这个类名不算）。
+    */
+    expect(app).not.toMatch(/\.composer__extras\s*\{/);
+
+    // 属性字段行只剩「添加内容窗口」这一处：仍要 26px、`nowrap`、不许 `display:none` 塌陷
+    expect(rulePx(app, "\\.addentry__extras", "min-height")).toBe(26);
+    expect(app).toMatch(/\.addentry__extras\s*\{[^}]*flex-wrap:\s*nowrap/);
+    expect(app).not.toMatch(/\.addentry__extras[^{]*\{[^}]*display:\s*none/);
   });
 
   /*
     轻量即时渲染宿主（编辑拓展阶段 B / Task B5）：输入态**继续用 `.composer__input`**，
-    所以上面那条三行结构不变量同时守住了它；这里补呈现态自己的约束——
-    Markdown 段距不能把录入框撑高（限高 + 内部滚动），否则三行 136px 的结构就不成立了。
+    所以上面那条两行结构不变量同时守住了它；这里补呈现态自己的约束——
+    Markdown 段距不能把录入框撑高（限高 + 内部滚动），否则录入框默认高就不成立了。
   */
   it("快捷输入呈现态：限高 + 内部滚动，且不靠 hover 才能回到编辑", () => {
     expect(rulePx(app, "\\.quick-composer__view", "max-height")).toBe(180);
@@ -124,10 +147,16 @@ describe("功能栏几何（DESIGN.md §2.5-2 不变量）", () => {
     expect(app).toMatch(/\.quick-composer__view\s+\.markdown-body\s*\{[^}]*max-width:\s*none/);
   });
 
-  it("快捷输入的命令菜单：向上弹出、限高滚动（录入框在窗口底部，向下弹会被裁掉）", () => {
+  it("快捷输入的命令菜单：默认向上 + 可向下（宿主按可用空间选）、限高滚动", () => {
     expect(app).toMatch(/\.cmd-menu\s*\{[^}]*bottom:\s*calc\(100%\s*\+\s*6px\)/);
     expect(rulePx(app, "\\.cmd-menu", "max-height")).toBe(232);
     expect(app).toMatch(/\.cmd-menu\s*\{[^}]*overflow-y:\s*auto/);
+    /*
+      向下弹的修饰类必须有：功能栏录入框在功能栏顶部（y≈116），菜单限高 232px 一律向上弹会
+      顶出视口顶部（用户 2026-10-01 反馈的问题 3）。方向判定在 `menu-placement.test.ts`。
+    */
+    expect(app).toMatch(/\.cmd-menu--down\s*\{[^}]*top:\s*calc\(100%\s*\+\s*6px\)/);
+    expect(app).toMatch(/\.cmd-menu--down\s*\{[^}]*bottom:\s*auto/);
   });
 
   it("页面不滚动：滚动只发生在各栏内部（DESIGN.md §2.7）", () => {

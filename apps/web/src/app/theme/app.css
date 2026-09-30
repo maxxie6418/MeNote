@@ -2,8 +2,10 @@
  * 布局与组件的样式（全部走 tokens.css 的令牌；间距/字号刻度见 tokens.css 的临时说明）。
  *
  * 结构尺寸与关键间距**照抄原型**（DESIGN.md §3.1 要求定稿前从原型取值），因此
- * 「功能栏：新建按钮 38px + 录入框总高 136px → 导航区顶部 y = 252px」的不变量成立：
- *   54(顶栏) + 12(fn-top padding) + 38(按钮) + 12(录入框上边距) + 136(录入框) = 252
+ * 「功能栏：新建按钮 38px + 录入框 → 导航区顶部 y」的不变量成立：
+ *   54(顶栏) + 12(fn-top padding) + 38(按钮) + 12(录入框上边距) + 95(录入框两行) = 211
+ * 录入框自 2026-10-01 起**不再有"模式附加项"那一行**（用户反馈：没编辑时看着是一大块输入区，
+ * 真打字可写的地方只有 40px）→ 默认高由 136px 降为 95px，导航区顶部 y 由 252 变 211。
  * 改动这些值前必须重跑 `prototype/verify-prototype.js` 并重新测量（DESIGN.md §8-4）。
  */
 
@@ -208,7 +210,11 @@ button {
   filter: brightness(1.04);
 }
 
-/* 快速录入框：三行结构；总高 136px（结构不变量） */
+/*
+  快速录入框：**两行**结构（输入区 → 模式行），默认高 95px（结构不变量，见文件头算式）。
+  2026-10-01 用户反馈"没编辑时看到的输入范围很大、真开始输入时压缩得很小"：原设计在中间固定留
+  26px 放可编辑属性（`.composer__extras`，已删），现由「添加内容窗口」承担属性输入。
+*/
 .composer {
   margin-top: 12px;
   background: var(--panel);
@@ -239,23 +245,12 @@ button {
   color: var(--muted);
 }
 
-/* 模式附加项：固定 26px 高、单排不换行；切模式只换内容不换高度（DESIGN.md §2.5-2） */
-.composer__extras {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: var(--sp-2);
-  height: 26px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.composer__extras::-webkit-scrollbar {
-  height: 0;
-}
-
+/*
+  模式行（录入框的第二行也是最后一行）：左分段控件 + 右发布按钮。
+  上面那条「模式附加项」容器（`.composer__extras`，固定 26px、`nowrap`、禁止 `display:none`
+  塌陷）已随 2026-10-01 的用户反馈删除——功能栏录入框不再承载属性输入。
+  属性字段行现在只有「添加内容窗口」有（`.addentry__extras`，保留同族的 26px / `nowrap`）。
+*/
 .composer__modes {
   display: flex;
   align-items: center;
@@ -266,7 +261,7 @@ button {
 /*
   快捷输入的轻量即时渲染宿主（编辑拓展阶段 B / Task B5）。
   输入态沿用 `.composer__input`（40–180px、`resize: vertical`）——它由 `layout-invariants.test.ts`
-  守着，是"三行 136px"结构不变量的一部分；这里只补呈现态与定位，不另立一套尺寸。
+  守着，是"两行录入框"结构不变量的一部分；这里只补呈现态与定位，不另立一套尺寸。
 
   焦点环不在这里补：`.composer__input` 自己抹掉了 outline，宿主必须给补偿——功能栏是
   `.composer:focus-within`、添加内容窗口是 `.addentry__input:focus`，两处都已存在。
@@ -303,7 +298,7 @@ button {
   padding: 0;
 }
 
-/* 呈现内容里的段落与列表收紧（三行录入框里不该出现大段空白） */
+/* 呈现内容里的段落与列表收紧（两行录入框里不该出现大段空白） */
 .quick-composer__view .markdown-body p {
   margin: 0 0 var(--sp-1);
 }
@@ -314,7 +309,7 @@ button {
 
 /*
   编辑态的块列表（v0.6.3 块级即时渲染）：已写完的块在这里呈现、当前块是 textarea。
-  重点是**不许把功能栏顶高**——三行 136px 是结构不变量，所以列表自己滚
+  重点是**不许把功能栏顶高**——录入框默认高是结构不变量（两行 95px），所以列表自己滚
   （`DESIGN.md`：每层一个滚动容器），上限与 `.quick-composer__view` 一致取 180px。
 */
 .quick-composer__blocks {
@@ -345,8 +340,11 @@ button {
 }
 
 /*
-  `/` 命令菜单（编辑拓展阶段 B / Task B2）：复用 `.menu` 的外观，只补放置与「向上弹出」
-  ——录入框在窗口底部，向下弹会被视口裁掉。
+  `/` 与 `@` 菜单（编辑拓展阶段 B / Task B2）：复用 `.menu` 的外观，只补放置。
+  **默认向上弹**（编辑器试验页的锚点都在页面底部，向下的空间留给读数卡）；
+  宿主量到下方放得下时加 `.cmd-menu--down`——功能栏录入框在功能栏顶部，一律向上弹会顶出视口
+  （用户 2026-10-01 反馈的问题 3）。方向与限高由 `app/editor/menu-placement.ts` 算，
+  `max-height` 由宿主按可用空间写成内联值（窗口里那个 `overflow: hidden` 的 `.modal` 才是边界）。
 */
 .cmd-menu {
   left: 0;
@@ -354,6 +352,12 @@ button {
   max-height: 232px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* 向下弹：清掉向上那条，改从锚点下方展开 */
+.cmd-menu--down {
+  top: calc(100% + 6px);
+  bottom: auto;
 }
 
 .cmd-menu__item.is-active {
@@ -4369,7 +4373,7 @@ button.chip--tag:hover {
   color: var(--muted);
 }
 
-/* 模式附加项行：与录入框 `.composer__extras` 同族取值（切字段只换内容不塌高度） */
+/* 模式附加项行（只剩「添加内容窗口」这一处）：切字段只换内容不塌高度（26px / `nowrap`） */
 .addentry__extras {
   display: flex;
   align-items: center;

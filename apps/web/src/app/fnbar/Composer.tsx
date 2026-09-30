@@ -1,12 +1,19 @@
 /**
- * 快速录入框（功能拆解 M04-01、M02-01；DESIGN.md §2.5-2 的三行结构不变量）。
+ * 快速录入框（功能拆解 M04-01、M02-01；DESIGN.md §2.5-2 的两行结构不变量）。
  *
- * 三行顺序**不可变**：输入区（min 40 / max 180px，可纵向 resize）→ 模式附加项（固定 26px，
- * 不换行）→ 模式行（左：盒式分段控件；右：发布按钮，同一行）。切模式**只换附加项内容，
- * 不换高度**——`memo` 档是空容器占位，不得用 `display:none` 让容器塌陷（有回归用例守着）。
+ * 两行顺序**不可变**：输入区（min 40 / max 180px，可纵向 resize）→ 模式行
+ * （左：盒式分段控件；右：发布按钮，同一行）。
  *
- * 发布能力按步骤接入：`笔记` 档现在就能用（首行作标题，Q24 的入口二）；`Memo`/`待办` 分别在
- * M2-4/M2-5 落地，在此之前按钮**禁用并说明原因**（DESIGN.md §6.1），不做"点了没反应"的空按钮。
+ * 【2026-10-01 用户反馈问题 1】**功能栏这个录入框不再带"模式附加项"那一行**：原设计在输入区与
+ * 模式行之间固定留 26px 放可编辑属性（待办：截止 + 优先级；Memo：「设为清单？」；笔记：
+ * 「首行作标题」+ 落点），结果"没编辑时看着是一大块输入区，真开始打字可写的地方只有 40px"。
+ * 属性输入现在只留在**添加内容窗口**（`AddEntryDialog`，Memo / 待办视图的「添加」），
+ * `@` 属性菜单也随这一行一起退出功能栏录入框（`attributes` 传空表 → 不弹菜单，见 `QuickComposer`），
+ * 后期由 `@` 统一接管属性设置（用户口径）。
+ *
+ * 因此这里的发布用默认值：**待办 = 无截止 + 优先级「中」**、**Memo = 不标清单**——要设属性去
+ * 添加内容窗口。`ModeExtras` / `TASK_ITEM_PATTERN` / `ATTRIBUTE_FOCUS_SELECTOR` 仍从本文件导出，
+ * 由窗口复用（同一份字段判定，不抄第二套）。
  */
 import { splitFirstLineAsTitle } from "@menote/mdcore";
 import {
@@ -14,12 +21,12 @@ import {
   TASK_PRIORITY_LABELS,
   type TaskPriority,
 } from "@menote/mdcore";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "../ui/Controls";
 import { Chip } from "../ui/Chip";
 import { SegmentedControl, type SegmentedOption } from "../ui/SegmentedControl";
 import { QuickComposer } from "./QuickComposer";
-import { attributeCommandsFor, type QuickAttributeId } from "./quick-attributes";
+import type { QuickAttributeCommand, QuickAttributeId } from "./quick-attributes";
 
 export const COMPOSER_MODES = [
   { value: "memo", label: "Memo", icon: "clock" },
@@ -49,11 +56,12 @@ const MODE_DISABLED_REASON: Record<ComposerMode, string> = {
 export const TASK_ITEM_PATTERN = /^\s*[-*+]\s+\[[ xX]\]/m;
 
 /**
- * `@` 属性命令点了以后聚焦哪儿（**不写正文**，只是把光标送到已经存在的受控字段上）。
+ * 属性命令点了以后聚焦哪儿（**不写正文**，只是把光标送到已经存在的受控字段上）。
  *
- * 用容器内查询而不是往 `ModeExtras` 里穿 ref：那个组件被两个录入面复用（字段只有一份实现），
- * 为一次聚焦改它的公共契约不划算；选择器就是两个控件自己的可访问名。**导出**给
- * `AddEntryDialog` 复用——同一个 `@` 在两个录入面必须落到同一个字段。
+ * 2026-10-01 起只有「添加内容窗口」需要它——功能栏录入框的属性行按用户反馈移除，
+ * `@` 菜单随之不在那里出现（`attributes` 传空表）。
+ * 用容器内查询而不是往 `ModeExtras` 里穿 ref：那个组件被录入面复用（字段只有一份实现），
+ * 为一次聚焦改它的公共契约不划算；选择器就是两个控件自己的可访问名。
  */
 export const ATTRIBUTE_FOCUS_SELECTOR: Record<QuickAttributeId, string> = {
   due: '[aria-label="截止日期"]',
@@ -62,11 +70,18 @@ export const ATTRIBUTE_FOCUS_SELECTOR: Record<QuickAttributeId, string> = {
 };
 
 /**
- * 模式附加项：内容随模式变，**容器高度恒定**（功能栏里那条 26px 不变量）。
+ * 功能栏录入框的**空属性表**：模块级冻结常量，不能写成字面量 `[]`——
+ * `QuickComposer` 把它放进 `useMemo` 依赖，每次渲染新建数组会让菜单过滤每帧重算。
+ */
+const NO_ATTRIBUTES: readonly QuickAttributeCommand[] = Object.freeze([]);
+
+/**
+ * 模式附加项：内容随模式变，**容器高度恒定**（`AddEntryDialog` 里那条 26px 不变量）。
  *
  * **导出**给 `AddEntryDialog` 复用（用户 2026-09-29：一个窗口结构、只换显示的设置）——
  * 待办的「截止 + 优先级」、Memo 的「设为清单？」都只有这一份实现。
- * `noteTargetLabel` 对非笔记档无意义，故可选（窗口只渲染 memo / task）。
+ * `noteTargetLabel` 对非笔记档无意义，故可选（窗口只渲染 memo / task；笔记档的行
+ * 2026-10-01 起不再出现在功能栏录入框，那一档保留给"以后接笔记属性"）。
  */
 export function ModeExtras({
   mode,
@@ -162,9 +177,14 @@ export function ModeExtras({
 export interface ComposerProps {
   /** 笔记模式发布：首行作标题，其余为正文 */
   onPublishNote?: (title: string, body: string) => void;
-  /** Memo 模式发布：`asTask` = 用户确认了"设为清单？" */
+  /**
+   * Memo 模式发布。`asTask` 恒为 `false`——「设为清单？」那个 chip 随附加项行一起退出功能栏
+   * （2026-10-01）；要标清单去「添加内容窗口」（那里还有同一个 chip）。
+   */
   onPublishMemo?: (text: string, options: { asTask: boolean }) => void;
-  /** 待办模式发布（M2-5）：新建清单默认状态"待办" */
+  /**
+   * 待办模式发布（M2-5）：无截止 + 优先级「中」——属性字段随附加项行退出功能栏（2026-10-01）。
+   */
   onPublishTask?: (text: string, options: { due: string | null; priority: TaskPriority }) => void;
   /**
    * 受控模式（M2-8）：首页的「记录 Memo / 新建待办」需要从外部把录入框切到指定档。
@@ -172,15 +192,13 @@ export interface ComposerProps {
    */
   mode?: ComposerMode;
   onModeChange?: (mode: ComposerMode) => void;
-  /**
-   * 「笔记」档的落点提示（当前笔记本名；不传 = 「根目录」）。
-   * 落点本身由 `createNote` 按当前视图决定，这里只做展示，不参与写入。
-   */
-  noteTargetLabel?: string;
 }
 
 const TASK_PRIORITY_OPTIONS: ReadonlyArray<{ value: TaskPriority; label: string }> =
   TASK_PRIORITIES.map((priority) => ({ value: priority, label: TASK_PRIORITY_LABELS[priority] }));
+
+/** 待办档没有字段可填时的发布值：无截止、优先级「中」（M07-03 的默认档） */
+const DEFAULT_TASK_ATTRIBUTES = { due: null, priority: "medium" } as const;
 
 export function Composer({
   onPublishNote,
@@ -188,7 +206,6 @@ export function Composer({
   onPublishTask,
   mode: controlledMode,
   onModeChange,
-  noteTargetLabel = "根目录",
 }: ComposerProps) {
   const [innerMode, setInnerMode] = useState<ComposerMode>("memo");
   // 受控/非受控都支持：外部给了 mode 就用外部的，否则自己管（既有用法不受影响）
@@ -198,16 +215,6 @@ export function Composer({
     onModeChange?.(next);
   };
   const [text, setText] = useState("");
-  const [taskRequested, setTaskRequested] = useState(false);
-  const [taskDue, setTaskDue] = useState("");
-  // M07-03 的默认优先级为"中"（原型里也是这么显示的）
-  const [taskPriority, setTaskPriority] = useState<TaskPriority>("medium");
-  /** 附加项容器：`@` 选了属性后在这里找对应的受控字段聚焦 */
-  const fieldsRef = useRef<HTMLDivElement | null>(null);
-
-  const hasTaskItem = TASK_ITEM_PATTERN.test(text);
-  // 用户把 `- [ ]` 删掉后，清单标记自动作废（不靠 effect 同步状态）
-  const asTask = taskRequested && hasTaskItem;
 
   const ready = PUBLISH_READY[mode] && text.trim() !== "";
   const disabledReason = !PUBLISH_READY[mode]
@@ -226,58 +233,33 @@ export function Composer({
     }
     if (mode === "memo") {
       // 乐观发布：界面立刻清空，条目由调用方先落本地再后台上传
-      onPublishMemo?.(text, { asTask });
+      onPublishMemo?.(text, { asTask: false });
       setText("");
-      setTaskRequested(false);
       return;
     }
     if (mode === "task") {
-      onPublishTask?.(text, { due: taskDue === "" ? null : taskDue, priority: taskPriority });
+      onPublishTask?.(text, { ...DEFAULT_TASK_ATTRIBUTES });
       setText("");
-      setTaskDue("");
-      setTaskPriority("medium");
     }
-  }
-
-  /** `@` 选了属性：把焦点送到既有的受控字段。**属性不写进正文**（设计 v3 §3.3）。 */
-  function focusAttribute(id: QuickAttributeId): void {
-    fieldsRef.current
-      ?.querySelector<HTMLElement>(ATTRIBUTE_FOCUS_SELECTOR[id])
-      ?.focus();
   }
 
   return (
     <div className="composer">
       {/*
         输入区换成语义可靠的轻量即时渲染宿主（编辑拓展阶段 B / Task B6）：
-        行内格式走共享纯函数，`/` 给快捷基础命令，`@` 只聚焦下面的受控字段。
-        class 仍是 `.composer__input`——三行 136px 的结构不变量就按它守。
+        行内格式走共享纯函数，`/` 给快捷基础命令。`@` 属性菜单**不在这个录入面出现**
+        （2026-10-01：属性行退出功能栏，`attributes` 传空表，`QuickComposer` 因此不弹菜单）。
+        class 仍是 `.composer__input`——两行结构不变量就按它守。
       */}
       <QuickComposer
         mode={mode}
         value={text}
         onChange={setText}
-        attributes={attributeCommandsFor(mode)}
-        onChooseAttribute={focusAttribute}
+        attributes={NO_ATTRIBUTES}
         onSubmitShortcut={publish}
         ariaLabel="快速录入"
         placeholder="记点什么……  Ctrl+Enter 发布"
-        keepEditingWithin={fieldsRef}
       />
-
-      <div className="composer__extras" data-testid="composer-extras" ref={fieldsRef}>
-        <ModeExtras
-          mode={mode}
-          showTaskPrompt={hasTaskItem}
-          asTask={asTask}
-          onSetTask={setTaskRequested}
-          taskDue={taskDue}
-          onTaskDue={setTaskDue}
-          taskPriority={taskPriority}
-          onTaskPriority={setTaskPriority}
-          noteTargetLabel={noteTargetLabel}
-        />
-      </div>
 
       <div className="composer__modes">
         <SegmentedControl

@@ -46,7 +46,7 @@ import { useVaultScope } from "./useVaultScope";
 import { useItemPatchActions } from "./useItemPatchActions";
 import { useMemoWrite } from "../memos/useMemoWrite";
 import type { BatchProgress, BatchResult } from "./batch";
-import type { PrivacyGate } from "@menote/shared";
+import { canShowInList, type PrivacyGate } from "@menote/shared";
 
 /** 列表是否等价：只比对界面真正用到的字段 */
 function sameItems(left: LocalItem[], right: LocalItem[]): boolean {
@@ -545,7 +545,23 @@ export function useNotesWorkspace(
 
   const items = useMemo(() => filterByView(allItems, view, gate), [allItems, view, gate]);
   const tags = useMemo(() => collectTags(allItems), [allItems]);
-  const selected = items.find((item) => item.id === selectedId) ?? null;
+  /**
+   * 当前打开的条目（正文区渲染它）。
+   *
+   * **不能从 `items`（当前视图过滤后的列表）里找**：左侧笔记本树里可以直接点开任意一篇，
+   * 而那一篇未必属于此刻的视图（例如停在「工作」视图里点开了「私事」下的文档，或视图是
+   * 最近编辑 / 收藏 / 标签）。此前 `items.find(...)` 会因此返回 `null` → 正文区退回空占位，
+   * 用户点了树里的文档却"看不到正文，得再点一次"（用户 2026-10-01 反馈，问题 4）。
+   *
+   * 门禁仍然要守：只把**此刻允许出现在列表里**的条目当作可打开（空间未解锁、回收站里的条目
+   * 一律为 `null`，正文区照旧给占位），口径与列表过滤同一处 `canShowInList`。
+   */
+  const selected = useMemo(() => {
+    if (selectedId === null) return null;
+    const item = allItems.find((row) => row.id === selectedId);
+    if (!item) return null;
+    return canShowInList(item, gate) ? item : null;
+  }, [allItems, gate, selectedId]);
   /**
    * "正文还没到"：由**显式的 `openingId`** 决定，而不是"`selectedId` 与 `docVersion` 不一致"——
    * 后者要求在读完正文前就抬 `selectedId`，会让整张列表多提交一次（见 `openingId` 的注释）。

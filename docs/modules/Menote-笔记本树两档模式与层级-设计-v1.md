@@ -23,6 +23,9 @@
      点开的**文档**在树里没有任何高亮 —— 用户点完文档，视线回到树上找不到"我现在在哪一篇"。
   3. **文档行与文件夹行长得太像**：都是 13px 图标 + `--fs-small` 文字 + `--text-2`，只是图标不同
      （`folder` / `note`），文件夹那条的橙色只在 `.tree-row__folder` 上（很轻）。
+  4. **折叠只收子夹、不收文档**：`FolderTree` 的折叠三角只控制 `.tree__children`（子文件夹），
+     一个夹里的文档行**照样铺在树上**（且没有子夹的夹连三角都没有，收不起来）——树一长就乱，
+     而"收起来"这个动作对用户不起作用。
 - **中间列表已经有两级**：`groupNotesByFolder()`（`features/notes/groups.ts`）+ `NoteList` 的分组头，
   「全部笔记」下是「未分类 + 各根文件夹组」、选中某夹时是「它的子夹分组头 + 本夹文档」。
 - **用户对"分级文件树"的描述**（原文）：树里只显示两级（主文件夹、次文件夹），**不显示次文件夹下的文件**；
@@ -55,11 +58,15 @@
 | 图标 | `folder`，`--amber`（现状保留） | `note` / `table`，`--muted`（**不用琥珀**，与结构区分） |
 | 文字 | `--text`，字重 500 | `--text-2`，常规字重 |
 | 计数 | 右侧 `--fs-micro` 徽标（现状保留） | **无计数**（内容数量不是"这一行的属性"） |
-| 折叠三角 | 有子夹时有（现状保留） | 无 |
+| 折叠三角 | **有子夹、或（档 A 下）有文档**时出现；**收起时子夹与文档一起收起**（现状只收子夹 → 修） | 无 |
 | 更多菜单 | hover / 触屏常显（现状保留） | 无（要重命名 / 移动请到列表行的菜单） |
 | 层级 | 第 2 层走 `.tree__children`（引导线 + 缩进，现状保留） | **缩进与文件夹名对齐，并加同一条引导线**（`.tree-items` 补 `border-left`，与 `.tree__children` 同一取值） |
 | 选中 | `aria-current` + `--primary-soft`（现状保留） | **新增**：当前打开的文档 `aria-current` + `--primary-soft` + `--primary-ink`（数据来自 `workspace.selectedId`） |
 | 超出上限 | — | 第 51 条起给「还有 N 条…」，点了把中间列切到那个文件夹（现状保留） |
+
+**折叠语义要一起修**：现在收起的只是子文件夹（`.tree__children`），一个夹里的 50 条文档照样铺在树上——
+这正是"树一长就乱"的另一个来源。改为**收起该夹的全部内容（子夹 + 文档）**，并把三角的出现条件
+扩到"有文档也算"（否则一个没有子夹、只有文档的夹收不起来）。
 
 补一条**"当前在哪里"的呼应**：树里选中的文件夹、列表头（`ItemListHead` 的面包屑）与正文区打开的条目
 三者本来就是同一份状态（`view` / `selectedId`），本节只补树内对"打开的文档"的反馈，不改状态模型。
@@ -69,10 +76,11 @@
 | 步 | 内容 | 落点 |
 |---|---|---|
 | 1 | 树内文档行：引导线 + 与文件夹名对齐的缩进 + 类型图标改 `--muted` | `app/theme/app.css`（`.tree-items` / `.tree-item`）、`FolderTree.tsx`（结构不变） |
-| 2 | 文档行选中反馈：新增 `selectedItemId` prop，命中时 `aria-current="true"` | `FolderTree.tsx`、`NotebookPanel.tsx`、`NavPanels.tsx`、`App.tsx`（传 `workspace.selectedId`） |
-| 3 | 文件夹行辨识度：名字 `--text` + 字重 500（**不动**尺寸、不换图标字体） | `app.css` |
-| 4 | 设置项改两档单选（完整文件树 / 分级文件树）+ `InfoHint` 说明 | `features/settings/ui/SettingsPanel.tsx`（契约与默认值不动） |
-| 5 | 用例：树内文档行带引导线（声明值）、文档选中态随 `selectedItemId`、设置项两档的 `aria-pressed` 与写入值 | `test/notebook-tree-items.test.tsx`、`test/settings-*.test.tsx`、`test/layout-invariants.test.ts` |
+| 2 | 折叠语义：收起 = 子夹 + 文档一起收；三角出现条件补"有文档也算" | `FolderTree.tsx` |
+| 3 | 文档行选中反馈：新增 `selectedItemId` prop，命中时 `aria-current="true"` | `FolderTree.tsx`、`NotebookPanel.tsx`、`NavPanels.tsx`、`App.tsx`（传 `workspace.selectedId`） |
+| 4 | 文件夹行辨识度：名字 `--text` + 字重 500（**不动**尺寸、不换图标字体） | `app.css` |
+| 5 | 设置项改两档单选（完整文件树 / 分级文件树）+ `InfoHint` 说明 | `features/settings/ui/SettingsPanel.tsx`（契约与默认值不动） |
+| 6 | 用例：树内文档行带引导线（声明值）、折叠收起文档、文档选中态随 `selectedItemId`、设置项两档的 `aria-pressed` 与写入值 | `test/notebook-tree-items.test.tsx`、`test/settings-*.test.tsx`、`test/layout-invariants.test.ts` |
 
 **不做**：不引入第三层（`MAX_FOLDER_DEPTH` 不动）；不做 Obsidian 式"文件夹与文档混排拖拽"；
 不加虚拟滚动（每夹 50 条上限已在）；不改加密空间那棵树（锁定时列标题就等于泄露内容——**永远不列条目**）；
@@ -84,8 +92,10 @@
 2. 档 A 下：任意文档行的左端与它所属文件夹**名**对齐，并落在同一条引导线上（截图对照）；
 3. 档 A 下：点开某篇文档，树里那一行有选中底色；换一篇，底色跟着换；切到别的文件夹视图时
    树里不再有选中行（列表头与正文区仍显示先前打开的那一篇——问题 4 已修的行为）；
-4. 档 B 下：树里只有两级文件夹，没有文档行；点文件夹后中间列是"子夹组头 + 本夹文档"两级；
-5. 每夹 50 条上限与「还有 N 条…」在档 A 下仍有效；
-6. 锁定隐私锁时：空间内文件夹仍带小锁角标、空间那一支仍不列文档；
-7. `style-coverage` / `layout-invariants` / 树与设置页的既有用例全绿；2000 篇下展开树不出现长任务
+4. 档 A 下：收起一个夹，**子夹与它的文档一起收起**；再展开，两者一起回来（没有子夹、只有文档的夹
+   也出现三角）；
+5. 档 B 下：树里只有两级文件夹，没有文档行；点文件夹后中间列是"子夹组头 + 本夹文档"两级；
+6. 每夹 50 条上限与「还有 N 条…」在档 A 下仍有效；
+7. 锁定隐私锁时：空间内文件夹仍带小锁角标、空间那一支仍不列文档；
+8. `style-coverage` / `layout-invariants` / 树与设置页的既有用例全绿；2000 篇下展开树不出现长任务
    （沿用既有做法：只测声明值与 DOM，不测真实布局）。

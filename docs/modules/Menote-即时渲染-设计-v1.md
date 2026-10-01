@@ -1,12 +1,12 @@
-# Menote 即时渲染（live preview）设计 v1（文档版本 v2）
+# Menote 即时渲染（live preview）设计 v1（文档版本 v3）
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v2 |
-| 文档状态 | 生效（首期实现已落地并实测；阶段 C 复核了只读与切档行为；覆盖表之外的项见 §七） |
+| 文档版本 | v3 |
+| 文档状态 | 生效（首期实现已落地并实测；阶段 C 复核了只读与切档行为；v3 改了重建时机与排版归属；覆盖表之外的项见 §七） |
 | 目的和适用范围 | 「即时渲染」这一档编辑模式：**正文直接呈现渲染样式，光标所在行显示 Markdown 源码**。本文定**首期覆盖哪些语法元素、交互细则、实现约束与性能要求**，以及明确不做哪些（含理由）。产品口径见 `wiki/Menote-设计文档-v7.4.md` §7.1（**只读，不改**） |
 | 权威级别 | 模块规则（与 `DESIGN.md` 的视觉规范配合；`DESIGN.md` 尚未补本节，见 §七-9） |
-| 最后更新日期 | 2026-09-29 |
+| 最后更新日期 | 2026-10-01 |
 
 ## 修改记录
 
@@ -14,6 +14,7 @@
 |---|---|---|---|---|
 | v1 | v0.5.5 | 2026-09-28 | 首版：需求依据、覆盖表（首期做/不做）、交互细则、性能与实现约束、实测数字、未验证项 | deepseek-v4.1-flash |
 | v2 | v0.6.2 | 2026-09-29 | 编辑拓展阶段 C / Task C2 复核记录（§七 开头）：`live` + `readOnly` 缺口不存在（含判定门的红方向验证）、只读下程序化写入照常生效并上报、切档只重配置不重建、真 CM6 在 jsdom 可跑（需两个布局存根）；并登记 `live` 已回到生产模式清单。实现未改动。 | deepseek-v4.1-flash |
+| v3 | v0.6.5 | 2026-10-01 | **§四-3 重建时机改写**：原先四种事件任一成立就同步重算（含语法树补解析），改为打字停手 90ms 重算 / 光标与滚动走下一帧。**纯函数签名与行为未动**，19 条用例原样全绿。§六 标注 26ms 是改前算法的数字、需在试验页重测。§五 落点表补 `app/editor/theme.ts`。样式侧（预览与即时渲染共用排版规则）记在 `docs/todo/Menote-编辑器性能与样式收口-实施计划-v1.md`，本文不改覆盖表与交互细则。 | MiniMax-M3.1-Flash-Preview |
 
 ## 一、依据与结论
 
@@ -56,18 +57,27 @@
 
 1. **只算视口**：Lezer 的树是**懒解析**的（实测：建 `EditorState` 后树只覆盖前 ~3011 字符），所以插件里用 `ensureSyntaxTree(state, 视口末端, 50ms)` 补可见区；超预算就退回部分树——那一屏先显示源码，下一帧再渲染。装饰构建本身很便宜（实测视口 4KB 约 0.4–1.1ms / 397 处）。
 2. **输入法安全**（本项目最该守的一条，中文优先）：组合期间跳过重算 + 位置映射；这条**只能靠人工用真实输入法验**，见 §七-1。
-3. **重建时机**：`docChanged | viewportChanged | selectionSet | focusChanged` 之一才重算；`docChanged` 时先 `map(changes)` 保住位置（即使后面不重算也不会指向已消失的区间）。
-4. **可测性**：核心是**纯函数** `buildLivePreviewDecorations(state, {from, to, activeRange}) → { decorations, atomic }`——只依赖 `EditorState` 与语法树，不需要视图，所以能在 jsdom 里逐条断言（全仓既有的 CM6 测试都只能 mock 掉整个编辑器）。
+3. **重建时机**【2026-10-01 改】：原先是 `docChanged | viewportChanged | selectionSet | focusChanged` **任一**成立就同步重算一遍（含 `ensureSyntaxTree` 的补解析），等于**敲一个字、按一次方向键各付一次**。现在分开处理：
+
+   | 触发 | 策略 | 理由 |
+   |---|---|---|
+   | `docChanged` | 停手 **90ms** 后重算 | 连续打字期间一次都不补解析语法树。位置已由 `map(changes)` 保住，装饰不会指向已消失的区间 |
+   | `selectionSet` / `focusChanged` | **下一帧**重算（同帧多次合并成一次） | "光标那一行露源码"是核心交互，必须跟手；一帧内多次更新只算一次 |
+   | `viewportChanged` | 下一帧重算 | 滚进新区域要有装饰，延迟一帧不可见 |
+
+   参考外部项目 inkstone 的 `live-preview.ts`（同为 CM6 + 自写 live preview，它那边是块级缓存 + 90ms 防抖）。差别是我们装饰的是**语法节点**而非渲染好的 HTML，没有"复用未变块的 HTML"那一层，只做时机上的合并。`destroy()` 撤掉两个定时器。
+4. **可测性**：核心是**纯函数** `buildLivePreviewDecorations(state, {from, to, activeRange}) → { decorations, atomic }`——只依赖 `EditorState` 与语法树，不需要视图，所以能在 jsdom 里逐条断言（全仓既有的 CM6 测试都只能 mock 掉整个编辑器）。**节流只发生在插件层，纯函数的签名与行为一字未改**，19 条用例原样全绿。
 5. **切换不重建文档**：`live` 走 `Compartment` 重配置（与只读开关同一套），"仅编辑 ↔ 即时渲染"在 React 树里位置相同、不会重新挂载；行号与即时渲染扩展互斥（渲染视图里行号只是噪声）。
 
 ## 五、落点
 
 | 文件 | 作用 |
 |---|---|
-| `apps/web/src/app/editor/live-preview.ts`（新增） | 纯函数装饰构建 + `ViewPlugin` + 两个 widget（项目符号、图片占位） |
-| `apps/web/src/app/editor/Editor.tsx` | `live` prop（Compartment）、`markdown({ base: markdownLanguage })`、行号互斥 |
+| `apps/web/src/app/editor/live-preview.ts`（新增） | 纯函数装饰构建 + `ViewPlugin`（含 §四-3 的重算时机）+ 两个 widget（项目符号、图片占位） |
+| `apps/web/src/app/editor/theme.ts`（v3 新增） | `EditorView.baseTheme`：焦点环、浮层底色、面板层级等**结构性**收口（颜色一律不写在这里，交给 `app.css` 的令牌） |
+| `apps/web/src/app/editor/Editor.tsx` | `live` prop（Compartment）、`markdown({ base: markdownLanguage })`、行号互斥、`drawSelection`（跨行选区） |
 | `apps/web/src/features/notes/ui/NoteWorkspace.tsx` | `DocMode` 加 `live`，模式切换第四档，单栏渲染 |
-| `apps/web/src/app/theme/app.css` | `.cm-live-*` 样式（只用现有令牌：6 档字号、`--muted/--text-2/--primary-ink/--panel-2/--line*/--bg-soft`） |
+| `apps/web/src/app/theme/app.css` | `.cm-live-*` 样式；**v3 起与 `.markdown-body` 按选择器成组合并**（一个值只写一次，渲染档与预览档不再各自维护）；另补 CodeMirror 自带外观（光标/选区/活动行/行号槽/占位符/搜索面板）。只用现有令牌：6 档字号、`--muted/--text-2/--primary-ink/--panel-2/--line*/--bg-soft` |
 | `packages/shared/src/settings.ts` | `EditorModeSchema` 加 `"live"`（只扩取值、不动字段） |
 | `apps/web/src/features/settings/ui/SettingsPanel.tsx` | 第四档从"置灰 + 说明"改为可选 |
 | `apps/web/test/live-preview.test.ts`（新增） | 19 条：覆盖表逐项 + 活动行规则 + 原子区间 |
@@ -80,7 +90,7 @@
 | 活动行规则 | 失焦：整篇渲染；点进「引用」行：该行显示 `> 引用一行`，其余行照常渲染；**真实按键**输入后源码标记完好（`**粗体**` 原样保留） |
 | 模式切换 | `仅编辑 → 即时渲染` 后 `.cm-content` **仍是同一个 DOM 节点**（未重建文档）；即时渲染下无行号 |
 | 设置页 | 第四档 `disabled=false`，说明文字为新的细则摘要 |
-| 输入路径成本 | 小文档下打字无长任务；800KB 文档"敲一个字"的增量解析 + 局部装饰 headless 实测中位 26ms（真机待复核，见 §七-2） |
+| 输入路径成本 | 小文档下打字无长任务；800KB 文档"敲一个字"的增量解析 + 局部装饰 headless 实测中位 26ms（真机待复核，见 §七-2）。**⚠️ 这个数是 §四-3 改之前的算法测的**（当时每键同步重算），不能拿来衡量现在这版；请在「设置 › 编辑试验」的长任务读数上重新量一遍并回填 |
 
 ## 七、未做 / 待办（按建议顺序）
 

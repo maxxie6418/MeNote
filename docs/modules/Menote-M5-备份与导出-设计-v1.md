@@ -1,9 +1,9 @@
-# Menote 备份与导出设计 v1（文档版本 v1）
+# Menote 备份与导出设计 v1（文档版本 v2）
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1 |
-| 文档状态 | 草案（**待用户确认后转生效**） |
+| 文档版本 | v2 |
+| 文档状态 | 生效（导出 / 导入 / 设置页三批均已落地；回收站条目的服务端还原与冲突三档界面见 §八） |
 | 目的和适用范围 | M5 的「备份 / 导出 / 导入」：**备份包长什么样、谁来生成、怎么恢复、重复导入会不会刷出重复条目**。本文定格式契约与取舍，不含界面稿；界面另走「界面怎么做」。产品口径见 `wiki/Menote-功能拆解-v2` M06/M07（**只读，不改**） |
 | 权威级别 | 模块规则（格式契约另需回写 `wiki/`，见 §九） |
 | 最后更新日期 | 2026-10-01 |
@@ -13,6 +13,7 @@
 | 文档版本 | 应用版本 | 日期 | 修改摘要 | 修改模型ID |
 |---|---|---|---|---|
 | v1 | v0.6.8 | 2026-10-01 | 初版。参照外部项目 inkstone 的备份做法（`COMPLETE` 提交标记、内容寻址附件），结合 MeNote 实际的离线优先 + outbox 架构重新设计幂等方案 | MiniMax-M3.1-Flash-Preview |
+| v2 | v0.6.9 | 2026-10-01 | 导出/导入/设置页三批落地后回写：新增 §4.1（第三处被推翻的判断——`createLocalItem` 不能用，另写 `restoreLocalItem`）与 §4.2（回收站条目在服务端要补一次软删）、补全 §七 落点与 §八 待办、记录 zip 库选型 | MiniMax-M3.1-Flash-Preview |
 
 ---
 
@@ -80,10 +81,27 @@ manifest 里的每个 `path` 在读盘前都要过一遍：拒绝绝对路径、
 
 1. 校验 `COMPLETE` 与 `manifest.json`；不合格直接拒收并说明原因。
 2. 逐个文件校验 `bytes` + `sha256`；附件重算哈希比对。
-3. 对每条：`createLocalItem({ id: <备份里的 id>, ... })` + `enqueue`，**然后照常走 outbox 推流**。
+3. 对每条：写本地行（`features/backup/restore.ts` 的 `restoreLocalItem`）+ `enqueue`，**然后照常走 outbox 推流**。
 4. 文件夹同理：`createLocalFolder` + `create_folder` 出队。
 
-**关键前提（已验证，2026-10-01）**：本项目的 id 由**客户端**用 `newUlid()` 生成（`apps/web/src/data/db/repository.ts:44,449,505`），先写 IndexedDB 再入 outbox，最后由 `push.ts` 回放；服务端 `SQL_INSERT_ITEM` 带 `WHERE NOT EXISTS (SELECT 1 FROM items WHERE id = ?)`（`apps/worker/src/db/tables.ts:89-91`）——**接受客户端给的 id**。所以导入可以原样复用这条链路，不需要任何新协议。
+**关键前提（已验证，2026-10-01）**：本项目的 id 由**客户端**用 `newUlid()` 生成（`apps/web/src/data/db/repository.ts:44,449,505`），先写 IndexedDB 再入 outbox，最后由 `push.ts` 回放；服务端 `SQL_INSERT_ITEM` 带 `WHERE NOT EXISTS (SELECT 1 FROM items WHERE id = ?)`（`apps/worker/src/db/tables.ts:89-91`）——**接受客户端给的 id**。所以导入可以原样复用这条链路，不需要任何新协议。**服务端在本功能里零改动。**
+
+### 4.1 第三处被核对推翻的判断：`createLocalItem` 不能用
+
+初稿写的是「对每条调 `createLocalItem`」。**实现时核对发现那是"新建一条笔记"的接口，不是"还原一条条目"的接口**——它把下面这些字段硬编码成新建时的样子：
+
+| 字段 | `createLocalItem` 给的值 | 后果 |
+|---|---|---|
+| `pinned` / `starred` | `0` | **置顶与收藏丢失** |
+| `enc_self` | `0` | **单篇加密标记丢失** |
+| `created_at` / `updated_at` | `now` | **创建时间变成恢复时刻** |
+| `deleted_at` | `null` | **回收站状态丢失** |
+
+所以另写了 `features/backup/restore.ts` 的 `restoreLocalItem`：这些字段按备份原样写，`rev` / `meta_rev` / `sync_seq` 仍归零（那是本机的乐观锁与同步游标，服务端不认备份里的旧值，照抄会**永久冲突**）。**结论要收窄成一句：推流链路可以复用，写入函数不能。**
+
+### 4.2 回收站条目：本地能还原，服务端要补一次软删
+
+`deleted_at` 不在 outbox 的操作类型里，回收站是**服务端**接口（`DELETE /api/trash/items/:id`，见 `routes/trash.ts:41`）。而 `create` 推上去会建成一条正常条目。所以首期：**本地行按备份写成回收站态，服务端那边会以正常条目出现**。导入结果里 `itemsFromTrash` 如实回报这个数，不默默变（界面已按 `DESIGN.md` §5.4-2 把它平铺出来）。补做软删需要"条目先同步成功、再调回收站"的时序，留到下一批。
 
 ## 五、幂等与冲突
 
@@ -109,22 +127,30 @@ manifest 里的每个 `path` 在读盘前都要过一遍：拒绝绝对路径、
 
 | 文件 | 作用 |
 |---|---|
-| `packages/shared/src/backup.ts`（新增） | 格式契约：`manifest` / `COMPLETE` 的 schema 与编解码、路径归一化与安全校验。**纯函数、可测、不依赖浏览器** |
-| `packages/shared/test/backup.test.ts`（新增） | 纯函数用例：COMPLETE 解析、哈希比对、路径穿越拒绝、坏 manifest 拒收 |
-| `apps/web/src/features/backup/`（新增） | 导出编排（读 IndexedDB、下载附件、算哈希、进度与中断）与导入编排（校验、还原、冲突） |
-| `apps/web/src/app/router.ts` + `SettingsPanel` | 设置页新开一档「备份与导出」（M5 界面稿另走） |
+| `packages/shared/src/backup.ts`（新增） | 格式契约：`manifest` / `COMPLETE` 的 schema 与编解码、**包内路径的唯一产地**（`notePath` / `attachmentPath` / `foldersPath` / `completePath` / `manifestPath`）、路径归一化与安全校验、`verifySnapshot`。**纯函数、可测、不依赖浏览器** |
+| `packages/shared/test/backup.test.ts`（新增） | 纯函数用例：COMPLETE 解析、哈希比对、路径穿越拒绝、坏 manifest 拒收、**所有包内路径都带 `snapshot/` 前缀** |
+| `apps/web/src/features/backup/build.ts`（新增） | 纯构建层：条目 + 正文 + 附件 → manifest 与文件清单。不做 IO，可在 jsdom 里断言 |
+| `apps/web/src/features/backup/export.ts`（新增） | 导出编排：读 IndexedDB（**草稿优先**）、下载附件、算哈希、可见进度与可中断、fflate 异步打包 |
+| `apps/web/src/features/backup/restore.ts`（新增） | 还原专用的本地写入（见 §4.1） |
+| `apps/web/src/features/backup/import.ts`（新增） | 导入编排：解包 → 校验 → 文件夹 → 条目 → 附件 |
+| `apps/web/src/features/backup/ui/BackupPage.tsx`（新增） | 设置页「备份与导出」：导出无确认但有进度与取消；导入先出摘要再二次确认 |
+| `apps/web/test/backup.test.ts`（新增） | 往返用例：包能过校验、正文逐字往返、**连导两次条目数不变**、坏包整包拒收、路径越界在读文件前被拒 |
+| `apps/web/src/features/attachments/model.ts` | 新增 `extractAttachmentRefsWithNames`（备份要文件名，URL 里只有哈希） |
+| `apps/web/src/app/router.ts` + `SettingsPanel` | 设置页新开一档「备份与导出」 |
+
+**zip 库**：`fflate`（用户 2026-10-01 拍板）。约 30KB、专为现代浏览器、tree-shake 友好。用它的**异步** `zip` 而非 `zipSync`——全量备份动辄几百个文件，同步压缩会把主线程堵死几百毫秒到几秒。
 
 **关于 `packages/crypto-format`**：`AGENTS.md` 写它「M3 落最小骨架」，但**实际不存在**（`packages/` 下只有 `mdcore` 与 `shared`）。本设计**不需要**独立包——格式契约就是纯数据 schema，和 `items.ts` / `content.ts` / `sync.ts` 同类，放 `packages/shared` 即可。为此新建一个包属于扩大范围，且 AGENTS.md 那句与实现不符，**改它需要用户点头**（已登记 §九）。
 
 ## 八、未做 / 待办
 
-1. **导入幂等只做了结构确认，未跑通端到端**。开工人第一件事就是写一个「同一份备份连导两次，条目数不变」的用例。
-2. **大备份的分片与断点续传**不做。首期接受"全量导出很慢"，靠进度与中断兜住。
-3. **加密备份（整个包用密码加密）**首期不做。先出明文包，真需要再加一层——但那会让"解包即可读"这个优点消失，要重新权衡。
-4. **定时自动备份**（定期推到 WebDAV / S3）属 M5 后半段，本设计只保证手动导出可用。
-5. **界面稿**未做。`DESIGN.md` §5.1-2 要求多步危险流程有明确入口与退出方式，恢复流程要按那条画。
-6. **`item_versions` 默认不进备份**，另给一个「含历史版本」开关（用户 2026-10-01 确认）。理由：版本是 2000 条上限的大头，恢复价值远低于正文。
-7. **回收站条目（`deleted_at`）进备份**（用户 2026-10-01 确认）。"误删了从备份找回来"是真实需求，且不含的话备份就不是"那个时刻的真实状态"。
+1. **回收站条目的服务端还原**：本地行已按备份写成回收站态，但服务端会以正常条目出现（§4.2）。补做要"条目先同步成功、再调 `DELETE /api/trash/items/:id`"，是下一批的活。当前 `itemsFromTrash` 如实回报。
+2. **冲突三档的界面**：导入时默认 `newer`（按 `updated_at` 比较），但"在恢复预览里逐条改"那一层还没做。
+3. **大备份的分片与断点续传**不做。首期接受"全量导出很慢"，靠可见进度与可中断兜住。
+4. **加密备份（整个包用密码加密）**首期不做。先出明文包，真需要再加一层——但那会让"解包即可读"这个优点消失，要重新权衡。
+5. **定时自动备份**（定期推到 WebDAV / S3）属 M5 后半段。
+6. **导出的服务端侧**不做（见 §三，客户端导出够用）。
+7. ~~**导入幂等只做了结构确认，未跑通端到端**~~ —— **已跑通**：`apps/web/test/backup.test.ts` 有一条「同一份备份连导两次，条目数不变」的用例，是这三层的看门狗。
 
 ## 九、待回写 `wiki/`（需用户同意，本轮未动）
 

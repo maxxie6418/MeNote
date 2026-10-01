@@ -1,5 +1,8 @@
 /**
- * 添加内容窗口的装配（`App.tsx` 组合根）。设计见 `docs/modules/Menote-添加内容窗口-设计-v1.md`。
+ * 添加内容窗口的装配（`App.tsx` 组合根）。本文件是 v1 的装配，原始设计见
+ * `docs/archive/Menote-添加内容窗口-设计-v1.md`（已归档）；v2 设计见
+ * `docs/modules/Menote-添加内容窗口-设计-v2.md`（**尚未实施**，步骤见
+ * `docs/todo/Menote-添加内容窗口-实施计划-v2.md`）。
  *
  * 从 `App.tsx` 抽出的原因：组合根已顶到 500 行预算（`AGENTS.md` / 架构 §2.3.3 的
  * `max-lines` 护栏），把窗口的**开关状态 + JSX**收进这个 hook，组合根只留一行 hook 调用、

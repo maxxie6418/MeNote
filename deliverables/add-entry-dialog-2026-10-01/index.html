@@ -1,0 +1,2017 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MeNote · 添加内容窗口优化方案（现状 vs 方案）· 2026-10-01</title>
+    <style>
+      /* ============================================================
+         令牌：逐值抄自 apps/web/src/app/theme/tokens.css（DESIGN.md §3.3）
+         原型不得另立色值 / 字号 / 圆角 / 间距（DESIGN.md 禁止项 #2 #3 #14）
+         ============================================================ */
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --bg-soft: #f7f7f7;
+        --panel: #ffffff;
+        --panel-2: #f2f2f2;
+        --panel-3: #e8e8e8;
+        --line: #e0e0e0;
+        --line-2: #c9c9c9;
+        --text: #1d1d1d;
+        --text-2: #4a4a4a;
+        --muted: #6b6b6b;
+        --primary: #f6821f;
+        --primary-2: #e8720d;
+        --primary-soft: rgba(246, 130, 31, 0.12);
+        --primary-line: rgba(246, 130, 31, 0.35);
+        --primary-ink: #b45309;
+        --on-primary: #1d1d1d;
+        --amber: #8a5a00;
+        --amber-soft: rgba(138, 90, 0, 0.11);
+        --amber-line: rgba(138, 90, 0, 0.26);
+        --green: #1f7a4d;
+        --green-soft: rgba(31, 122, 77, 0.11);
+        --green-line: rgba(31, 122, 77, 0.26);
+        --red: #c0392b;
+        --red-soft: rgba(192, 57, 43, 0.1);
+        --red-line: rgba(192, 57, 43, 0.26);
+        --purple: #6d47a8;
+        --purple-soft: rgba(109, 71, 168, 0.12);
+        --hairline: rgba(29, 29, 29, 0.022);
+        --ph-stripe: rgba(29, 29, 29, 0.05);
+        --topbar-bg: rgba(255, 255, 255, 0.86);
+        --scrim: rgba(29, 29, 29, 0.42);
+        --shadow-1: 0 4px 14px rgba(29, 29, 29, 0.07);
+        --shadow-2: 0 16px 40px rgba(29, 29, 29, 0.13);
+        --shadow-3: 0 28px 70px rgba(29, 29, 29, 0.2);
+        --topbar-h: 54px;
+        --fnbar-w: 294px;
+        --subbar-w: 232px;
+        --radius-sm: 6px;
+        --radius: 10px;
+        --radius-lg: 14px;
+        --radius-pill: 99px;
+        --fs-display: 20px;
+        --fs-title: 17px;
+        --fs-body-lg: 14px;
+        --fs-body: 13px;
+        --fs-small: 12px;
+        --fs-micro: 11px;
+        --sp-1: 4px;
+        --sp-2: 8px;
+        --sp-3: 12px;
+        --sp-4: 16px;
+        --sp-5: 20px;
+        --sp-6: 24px;
+        --mono: "JetBrains Mono", "Cascadia Code", Consolas, "SF Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", sans-serif;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #161616;
+        --bg-soft: #1e1e1e;
+        --panel: #242424;
+        --panel-2: #2d2d2d;
+        --panel-3: #383838;
+        --line: #333333;
+        --line-2: #4a4a4a;
+        --text: #f2f2f2;
+        --text-2: #bdbdbd;
+        --muted: #8f8f8f;
+        --primary: #f6821f;
+        --primary-2: #fbad41;
+        --primary-soft: rgba(246, 130, 31, 0.16);
+        --primary-line: rgba(246, 130, 31, 0.34);
+        --primary-ink: #f6821f;
+        --on-primary: #161616;
+        --amber: #e0a458;
+        --amber-soft: rgba(224, 164, 88, 0.14);
+        --amber-line: rgba(224, 164, 88, 0.3);
+        --green: #5cbf8a;
+        --green-soft: rgba(92, 191, 138, 0.14);
+        --green-line: rgba(92, 191, 138, 0.28);
+        --red: #f07167;
+        --red-soft: rgba(240, 113, 103, 0.14);
+        --red-line: rgba(240, 113, 103, 0.3);
+        --purple: #b5a2e0;
+        --purple-soft: rgba(181, 162, 224, 0.16);
+        --hairline: rgba(255, 255, 255, 0.02);
+        --ph-stripe: rgba(255, 255, 255, 0.035);
+        --topbar-bg: rgba(22, 22, 22, 0.86);
+        --scrim: rgba(0, 0, 0, 0.55);
+        --shadow-1: 0 4px 14px rgba(0, 0, 0, 0.35);
+        --shadow-2: 0 16px 40px rgba(0, 0, 0, 0.45);
+        --shadow-3: 0 28px 70px rgba(0, 0, 0, 0.55);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg-soft);
+        color: var(--text);
+        font: var(--fs-body) / 1.6 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+      }
+      :focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+      .ico {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .ico--13 {
+        width: 13px;
+        height: 13px;
+      }
+
+      /* ---------- 页面外壳（评审用，不属于方案本体） ---------- */
+      .page {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: var(--sp-6) var(--sp-5) var(--sp-6);
+      }
+      .page__head {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-4);
+        flex-wrap: wrap;
+        padding-bottom: var(--sp-4);
+        border-bottom: 1px solid var(--line);
+      }
+      .page__title {
+        margin: 0;
+        font: 500 var(--fs-display) / 1.35 var(--sans);
+        letter-spacing: -0.01em;
+      }
+      .page__sub {
+        margin: var(--sp-1) 0 0;
+        color: var(--text-2);
+        font-size: var(--fs-small);
+        max-width: 780px;
+      }
+      .page__tools {
+        margin-left: auto;
+        display: flex;
+        gap: var(--sp-2);
+        align-items: center;
+      }
+      h2.sec {
+        margin: var(--sp-6) 0 var(--sp-3);
+        font: 500 var(--fs-title) / 1.4 var(--sans);
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+      }
+      h2.sec .sec__n {
+        font: 500 var(--fs-micro) / 1 var(--mono);
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        padding: 3px 6px;
+      }
+      .sec__note {
+        margin: 0 0 var(--sp-4);
+        color: var(--text-2);
+        font-size: var(--fs-small);
+        max-width: 900px;
+      }
+
+      /* ---------- 通用控件（同 token 家族） ---------- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-1);
+        height: 31px;
+        padding: 0 var(--sp-3);
+        border-radius: var(--radius);
+        border: 1px solid var(--line-2);
+        background: var(--panel);
+        color: var(--text);
+        font-size: var(--fs-body);
+        transition: background 160ms, border-color 160ms;
+      }
+      .btn--sm {
+        height: 27px;
+        padding: 0 var(--sp-2);
+        font-size: var(--fs-small);
+      }
+      .btn--primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: var(--on-primary);
+        font-weight: 500;
+        box-shadow: var(--shadow-1);
+      }
+      .btn--primary:hover {
+        background: var(--primary-2);
+        border-color: var(--primary-2);
+      }
+      .btn[disabled] {
+        opacity: 0.45;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-1);
+        height: 21px;
+        padding: 0 var(--sp-2);
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text-2);
+        font-size: var(--fs-micro);
+        white-space: nowrap;
+      }
+      .chip--sw {
+        cursor: pointer;
+        background: var(--panel);
+        border-color: var(--line-2);
+        color: var(--text-2);
+      }
+      .chip--sw:hover {
+        background: var(--panel-2);
+      }
+      .chip--primary {
+        background: var(--primary-soft);
+        border-color: var(--primary-line);
+        color: var(--primary-ink);
+        font-weight: 500;
+      }
+      .chip--amber {
+        background: var(--amber-soft);
+        border-color: var(--amber-line);
+        color: var(--amber);
+        font-weight: 500;
+      }
+      .chip--tag {
+        background: var(--purple-soft);
+        border-color: var(--purple-soft);
+        color: var(--purple);
+      }
+      .link {
+        color: var(--primary-ink);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        background: none;
+        border: 0;
+        padding: 0;
+        font-size: inherit;
+      }
+      .seg {
+        display: inline-flex;
+        padding: 2px;
+        gap: 2px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .seg button {
+        height: 23px;
+        padding: 0 var(--sp-2);
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-2);
+        font-size: var(--fs-micro);
+        transition: background 160ms, color 160ms;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--panel);
+        color: var(--text);
+        font-weight: 500;
+        box-shadow: var(--shadow-1);
+      }
+      .infohint {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: var(--radius-circle, 50%);
+        border: 1px dashed var(--line-2);
+        color: var(--muted);
+        font-size: var(--fs-micro);
+        font-style: italic;
+        cursor: help;
+        flex: none;
+      }
+      .kbd {
+        font: var(--fs-micro) / 1 var(--mono);
+        border: 1px solid var(--line-2);
+        border-bottom-width: 2px;
+        border-radius: var(--radius-sm);
+        padding: 2px 4px;
+        color: var(--text-2);
+        background: var(--panel-2);
+      }
+
+      /* ---------- 对照舞台 ---------- */
+      .compare {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-5);
+      }
+      /* 两个舞台上下排、整幅宽：功能栏 294 + 二级侧栏 232 已经占掉 526，
+         并排会把主区挤成竖排字。整幅宽才看得出弹窗在真实骨架里的位置。 */
+      .stage-root {
+        display: contents;
+      }
+      .col__head {
+        display: flex;
+        align-items: baseline;
+        gap: var(--sp-2);
+        margin-bottom: var(--sp-2);
+      }
+      .col__tag {
+        font: 500 var(--fs-micro) / 1 var(--mono);
+        padding: 4px 6px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--line-2);
+        color: var(--text-2);
+        background: var(--panel);
+      }
+      .col--next .col__tag {
+        background: var(--primary-soft);
+        border-color: var(--primary-line);
+        color: var(--primary-ink);
+      }
+      .col__name {
+        font: 500 var(--fs-body-lg) / 1.4 var(--sans);
+      }
+      .col__desc {
+        color: var(--muted);
+        font-size: var(--fs-small);
+      }
+
+      /* 应用外壳（真实骨架：顶栏 + 功能栏 + 主区，DESIGN.md §2.1） */
+      .stage {
+        position: relative;
+        height: 560px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--bg);
+      }
+      .app {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        /* 评审面板可能只有 600 多宽：给外壳一个最小宽度，窄窗下按比例裁掉右侧，
+           而不是把主区挤成竖排单字（那是舞台太窄的假象，不是设计问题）。 */
+        min-width: 1120px;
+      }
+      .topbar {
+        height: var(--topbar-h);
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        padding: 0 var(--sp-4);
+        border-bottom: 1px solid var(--line);
+        background: var(--topbar-bg);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        font-weight: 500;
+      }
+      .brand img {
+        width: 22px;
+        height: 22px;
+        display: block;
+      }
+      .crumb {
+        color: var(--text-2);
+        font-size: var(--fs-small);
+      }
+      .search {
+        margin-left: auto;
+        width: 168px;
+        height: 33px;
+        border-radius: var(--radius);
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--muted);
+        font-size: var(--fs-small);
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        padding: 0 var(--sp-2);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-1);
+        height: 30px;
+        padding: 0 var(--sp-2);
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--green-line);
+        background: var(--green-soft);
+        color: var(--green);
+        font-size: var(--fs-micro);
+      }
+      .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: var(--radius-circle, 50%);
+        background: var(--primary-soft);
+        color: var(--primary-ink);
+        display: grid;
+        place-items: center;
+        font-size: var(--fs-small);
+        font-weight: 500;
+      }
+      .shell {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+      .fnbar {
+        width: var(--fnbar-w);
+        flex: none;
+        background: var(--bg-soft);
+        border-right: 1px solid var(--line);
+        padding: var(--sp-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-3);
+      }
+      .fnbar__new {
+        height: 31px;
+        border-radius: var(--radius);
+        border: 0;
+        background: var(--primary);
+        color: var(--on-primary);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--sp-1);
+        box-shadow: var(--shadow-1);
+      }
+      .fnbar__composer {
+        height: 95px;
+        flex: none;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: var(--shadow-1);
+        padding: 9px;
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-1);
+      }
+      .fnbar__ghost {
+        color: var(--muted);
+        font-size: var(--fs-small);
+      }
+      .fnbar__modes {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        margin-top: auto;
+      }
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .nav__row {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: 6px var(--sp-2);
+        border-radius: var(--radius-sm);
+        color: var(--text-2);
+        font-size: var(--fs-body);
+      }
+      .nav__row[aria-current="page"] {
+        color: var(--primary-ink);
+        background: var(--primary-soft);
+        font-weight: 500;
+      }
+      .work {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .pagehead {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: var(--sp-3) var(--sp-4);
+        border-bottom: 1px solid var(--line);
+      }
+      .pagehead__title {
+        font: 500 var(--fs-title) / 1.3 var(--sans);
+      }
+      .pagehead__count {
+        color: var(--muted);
+        font-size: var(--fs-small);
+      }
+      .tabs {
+        display: flex;
+        gap: var(--sp-3);
+        margin-left: var(--sp-3);
+      }
+      .tabs span {
+        padding-bottom: 5px;
+        color: var(--muted);
+        font-size: var(--fs-body);
+        border-bottom: 2px solid transparent;
+      }
+      .tabs span[aria-current="true"] {
+        color: var(--text);
+        border-bottom-color: var(--primary);
+        font-weight: 500;
+      }
+      .work__body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+      }
+      .subbar {
+        width: var(--subbar-w);
+        flex: none;
+        border-right: 1px solid var(--line);
+        padding: var(--sp-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-1);
+      }
+      .subbar__h {
+        color: var(--muted);
+        font-size: var(--fs-micro);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: var(--sp-1);
+      }
+      .subbar__row {
+        color: var(--text-2);
+        font-size: var(--fs-small);
+        padding: 5px var(--sp-2);
+        border-radius: var(--radius-sm);
+      }
+      .subbar__row[aria-current="true"] {
+        background: var(--panel-2);
+        color: var(--text);
+      }
+      .timeline {
+        flex: 1;
+        min-width: 0;
+        padding: var(--sp-4);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-2);
+      }
+      .day {
+        color: var(--muted);
+        font-size: var(--fs-micro);
+        font-family: var(--mono);
+      }
+      .memo {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        padding: var(--sp-2) var(--sp-3);
+        font-size: var(--fs-small);
+        color: var(--text-2);
+        display: flex;
+        gap: var(--sp-2);
+        align-items: flex-start;
+      }
+      .memo__dot {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-circle, 50%);
+        background: var(--line-2);
+        margin-top: 7px;
+        flex: none;
+      }
+
+      /* ---------- 浮层与弹窗 ---------- */
+      /* 遮罩：只做压暗，不放入场动画。
+         评审环境（无头 / file://）里 CSS 动画不推进，浮层会卡在首帧变成半透明——
+         原型要的是"任何环境都实心可读"。入场动效按 DESIGN.md §6.8（160–200ms）在实现里做。 */
+      .overlay {
+        position: absolute;
+        inset: 0;
+        background: var(--scrim);
+        display: grid;
+        place-items: center;
+        padding: var(--sp-4);
+      }
+      .modal {
+        width: 100%;
+        max-width: 400px;
+        background: var(--panel);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-3);
+        overflow: hidden;
+      }
+      .modal__head {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: var(--sp-3) var(--sp-4);
+        border-bottom: 1px solid var(--line);
+      }
+      .modal__title {
+        margin: 0;
+        font: 500 var(--fs-body-lg) / 1.3 var(--sans);
+      }
+      .modal__body {
+        padding: var(--sp-4);
+      }
+      .modal__foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--sp-2);
+        padding: var(--sp-3) var(--sp-4);
+        border-top: 1px solid var(--line);
+        background: var(--bg-soft);
+      }
+      .input {
+        display: block;
+        width: 100%;
+        min-height: 112px;
+        max-height: 320px;
+        padding: var(--sp-2);
+        border-radius: var(--radius);
+        border: 1px solid var(--line-2);
+        background: var(--bg);
+        color: var(--text);
+        font: var(--fs-body) / 1.6 var(--sans);
+        resize: vertical;
+      }
+      .input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+        outline: none;
+      }
+      .input::placeholder {
+        color: var(--muted);
+      }
+      .hintline {
+        min-height: 18px;
+        margin-top: var(--sp-1);
+        font-size: var(--fs-micro);
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+      }
+      .hintline--warn {
+        color: var(--amber);
+      }
+      /* 属性区：按「这条是什么 → 什么时候 → 归到哪」分三组，每组一行。
+         这**取代**了 DESIGN.md §2.2 原来的「字段行固定 26px、不换行、越界横向滚动」——
+         单行在 520px 下装不下清单 Memo 的全部控件（用户 2026-10-01 拍板允许多行）。
+         每行 min-height 26px、允许换行，所以标签多的时候是往下长而不是横向拖。 */
+      .fields {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-1);
+        margin-top: var(--sp-2);
+      }
+      .fields__row {
+        position: relative; /* 标签菜单的锚 */
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        row-gap: var(--sp-1);
+        min-height: 26px;
+        flex-wrap: wrap;
+      }
+      /* 行尾（计数 / ⓘ）永远靠最右 */
+      .fields__row .extras__end {
+        margin-left: auto;
+      }
+      /* 添加内容窗口放宽到 520px（用户 2026-10-01：窗口可以做大一点）；
+         其余弹窗仍按 DESIGN.md §2.2 的 400px。min() 保证窄屏不溢出。 */
+      #stageNext .modal {
+        max-width: min(520px, 100%);
+      }
+      /* 标签选择：锚在标签行上方的短菜单（DESIGN.md §5.3「短菜单 → 菜单浮层」）。
+         行不再有 overflow，浮层可以直接挂在行里向上展开，不会被裁掉（§6.4-1 空间不足向上翻）。 */
+      .tagmenu {
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + var(--sp-1));
+        z-index: 3;
+        width: 240px;
+        max-height: 232px;
+        overflow-y: auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-2);
+        padding: var(--sp-2);
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-1);
+      }
+      .tagmenu input {
+        height: 27px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--line-2);
+        background: var(--bg);
+        color: var(--text);
+        font: var(--fs-small) / 1 var(--sans);
+        padding: 0 var(--sp-2);
+        width: 100%;
+      }
+      .tagmenu input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+        outline: none;
+      }
+      .tagmenu__list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--sp-1);
+      }
+      /* 记录日期 chip：可点开系统日期选择器。
+         input 铺满 chip 但透明——比 showPicker() 稳，键盘也能直接聚焦到它；
+         不能用 display:none（不可聚焦），这与 §2.2「不得 display:none 塌陷」同一口径。 */
+      .chip--date {
+        position: relative;
+        cursor: pointer;
+      }
+      .chip--date input[type="date"] {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        color-scheme: inherit;
+      }
+      .chip--date:focus-within {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .extras__end {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-1);
+        color: var(--muted);
+        font-size: var(--fs-micro);
+        white-space: nowrap;
+      }
+      .field {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-1);
+        color: var(--text-2);
+        font-size: var(--fs-micro);
+        white-space: nowrap;
+      }
+      .field input[type="date"] {
+        height: 26px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--line-2);
+        background: var(--panel);
+        color: var(--text);
+        font: var(--fs-micro) / 1 var(--sans);
+        padding: 0 var(--sp-2);
+        color-scheme: inherit;
+      }
+      .pin {
+        display: inline-grid;
+        place-items: center;
+        width: 17px;
+        height: 17px;
+        border-radius: var(--radius-circle, 50%);
+        background: var(--primary);
+        color: var(--on-primary);
+        font: 500 10px / 1 var(--sans);
+        flex: none;
+        box-shadow: var(--shadow-1);
+      }
+      .pin--plain {
+        background: var(--panel-3);
+        color: var(--text-2);
+        box-shadow: none;
+      }
+      .toast {
+        position: absolute;
+        right: var(--sp-4);
+        bottom: var(--sp-4);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-1);
+        padding: var(--sp-2) var(--sp-3);
+        border-radius: var(--radius);
+        background: var(--panel);
+        border: 1px solid var(--green-line);
+        color: var(--green);
+        font-size: var(--fs-small);
+        box-shadow: var(--shadow-2);
+      }
+      [hidden] {
+        display: none !important;
+      }
+
+      /* ---------- 变更清单 / 拍板项 ---------- */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: var(--sp-3);
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        padding: var(--sp-4);
+      }
+      .card h3 {
+        margin: 0 0 var(--sp-2);
+        font: 500 var(--fs-body-lg) / 1.4 var(--sans);
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+      }
+      .card p {
+        margin: 0 0 var(--sp-2);
+        font-size: var(--fs-small);
+        color: var(--text-2);
+      }
+      .card dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: var(--sp-1) var(--sp-2);
+        font-size: var(--fs-small);
+      }
+      .card dt {
+        color: var(--muted);
+        font-size: var(--fs-micro);
+        padding-top: 2px;
+      }
+      .card dd {
+        margin: 0;
+        color: var(--text-2);
+      }
+      .delta {
+        color: var(--red);
+        text-decoration: line-through;
+        text-decoration-color: var(--red-line);
+      }
+      .after {
+        color: var(--green);
+        font-weight: 500;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        padding: var(--sp-4);
+      }
+      .decision {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: var(--sp-2);
+        padding: var(--sp-3) 0;
+        border-top: 1px solid var(--hairline);
+      }
+      .decision:first-of-type {
+        border-top: 0;
+      }
+      .decision__n {
+        font: 500 var(--fs-micro) / 1.7 var(--mono);
+        color: var(--primary-ink);
+      }
+      .decision h4 {
+        margin: 0 0 var(--sp-1);
+        font: 500 var(--fs-body) / 1.5 var(--sans);
+      }
+      .decision p {
+        margin: 0 0 var(--sp-2);
+        font-size: var(--fs-small);
+        color: var(--text-2);
+      }
+      .opts {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-1);
+      }
+      .opt {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-2);
+        padding: var(--sp-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bg);
+        font-size: var(--fs-small);
+        cursor: pointer;
+      }
+      .opt:hover {
+        background: var(--panel-2);
+      }
+      .opt:has(input:checked) {
+        border-color: var(--primary-line);
+        background: var(--primary-soft);
+      }
+      .opt input {
+        margin: 3px 0 0;
+        accent-color: var(--primary);
+      }
+      .opt b {
+        font-weight: 500;
+      }
+      .opt span {
+        color: var(--text-2);
+      }
+      .opt em {
+        font-style: normal;
+        color: var(--primary-ink);
+        font-weight: 500;
+      }
+      ul.plain {
+        margin: 0;
+        padding-left: 1.15em;
+        font-size: var(--fs-small);
+        color: var(--text-2);
+      }
+      ul.plain li {
+        margin-bottom: var(--sp-1);
+      }
+      .foot {
+        margin-top: var(--sp-6);
+        padding-top: var(--sp-3);
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: var(--fs-micro);
+        font-family: var(--mono);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="page__head">
+        <div>
+          <h1 class="page__title">添加内容窗口（Memo / 待办）· 优化方案</h1>
+          <p class="page__sub">
+            优化 <b>Memo 页 / 待办页右上角「添加」</b>弹出的添加内容窗口。左是<strong>现状</strong>（已落地 v1），
+            右是<strong>方案</strong>（已按 D1–D4 定稿）。两个弹窗都能真输入、真发布，用来对比手感，不只是静态图。
+          </p>
+        </div>
+        <div class="page__tools">
+          <span class="seg" role="group" aria-label="模拟从哪个页面点添加">
+            <button type="button" data-page="memo" aria-pressed="true">在 Memo 页</button>
+            <button type="button" data-page="task" aria-pressed="false">在待办页</button>
+          </span>
+          <button class="btn btn--sm" id="themeBtn" type="button">深色主题</button>
+          <button class="btn btn--sm" id="resetBtn" type="button">重置输入</button>
+        </div>
+      </header>
+
+      <h2 class="sec"><span class="sec__n">01</span>现状 vs 方案（可交互）</h2>
+      <p class="sec__note">
+        说的是 <b>Memo 页 / 待办页右上角那个「添加」</b>弹出来的窗口，<b>不是</b>功能栏里的快速录入框——
+        那边一个字都不动。两边的弹窗都可以<strong>直接输入、点清单 chip、点标签、点发布</strong>。
+        页首「在 Memo 页 / 在待办页」两个按钮用来模拟你从哪个页面点的添加（D1 已定类型由页面决定，窗口内不切换）。
+        颜色 / 字号 / 圆角 / 间距全部取自 <code>DESIGN.md</code> 令牌，右上角可切深色。
+      </p>
+
+      <div class="compare">
+        <section class="col col--now">
+          <div class="col__head">
+            <span class="col__tag">现状</span>
+            <span class="col__name">已落地 v1</span>
+            <span class="col__desc">打开即定位；类型锁死在打开时那一次</span>
+          </div>
+          <div class="stage" id="stageNow"></div>
+        </section>
+
+        <section class="col col--next">
+          <div class="col__head">
+            <span class="col__tag">方案</span>
+            <span class="col__name">清单 Memo 也能设截止与优先级 · 标签可点选</span>
+            <span class="col__desc">类型由所在页面决定，窗口内不切换</span>
+          </div>
+          <div class="stage" id="stageNext"></div>
+        </section>
+      </div>
+
+      <h2 class="sec"><span class="sec__n">02</span>按 D1–D4 定下的方案</h2>
+      <p class="sec__note">
+        你已定：<b>D1 不放类型切换</b>、<b>D2 清单仍需点确认</b>、<b>D3 放宽窗口</b>、<b>D4 发布即关窗</b>，
+        以及「<b>窗口可以做大一点，属性区两行三行都行</b>」——据此定为 <b>520px + 属性区三行</b>。
+        加上「页头入口」这个口径澄清（不是在功能栏录入框里加东西），最终形态是下面这六条。
+      </p>
+      <div class="cards">
+        <article class="card">
+          <h3><span class="pin">1</span>类型由所在页面决定，窗口内不放切换</h3>
+          <p>
+            入口是 <b>Memo 页 / 待办页右上角的「添加」</b>，你在哪个页面，类型就已经定了；
+            窗口里再摆一个 Memo/待办 切换等于让用户改自己刚做过的选择。原型页首那两个按钮就是模拟
+            「你在哪个页面点了添加」。
+          </p>
+          <dl>
+            <dt>好处</dt>
+            <dd><code>kind</code> 依旧由打开入口决定，<code>Modal</code> 公共组件不用改（原先要加头部插槽）。</dd>
+            <dt>保持</dt>
+            <dd><code>Ctrl+N</code> 仍默认落在 Memo 档。</dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3><span class="pin">2</span>Memo 确认为清单后，截止 / 优先级跟着出来</h3>
+          <p>
+            这是本轮<b>最实的一条</b>。清单 Memo 就是 <code>is_task=1</code>，而待办视图取的正是
+            <code>is_task === 1</code>——所以你在 Memo 页点完「设为清单？」的下一秒，这条就已经躺在待办视图里了。
+            但现状里字段行只剩一个 chip，<b>没有任何地方能设截止和优先级</b>，用户只能去待办视图再改一次。
+          </p>
+          <dl>
+            <dt>根因</dt>
+            <dd>
+              <code>publishMemo</code> 的 options <b>本来就收</b> <code>due</code> / <code>priority</code>，
+              是 <code>AddEntryDialog</code> 只传了 <code>{ asTask }</code>，把它们丢在窗口里。
+            </dd>
+            <dt>成本</dt>
+            <dd><span class="after">零协议改动</span>：字段、写入通道、md front matter 全都现成，只补 UI 与一个 prop 形状。</dd>
+            <dt>控件</dt>
+            <dd>与待办档同一族：截止用原生 date、优先级用盒式分段控件，不新增控件形态。</dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3><span class="pin">3</span>标签：从「只能靠正文 #」变成可点选</h3>
+          <p>
+            现状标签由 <code>deriveTags(text)</code> 从正文 <code>#</code> 派生，窗口里没法点、也没法看全。
+            而 <code>tags</code> 是 Memo 侧栏筛选、标签视图、待办筛选都在吃的字段。
+          </p>
+          <dl>
+            <dt>做法</dt>
+            <dd>
+              字段行给一个「+ 标签」chip，点开是锚在旁边的<strong>短菜单</strong>（§5.3 短菜单走菜单浮层，不是弹窗）：
+              已有标签多选 + 输入新建。
+            </dd>
+            <dt>与正文 # 的关系</dt>
+            <dd>两边的标签<strong>合并去重</strong>后一起写进 <code>tags</code>；正文里来的显示为紫色、点选的显示为橙色，来源一眼可分。</dd>
+            <dt>边界</dt>
+            <dd>标签写进元数据，<b>不写进正文</b>（沿用既有约定）。</dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3><span class="pin">4</span>字段行不再有「空行」，但清单仍需点确认</h3>
+          <p>
+            字段行固定 26px 不许塌陷（发布时不跳高度），但 memo 档在没写 <code>- [ ]</code> 时原本是
+            <strong>纯空白的一条</strong>。现在这行常驻一个「清单」chip 占位（不可点、无清单项时不误导），
+            写出 <code>- [ ]</code> 后它变成可点的「设为清单？」。
+          </p>
+          <dl>
+            <dt>D2 口径</dt>
+            <dd><span class="after">不自动勾</span>：写了 <code>- [ ]</code> 只是<b>问</b>，点一下才变清单（守住需求 §9.3）。</dd>
+            <dt>行尾</dt>
+            <dd>清单项数量「N 项」实时可见（§5.4-2 实时计数必须可见）+ 一个 ⓘ 说明 <code>@</code> 与标签口径。</dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3><span class="pin">5</span>记录日期：这条落在时间轴的哪一天</h3>
+          <p>
+            Memo 时间轴按 <code>memo_at</code> 分天，现状写死 <code>memo_at: now</code>——所以现在
+            <b>只能记"此刻"</b>，补记昨天、提前记明天都做不到。加一个日期字段就补上了这个缺口。
+          </p>
+          <dl>
+            <dt>形态</dt>
+            <dd>
+              字段行最左侧一个 <code>sw</code> 胶囊：日历图标 + <b>今天</b>（默认）或 <b>10-01</b>（改过）。
+              选了非今天就转主色，一眼看出"这条会落到别的一天"。
+            </dd>
+            <dt>默认</dt>
+            <dd><span class="after">留空 = 今天 = 现状行为</span>，一个字都不改时发出去的 <code>memo_at</code> 与现在完全相同。</dd>
+            <dt>只给 Memo 档</dt>
+            <dd>
+              待办档已有「截止」，再加一个"记录日期"会让同一行出现两个日期、含义打架。
+              <b>待办不做</b>——要记哪天，用 Memo 记。
+            </dd>
+            <dt>控件</dt>
+            <dd>
+              胶囊里套一个铺满但透明的原生 <code>&lt;input type="date"&gt;</code>：点 chip 弹系统选择器、
+              键盘也能直接聚焦。比 <code>showPicker()</code> 稳；不用 <code>display:none</code>（不可聚焦）。
+            </dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3><span class="pin">6</span>窗口放宽到 520px + 属性区分三行</h3>
+          <p>
+            D3 定了要放宽；你随后明确「窗口可以做大一点，两行三号（行）都可以」，据此定为
+            <b>520px + 属性区三行</b>。落地方式仍是<b>只改这一个窗口</b>：<code>DESIGN.md</code> §2.2 的
+            「弹窗最大宽 400px」保持不动，另加一条结构尺寸「添加内容窗口宽 520px」——
+            解锁、重置密码、定义列结构那些弹窗不受影响。
+          </p>
+          <dl>
+            <dt>三行分组</dt>
+            <dd>
+              行 1「<b>这条是什么</b>」：记录日期 · 清单标记 · 清单项计数
+              ｜行 2「<b>什么时候</b>」：截止 · 优先级 ｜行 3「<b>归到哪</b>」：标签
+            </dd>
+            <dt>空组不占位</dt>
+            <dd>
+              <span class="after">这一条改了 §2.2</span>：原来是「固定 26px、不换行、空行也占位」，
+              现在<b>按需出现</b>——待办档不会出现一条什么都没写的行。
+            </dd>
+            <dt>发布不跳高</dt>
+            <dd>
+              原规则要占位，本质是怕<b>发布</b>时高度变。现在发布不改任何内容，高度稳定；
+              唯一的变化是用户主动点「设为清单？」展开行 2，那是有意展开。
+            </dd>
+            <dt>顺带</dt>
+            <dd>输入区 96 → 112px；行内允许换行，标签多时往下长而不是横向拖。</dd>
+            <dt>禁用原因</dt>
+            <dd>
+              空内容时「发布」置灰的原因从 <code>title</code>（键盘/触屏看不到）挪到输入区下方一行可见 micro 提示，
+              修掉 <code>DESIGN.md</code> §6.1「禁用必须说明为何禁用」这条违反。
+            </dd>
+          </dl>
+        </article>
+      </div>
+
+      <h2 class="sec"><span class="sec__n">03</span>属性配置：数据层允许什么</h2>
+      <p class="sec__note">
+        逐条对着 <code>packages/shared/src/items.ts</code> 的 <code>ItemMeta</code> / <code>ItemWriteMeta</code> /
+        <code>ItemMetaPatch</code> 与 <code>useMemoWrite.ts</code> 的写入路径核过。分界线是
+        <b>「新建时能不能写」</b>——只有 <code>patch_meta</code> 支持、新建协议里没有的字段，这轮不做。
+      </p>
+      <div class="panel">
+        <div class="decision">
+          <div class="decision__n">做</div>
+          <div>
+            <h4>标签 <code>tags</code></h4>
+            <p>
+              <code>tags: string[]</code> 在 <code>ItemWriteMeta</code> 里，<b>新建即可写</b>；
+              <code>patch_meta</code> 也支持。窗口点选的标签与正文派生的标签合并后一起落库。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">做</div>
+          <div>
+            <h4>截止 <code>task_due</code> / 优先级 <code>task_priority</code>（清单 Memo 也给）</h4>
+            <p>
+              两个字段都在 <code>ItemWriteMeta</code> 里，<code>publishMemo</code> 也已经透传。
+              待办档常驻；Memo 档在确认为清单后出现——因为那就是一条真待办。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">做</div>
+          <div>
+            <h4>记录日期 <code>memo_at</code>（只给 Memo 档）</h4>
+            <p>
+              <code>memo_at</code> 在 <code>ItemWriteMeta</code> 里，<b>新建即可写</b>；现状被
+              <code>publishMemo</code> 写死成 <code>now</code>，改成接受一个日期即可。
+              <b>实现上有个坑</b>：<code>memo_at</code> 是毫秒时间戳，而时间轴分天走的是
+              <b>设置时区</b>（<code>groupMemosByDay</code> 默认 <code>Asia/Shanghai</code>，不是本机时区）。
+              我的建议是<b>只改年月日、保留当前时分秒</b>，并按设置时区构造——这样补记的 Memo 在那组里
+              排在最新位置、显示的时间也正常；直接写当天 00:00 会让一堆补记条目都显示 00:00。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">不做</div>
+          <div>
+            <h4>状态 <code>task_status</code></h4>
+            <p>
+              值域 <code>todo / doing / done</code>，但新建默认就是「待办」，发布后再改比发布时选更自然，
+              而且待办视图本来就有拖动 / 点选改状态。放进添加窗口只是多一个几乎不用动的控件。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">不做</div>
+          <div>
+            <h4>置顶 <code>pinned</code> / 收藏 <code>starred</code></h4>
+            <p>
+              这两个字段<b>只在 <code>ItemMetaPatch</code> 里</b>，<code>ItemWriteMeta</code> 没有——
+              要在新建时设置就得扩协议（服务端与客户端的 schema 一起动）。而且刚建的条目置顶 / 收藏价值很低，
+              收益配不上改协议的成本。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">不做</div>
+          <div>
+            <h4>单篇加密 <code>enc_self</code> / 放进加密空间 <code>in_enc_space</code></h4>
+            <p>
+              服务端在 <code>ItemMetaPatchSchema</code> 里明确<b>拒绝给 Memo 做单篇加密</b>（Memo 归隐私锁管）；
+              <code>in_enc_space</code> 必须和 <code>folder_id</code> 同一次补丁给，且隐私锁关闭时不可用。
+              设计文档 §8.7 也定了「输入框没有加密开关」。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">待定</div>
+          <div>
+            <h4>所属笔记本 / 文件夹 <code>folder_id</code></h4>
+            <p>
+              <b>技术上完全支持</b>（<code>ItemWriteMeta.folder_id</code> 就在那儿），但有两个顾虑：
+              一是 Memo / 待办都是全局视图、「这条属于哪个笔记本」的实际诉求不强；
+              二是要引入文件夹树选择器这种重控件，塞进这个窗口里很挤，
+              还得处理加密空间内的文件夹在锁着时不可选。
+              <b>我的建议是这轮不做</b>，真要归档，建完再拖更顺手。你若觉得随手归档有价值，我再单独出一版。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="sec"><span class="sec__n">04</span>还需要你点头的两件事</h2>
+      <p class="sec__note">D1–D4 已定，这两条是属性配置带出来的新问题。</p>
+      <div class="panel">
+        <div class="decision">
+          <div class="decision__n">N1</div>
+          <div>
+            <h4>标签这一项，做还是先不做？</h4>
+            <p>它是本轮唯一需要动「标签从哪来」这条既有口径的改动（从纯派生变成派生 + 点选合并）。</p>
+            <div class="opts">
+              <label class="opt"
+                ><input type="radio" name="n1" checked /><b>做，点选 + 新建</b>
+                <span>　写入通道现成；Memo 侧栏、标签视图、待办筛选都吃 <code>tags</code>，收益直接。</span></label
+              >
+              <label class="opt"
+                ><input type="radio" name="n1" /><b>先不做</b>
+                <span>　这轮只补截止 / 优先级（零协议），标签继续只靠正文 <code>#</code>。</span></label
+              >
+            </div>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">已定</div>
+          <div>
+            <h4>N1 · 标签做（2026-10-01 拍板）</h4>
+            <p>
+              字段行给「+ 标签」chip → 锚在旁边的短菜单（已有标签多选 + 输入新建），
+              与正文 <code>#</code> 派生的标签<b>合并去重</b>后一起写进 <code>tags</code>。
+              正文来的显示紫色、点选的显示橙色，来源一眼可分。属性一律不写进正文。
+            </p>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">N2</div>
+          <div>
+            <h4>520px 是只给这个窗口，还是改全局弹窗宽度？</h4>
+            <p>
+              改全局最省事，但解锁、重置密码、定义列结构那些弹窗会一起变宽，属于没必要的连带改动。
+            </p>
+            <div class="opts">
+              <label class="opt"
+                ><input type="radio" name="n2" checked /><b>只给「添加内容窗口」520px</b>
+                <span>　推荐：§2.2 保留 400px，另加一条具名结构尺寸，影响面最小。</span></label
+              >
+              <label class="opt"
+                ><input type="radio" name="n2" /><b>全局弹窗都改 520px</b>
+                <span>　改 <code>DESIGN.md</code> §2.2 一处，但所有弹窗一起变宽。</span></label
+              >
+            </div>
+          </div>
+        </div>
+        <div class="decision">
+          <div class="decision__n">已定</div>
+          <div>
+            <h4>N3 · 属性区分三行（2026-10-01 拍板）</h4>
+            <p>
+              你说「窗口可以做大一点，两行三行都可以」，据此定为 <b>520px + 属性区三行</b>，按
+              「这条是什么 / 什么时候 / 归到哪」分组。<b>这会改 <code>DESIGN.md</code> §2.2 的
+              「添加内容窗口字段行高 = 固定 26px、不换行」</b>——改成「属性区每行 min-height 26px、
+              允许换行、空组不占位」。这是本轮唯一一处推翻已定结构尺寸的地方，实施时要单独回写。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="sec"><span class="sec__n">05</span>两个入口怎么弹 · 复用盘点</h2>
+      <p class="sec__note">
+        「待办右上角的添加」<b>已经在弹同一个窗口了</b>——不是要新建一个。两处入口都走
+        <code>addEntry.open(kind)</code>，同一个 <code>useAddEntrySlot</code>、同一个
+        <code>AddEntryDialog</code>，只有 <code>kind</code> 不同。原型页首那两个按钮就是它的模拟。
+      </p>
+      <div class="cards">
+        <article class="card">
+          <h3><span class="pin">✓</span>已经真正共用的（保持）</h3>
+          <p>这些是两个弹窗（乃至两个录入面）之间<b>实打实共享</b>的东西，实施时一份都不许抄第二遍：</p>
+          <dl>
+            <dt>窗口装配</dt>
+            <dd>
+              <code>useAddEntrySlot</code>（<code>App/AddEntrySlot.tsx</code>）——开关状态 + JSX 一份，
+              两个入口都指到它。<code>App.tsx</code>：待办 <code>onAdd</code> → <code>open("task")</code>，
+              Memo <code>onAdd</code> → <code>open("memo")</code>。
+            </dd>
+            <dt>窗口本体</dt>
+            <dd>
+              <code>AddEntryDialog</code> 一个组件、<code>kind</code> 两种——这正是你最初要的
+              「复用一个窗口结构、只换显示的设置」。
+            </dd>
+            <dt>判定与文案</dt>
+            <dd>
+              <code>TASK_ITEM_PATTERN</code>（<code>- [ ]</code> 清单项）、<code>TASK_PRIORITIES</code> /
+              <code>TASK_PRIORITY_LABELS</code>（来自 <code>@menote/mdcore</code>）、<code>deriveTags</code>、
+              <code>deriveTaskFields</code>——都是共享纯函数，不在本窗口重写。
+            </dd>
+            <dt>写入</dt>
+            <dd>
+              <code>publishMemo</code> 一条路径（<code>useMemoWrite.ts</code>），
+              <code>onPublishTask</code> 就是它的 <code>{ asTask: true, ...options }</code> 包装。
+            </dd>
+            <dt>UI 与时区</dt>
+            <dd>
+              <code>Modal</code> / <code>Button</code> / <code>Chip</code> / <code>SegmentedControl</code> /
+              <code>InfoHint</code>；<code>dayKeyInZone</code>（<code>memos/model.ts</code>）分天，
+              记录日期的反向换算（新函数）放同一处、同样带单测。
+            </dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h3><span class="pin">!</span>名存实亡的"复用"：<code>ModeExtras</code></h3>
+          <p>
+            现在的字段组件 <code>ModeExtras</code> 挂在 <code>Composer.tsx</code> 里、注释写着
+            "两个录入面复用同一份实现"。但<b>它已经只有一个调用方了</b>——
+            功能栏录入框 2026-10-01 把属性行删掉之后，<code>Composer.tsx</code> 里<b>根本没有渲染它</b>。
+          </p>
+          <dl>
+            <dt>证据</dt>
+            <dd>
+              全仓 <code>ModeExtras</code> 只有一处 import：<code>AddEntryDialog.tsx</code>。
+              <code>Composer.tsx</code> 的 JSX 里只有 <code>QuickComposer</code> + <code>composer__modes</code>。
+            </dd>
+            <dt>为什么不该继续硬复用</dt>
+            <dd>
+              它的形态与新方案对不上：① 参数是 <code>mode: ComposerMode</code> 的三分支 if/else，
+              其中 <b>note 档分支对窗口毫无意义</b>（笔记不进这个窗口）；
+              ② 死守单行 26px，而这轮已定三行；③ 要加记录日期与标签，都塞不进去。
+            </dd>
+            <dt>建议</dt>
+            <dd>
+              把它收成<b>窗口自己的</b> <code>AddEntryFields</code>（放 <code>fnbar/</code> 下、只服务窗口），
+              顺手把 <code>Composer.tsx</code> 里那几处只为它存在的导出与注释清掉——
+              真正的共享（<code>TASK_ITEM_PATTERN</code>、<code>ATTRIBUTE_FOCUS_SELECTOR</code>）留在原处。
+            </dd>
+            <dt>影响面</dt>
+            <dd>
+              <b>零行为变化</b>，只是把「假装被复用」的组件搬回它唯一的使用方旁边；
+              <code>add-entry-dialog.test.tsx</code> 的 13 条用例按新结构改断言即可。
+            </dd>
+          </dl>
+        </article>
+      </div>
+
+      <h2 class="sec"><span class="sec__n">06</span>本轮明确不做</h2>
+      <div class="panel">
+        <ul class="plain">
+          <li><b>功能栏录入框</b>：这次只改 Memo / 待办页头「添加」弹出来的窗口，功能栏那个快速录入框一个字不动（2026-10-01 刚把它压回两行）。</li>
+          <li><b>笔记档</b>：新建笔记仍走功能栏「新建笔记」，窗口只服务非笔记类（沿用已定口径）。</li>
+          <li><b>图片 / 附件</b>：瀑布流只渲染带图 Memo，窗口里加图会重现「加了看不见」。</li>
+          <li><b>富文本</b>：仍是 Markdown 纯文本，属性一律不写进正文。</li>
+          <li><b>待办档的记录日期</b>：待办已有「截止」，同一行再放一个"记录日期"含义会打架。要记哪天用 Memo 记。</li>
+          <li><b>发布后不关窗的连续记录</b>：D4 已定发布即关窗。</li>
+          <li><b>窗口内类型切换</b>：D1 已定不放。</li>
+        </ul>
+      </div>
+
+      <p class="foot">
+        评审产物 · 不入库 · 取值抄自 DESIGN.md v1.12 / tokens.css · 现状对照 apps/web/src/app/fnbar/AddEntryDialog.tsx
+      </p>
+    </div>
+
+    <template id="tpl">
+      <!-- 单根包裹：clone 出来的 fragment 被 adopt 进 DOM 后会**自身清空**，
+           之后再拿它 querySelector 就全是 null。留一个根元素、只搬根，查询才一直有效。 -->
+      <div class="stage-root">
+        <!-- 应用外壳：顶栏 + 功能栏 + 主区（DESIGN.md §2.1），弹窗叠在最上层 -->
+        <div class="app">
+        <div class="topbar">
+          <span class="brand"
+            ><svg
+              width="22"
+              height="22"
+              viewBox="0 0 512 512"
+              role="img"
+              aria-label="MeNote"
+              style="display: block"
+            >
+              <defs>
+                <linearGradient id="mn-cloud" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#F6821F" />
+                  <stop offset="100%" stop-color="#FBAD41" />
+                </linearGradient>
+                <linearGradient id="mn-paper-edge" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#F15A24" />
+                  <stop offset="100%" stop-color="#F6821F" />
+                </linearGradient>
+                <linearGradient id="mn-line" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#FDBA74" />
+                  <stop offset="100%" stop-color="#F6821F" />
+                </linearGradient>
+              </defs>
+              <g>
+                <path
+                  d="M108 307C76 304 54 279 54 248C54 216 79 190 110 188C121 141 163 110 213 110C257 110 295 134 313 169C328 160 346 155 365 155C414 155 454 195 454 244C454 290 420 327 375 333L128 333C120 333 114 323 108 307Z"
+                  fill="url(#mn-cloud)"
+                />
+                <path
+                  d="M292 181C313 164 338 155 365 155C414 155 454 195 454 244C454 290 420 327 375 333L292 333C310 315 320 290 320 261C320 230 309 202 292 181Z"
+                  fill="#F15A24"
+                  opacity="0.35"
+                />
+              </g>
+              <g transform="translate(0 40) rotate(-20 245 260)">
+                <path
+                  d="M157 177Q157 157 177 157L352 157Q373 157 373 178L373 383Q373 405 351 405L155 405Q133 405 133 383L133 199Q133 177 157 177Z"
+                  fill="url(#mn-paper-edge)"
+                />
+                <path
+                  d="M145 158Q145 138 165 138L340 138Q361 138 361 159L361 361Q361 382 340 382L145 382Q124 382 124 361L124 180Q124 158 145 158Z"
+                  fill="#FFFFFF"
+                />
+                <g fill="#F6821F">
+                  <rect x="105" y="177" width="52" height="18" rx="9" />
+                  <rect x="105" y="227" width="52" height="18" rx="9" />
+                  <rect x="105" y="277" width="52" height="18" rx="9" />
+                  <rect x="105" y="327" width="52" height="18" rx="9" />
+                </g>
+                <g fill="url(#mn-line)">
+                  <rect x="184" y="205" width="126" height="13" rx="6.5" />
+                  <rect x="184" y="247" width="126" height="13" rx="6.5" />
+                  <rect x="184" y="289" width="92" height="13" rx="6.5" />
+                </g>
+              </g>
+            </svg>
+            <span>MeNote</span></span
+          >
+          <span class="crumb">Memo</span>
+          <span class="search">
+            <svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            搜索笔记
+          </span>
+          <span class="pill">
+            <svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>
+            已同步
+          </span>
+          <span class="avatar">M</span>
+        </div>
+        <div class="shell">
+          <div class="fnbar">
+            <button class="fnbar__new" type="button">
+              <svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              新建笔记
+            </button>
+            <div class="fnbar__composer">
+              <span class="fnbar__ghost">记点什么…</span>
+              <div class="fnbar__modes">
+                <span class="seg"
+                  ><button type="button" aria-pressed="true">Memo</button
+                  ><button type="button" aria-pressed="false">待办</button
+                  ><button type="button" aria-pressed="false">笔记</button></span
+                >
+                <span class="btn btn--sm" style="margin-left: auto">发布</span>
+              </div>
+            </div>
+            <nav class="nav">
+              <span class="nav__row">首页</span>
+              <span class="nav__row" aria-current="page">Memo</span>
+              <span class="nav__row">待办</span>
+              <span class="nav__row">表格</span>
+              <span class="nav__row">回收站</span>
+            </nav>
+          </div>
+          <div class="work">
+            <div class="pagehead">
+              <span class="pagehead__title">Memo</span>
+              <span class="pagehead__count">128 条</span>
+              <span class="tabs"><span aria-current="true">时间轴</span><span>瀑布流</span></span>
+              <span class="btn btn--sm" style="margin-left: auto">
+                <svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                添加 Memo
+              </span>
+            </div>
+            <div class="work__body">
+              <div class="subbar">
+                <span class="subbar__h">侧栏</span>
+                <span class="subbar__row" aria-current="true">全部 Memo</span>
+                <span class="subbar__row">有清单的</span>
+                <span class="subbar__row">有图的</span>
+              </div>
+              <div class="timeline">
+                <span class="day">10-01</span>
+                <div class="memo"><span class="memo__dot"></span><span>周五复盘：把 M5 的字段口径写进设计稿</span></div>
+                <div class="memo"><span class="memo__dot"></span><span>买猫粮</span></div>
+                <span class="day">09-30</span>
+                <div class="memo"><span class="memo__dot"></span><span>提醒：周一交电费</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay">
+        <div class="modal" role="dialog" aria-modal="true">
+          <div class="modal__head">
+            <h2 class="modal__title"></h2>
+            <span data-slot="switch" style="margin-left: auto"></span>
+            <button class="btn btn--sm" data-slot="x" type="button" aria-label="关闭">
+              <svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+          <div class="modal__body" data-slot="body">
+            <textarea
+              class="input"
+              data-slot="text"
+              placeholder="记点什么……  Ctrl+Enter 发布"
+            ></textarea>
+            <div class="hintline" data-slot="hint"></div>
+            <div class="fields" data-slot="fields"></div>
+          </div>
+          <div class="modal__foot">
+            <button class="btn btn--sm" type="button" data-slot="cancel">取消</button>
+            <button class="btn btn--sm btn--primary" type="button" data-slot="publish">发布</button>
+          </div>
+        </div>
+      </div>
+      </div>
+    </template>
+
+    <script>
+      /* ============================================================
+         行为模型：两份实例共用一个工厂，只有 variant 不同。
+         判定与实现同一份口径：清单项 /^\s*[-*+]\s+\[[ xX]\]/m、标签由 # 派生。
+         ============================================================ */
+      const CHECK_RE = /^\s*[-*+]\s+\[[ xX]\]/gm;
+      const TAG_RE = /#([\p{L}\p{N}_/-]+)/gu;
+      const TPL = document.getElementById("tpl");
+
+      const ICON = {
+        check:
+          '<svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>',
+        list: '<svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+        cal: '<svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3.5v3M16 3.5v3"/></svg>',
+        warn: '<svg class="ico ico--13" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8v5M12 17h.01"/><path d="M10.3 4 3 17a2 2 0 0 0 1.7 3h14.6A2 2 0 0 0 21 17L13.7 4a2 2 0 0 0-3.4 0Z"/></svg>',
+      };
+
+      function parse(text) {
+        const items = text.match(CHECK_RE) || [];
+        const tags = Array.from(text.matchAll(TAG_RE), (m) => m[1]);
+        return { items: items.length, tags: Array.from(new Set(tags)) };
+      }
+
+      /** 造一个弹窗实例。variant: "now" | "next"；kind 由打开入口决定（"memo" | "task"）。 */
+      function mount(stage, variant, kind) {
+        // 只搬**根元素**，不把 fragment 本身 adopt 进去——否则 fragment 被清空，
+        // 后面 root.querySelector 全是 null（第一版就栽在这）。
+        const root = TPL.content.cloneNode(true).firstElementChild;
+        const q = (name) => root.querySelector(`[data-slot="${name}"]`);
+        stage.replaceChildren(root);
+
+        // 品牌标记内联了站点图标本体（DESIGN.md §5.5 第 5 条）。两个舞台各有一份，
+        // 渐变 id 必须加实例后缀，否则第二份的 `url(#mn-cloud)` 会指到第一份。
+        const uid = Math.random().toString(36).slice(2, 7);
+        for (const node of Array.from(root.querySelectorAll("[id]"))) {
+          const oldId = node.id;
+          const newId = `${oldId}-${uid}`;
+          node.id = newId;
+          for (const user of Array.from(root.querySelectorAll(`[fill="url(#${oldId})"]`))) {
+            user.setAttribute("fill", `url(#${newId})`);
+          }
+        }
+
+        const state = {
+          kind,
+          text: "",
+          taskRequested: false, // 用户手动点过「设为清单」（D2：必须点，不自动）
+          taskDue: "",
+          taskPriority: "medium",
+          memoDate: "", // 记录日期（memo_at 落在哪一天）；空 = 今天 = 现状行为
+          tags: [], // 窗口里选的标签（写进条目的 tags，不写进正文）
+          allTags: ["家务", "本周", "工作", "想法", "购物"], // 已有标签清单
+          tagMenuOpen: false,
+        };
+
+        const el = {
+          title: root.querySelector(".modal__title"),
+          switchHost: q("switch"),
+          text: q("text"),
+          hint: q("hint"),
+          fields: q("fields"),
+          body: q("body"),
+          publish: q("publish"),
+          toast: null,
+        };
+
+        function title() {
+          return state.kind === "memo" ? "添加 Memo" : "添加待办";
+        }
+
+        /**
+         * 属性区。现状（variant="now"）照抄 `ModeExtras` 的现状分支（单行 26px）；
+         * 方案（variant="next"）分三组、每组一行：
+         *   行 1「这条是什么」：记录日期 + 清单标记 + 清单项计数
+         *   行 2「什么时候」  ：截止 + 优先级（待办档常驻，Memo 档确认为清单后出现）
+         *   行 3「归到哪」    ：标签入口 + 标签
+         *
+         * 关键一条：Memo 档一旦点「设为清单？」，它就是 is_task=1、**会当场出现在待办视图**，
+         * 所以截止 / 优先级必须跟着出来——现状把它们连同 `publishMemo` 已有的 options 一起丢了。
+         *
+         * 空组**不渲染、不占位**。发布时内容不变，所以发布不跳高；
+         * 唯一的高度变化是用户主动点「设为清单？」展开行 2，那是有意展开。
+         */
+        function renderExtras(info) {
+          const parts = [];
+          if (variant === "now") {
+            // ── 现状 ──
+            if (state.kind === "task") {
+              parts.push(dueField(), priorityField());
+            } else {
+              const asTask = state.taskRequested && info.items > 0;
+              if (asTask) {
+                parts.push(
+                  '<span class="chip chip--sw chip--primary" data-act="settask" title="再点一次取消">' +
+                    ICON.check +
+                    "已设为清单</span>",
+                );
+              } else if (info.items > 0) {
+                parts.push(
+                  '<span class="chip chip--sw chip--amber" data-act="settask" title="正文里有 - [ ] 清单项；点这里让这条 Memo 变成清单">设为清单？</span>',
+                );
+              }
+            }
+            el.fields.innerHTML = wrapRow(parts);
+            return;
+          }
+
+          // ── 方案 ──
+          // 三组各一行：这条是什么 / 什么时候 / 归到哪。空组不渲染、不占位。
+          const asTask = state.kind === "task" || (state.taskRequested && info.items > 0);
+          const rowIdentity = [];
+          const rowTime = [];
+          const rowTags = [];
+          // 行 1 · 这条是什么（记录日期只给 Memo 档；留空 = 今天 = 现状行为）
+          if (state.kind === "memo") {
+            rowIdentity.push(dateChip());
+            // 清单标记（D2：仍需点一下确认，不自动勾）
+            if (state.taskRequested && info.items > 0) {
+              rowIdentity.push(
+                '<span class="chip chip--sw chip--primary" data-act="settask" title="再点一次取消；取消后这条就是普通 Memo">' +
+                  ICON.check +
+                  "已设为清单</span>",
+              );
+            } else if (info.items > 0) {
+              rowIdentity.push(
+                '<span class="chip chip--sw chip--amber" data-act="settask" title="正文里有 - [ ] 清单项；点这里让它变成一条待办">设为清单？</span>',
+              );
+            } else {
+              rowIdentity.push(
+                '<span class="chip" title="正文里写 - [ ] 清单项后，这里会问你要不要变成待办">清单</span>',
+              );
+            }
+          }
+          // 行 2 · 什么时候：截止 + 优先级（待办档常驻；Memo 档确认为清单后才出现）
+          if (asTask) {
+            rowTime.push(dueField(), priorityField());
+          }
+          // 行 3 · 归到哪：标签（写进 tags；正文 # 派生的也一并显示，来源用颜色区分）
+          const picked = state.tags;
+          const merged = Array.from(new Set([...picked, ...info.tags]));
+          rowTags.push(
+            '<span class="chip chip--sw" data-act="tagmenu" title="从已有标签里选，或直接输入新建">+ 标签' +
+              (merged.length > 0 ? " · " + merged.length : "") +
+              "</span>",
+          );
+          for (const tag of merged) {
+            const fromText = info.tags.includes(tag);
+            rowTags.push(
+              '<span class="chip ' +
+                (fromText ? "chip--tag" : "chip--primary") +
+                '" data-act="untag" data-tag="' +
+                tag +
+                '" title="' +
+                (fromText ? "来自正文 #" : "点一下移除这个标签") +
+                '">#' +
+                tag +
+                "</span>",
+            );
+          }
+          // 计数 + ⓘ 挂在**最后一行**的行尾，而不是固定在行 1——否则待办档的「这条是什么」行
+          // 只会剩下一个孤零零的计数。实时计数必须可见（DESIGN.md §5.4-2）。
+          if (info.items > 0) {
+            rowTags.push(
+              '<span class="extras__end">' +
+                info.items +
+                " 项" +
+                '<span class="infohint" title="正文里的 - [ ] 清单项数量；输入 @ 可跳到截止 / 优先级">i</span></span>',
+            );
+          }
+          el.fields.innerHTML =
+            wrapRow(rowIdentity, "identity") + wrapRow(rowTime, "time") + wrapRow(rowTags, "tags");
+
+          if (state.tagMenuOpen) {
+            const anchor = el.fields.querySelector('[data-row="tags"]');
+            if (!anchor) return;
+            const box = document.createElement("div");
+            box.className = "tagmenu";
+            box.innerHTML =
+              '<input type="text" placeholder="新建标签，回车确认" aria-label="新建标签" />' +
+              '<div class="tagmenu__list">' +
+              (state.allTags.length > 0
+                ? state.allTags
+                    .map(
+                      (t) =>
+                        '<span class="chip ' +
+                        (picked.includes(t) ? "chip--primary" : "chip--sw") +
+                        '" data-act="togtag" data-tag="' +
+                        t +
+                        '">#' +
+                        t +
+                        "</span>",
+                    )
+                    .join("")
+                : '<span style="color:var(--muted);font-size:var(--fs-micro)">还没有标签，直接输入新建</span>') +
+              "</div>";
+            anchor.append(box);
+            const input = box.querySelector("input");
+            input.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const name = input.value.trim().replace(/^#/, "");
+                if (name && !state.tags.includes(name)) {
+                  state.tags = [...state.tags, name];
+                  state.allTags = Array.from(new Set([...state.allTags, name]));
+                }
+                state.tagMenuOpen = false;
+                render();
+                el.text.focus();
+              } else if (e.key === "Escape") {
+                state.tagMenuOpen = false;
+                render();
+                el.text.focus();
+              }
+            });
+            input.focus();
+          }
+        }
+
+        /**
+         * 把一组控件包成一行。**空组返回空串**——这是多行属性区与原「固定 26px 不塌陷」的关键差别：
+         * 旧规则要求空行也占位，本轮改成按需出现，所以待办档不会出现一条什么都没写的行。
+         */
+        function wrapRow(parts, key) {
+          if (!parts || parts.length === 0) return "";
+          return (
+            '<div class="fields__row"' + (key ? ' data-row="' + key + '"' : "") + ">" + parts.join("") + "</div>"
+          );
+        }
+
+        /**
+         * 记录日期 chip。`memo_at` 决定这条 Memo 落在时间轴的哪一天（`groupMemosByDay` 按它分天）。
+         * 空值 = 今天，也就是现状 `publishMemo` 里的 `memo_at: now`——**不改日期时行为与现状一模一样**。
+         */
+        function dateChip() {
+          const isToday = state.memoDate === "" || state.memoDate === todayKey();
+          const label = isToday ? "今天" : state.memoDate.slice(5).replace("-", "-");
+          return (
+            '<label class="chip chip--sw chip--date ' +
+            (isToday ? "" : "chip--primary") +
+            '" title="这条 Memo 落在时间轴的哪一天；默认今天，可改">' +
+            ICON.cal +
+            "<span>" +
+            label +
+            "</span>" +
+            '<input type="date" data-act="memodate" value="' +
+            (isToday ? todayKey() : state.memoDate) +
+            '" aria-label="记录日期" />' +
+            "</label>"
+          );
+        }
+
+        function todayKey() {
+          const d = new Date();
+          const p = (n) => String(n).padStart(2, "0");
+          return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+        }
+
+        function dueField() {
+          return (
+            '<span class="field">截止 <input type="date" aria-label="截止日期" value="' +
+            state.taskDue +
+            '" /></span>'
+          );
+        }
+
+        function priorityField() {
+          const values = ["high", "medium", "low"];
+          const labels = { high: "高", medium: "中", low: "低" };
+          return (
+            '<span class="seg" role="group" aria-label="优先级">' +
+            values
+              .map(
+                (v) =>
+                  '<button type="button" data-pri="' +
+                  v +
+                  '" aria-pressed="' +
+                  (state.taskPriority === v) +
+                  '">' +
+                  labels[v] +
+                  "</button>",
+              )
+              .join("") +
+            "</span>"
+          );
+        }
+
+        function render() {
+          const info = parse(state.text);
+          const ready = state.text.trim() !== "";
+          el.title.textContent = title();
+
+          // D1：窗口内**不**放类型切换——入口在 Memo / 待办页头，类型由所在页决定
+          el.switchHost.innerHTML = "";
+
+          // 禁用原因改为可见（DESIGN.md §6.1：禁用必须说明为何，不能只挂在 title 上）
+          if (variant === "next") {
+            el.hint.className = "hintline";
+            el.hint.innerHTML = ready ? "" : "还没有内容 · 写一句就能发布";
+          } else {
+            el.hint.innerHTML = "";
+          }
+
+          el.publish.disabled = !ready;
+          el.publish.title = ready ? "Ctrl+Enter 发布" : "先写点内容再发布";
+          renderExtras(info);
+        }
+
+        el.text.addEventListener("input", () => {
+          state.text = el.text.value;
+          render();
+        });
+        el.text.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            publish();
+          }
+        });
+        root.addEventListener("change", (e) => {
+          const input = e.target.closest('[data-act="memodate"]');
+          if (!input) return;
+          state.memoDate = input.value;
+          render();
+        });
+
+        root.addEventListener("click", (e) => {
+          const target = e.target.closest("[data-act], [data-pri]");
+          if (!target) return;
+          if (target.dataset.pri) {
+            state.taskPriority = target.dataset.pri;
+            render();
+          } else if (target.dataset.act === "settask") {
+            state.taskRequested = !state.taskRequested;
+            state.tagMenuOpen = false;
+            render();
+          } else if (target.dataset.act === "tagmenu") {
+            state.tagMenuOpen = !state.tagMenuOpen;
+            render();
+          } else if (target.dataset.act === "togtag") {
+            const t = target.dataset.tag;
+            state.tags = state.tags.includes(t)
+              ? state.tags.filter((x) => x !== t)
+              : [...state.tags, t];
+            render();
+          } else if (target.dataset.act === "untag") {
+            state.tags = state.tags.filter((x) => x !== target.dataset.tag);
+            render();
+          }
+        });
+        // 点遮罩关闭（DESIGN.md §6.4-5）：等同「取消」，清空但不发提示
+        root.querySelector(".overlay").addEventListener("click", (e) => {
+          if (e.target === e.currentTarget) close();
+        });
+        for (const name of ["x", "cancel"]) q(name).addEventListener("click", () => close());
+        el.publish.addEventListener("click", publish);
+
+        function publish() {
+          if (el.text.value.trim() === "") return;
+          const info = parse(state.text);
+          // Memo 档确认为清单后，这条就是 is_task=1，会同时出现在 Memo 时间轴与待办视图
+          const asTask = state.kind === "task" || (state.taskRequested && info.items > 0);
+          const tagNote = state.tags.length > 0 ? " · 标签 " + state.tags.join("、") : "";
+          const label = asTask ? "已加入待办" : "已记录";
+          const where = asTask ? "已即时出现在待办视图" : "已即时出现在 Memo 时间轴";
+          close();
+          render();
+          toast(label + tagNote + " · " + where);
+        }
+
+        function toast(text) {
+          el.toast?.remove();
+          const node = document.createElement("div");
+          node.className = "toast";
+          node.innerHTML = ICON.check + "<span>" + text + "</span>";
+          stage.append(node);
+          el.toast = node;
+          setTimeout(() => node.remove(), 2800);
+        }
+
+        function close() {
+          state.text = "";
+          state.taskRequested = false;
+          state.taskDue = "";
+          state.taskPriority = "medium";
+          state.memoDate = "";
+          state.tags = [];
+          state.tagMenuOpen = false;
+          el.text.value = "";
+          el.fields.innerHTML = "";
+          el.hint.innerHTML = "";
+        }
+
+        // Esc 关闭（DESIGN.md §6.3）。两个舞台各挂一份，用「焦点在本舞台内」当归属判断，
+        // 免得在左边打字按 Esc 把右边的窗口也一起清了。
+        document.addEventListener("keydown", (e) => {
+          if (e.key !== "Escape") return;
+          if (!stage.contains(document.activeElement)) return;
+          e.preventDefault();
+          close();
+          render();
+        });
+
+        render();
+        el.text.focus();
+        return { setText: (v) => ((state.text = v), (el.text.value = v), render()) };
+      }
+
+      let nowApi = mount(document.getElementById("stageNow"), "now", "memo");
+      let nextApi = mount(document.getElementById("stageNext"), "next", "memo");
+
+      /**
+       * D1 的直接后果：窗口里没有类型切换，类型由**所在页面**决定。
+       * 所以评审时用页首这两个按钮模拟"你在 Memo 页 / 在待办页点了右上角的添加"。
+       */
+      let pageKind = "memo";
+      function openFromPage(kind) {
+        pageKind = kind;
+        for (const btn of document.querySelectorAll("[data-page]")) {
+          btn.setAttribute("aria-pressed", String(btn.dataset.page === kind));
+        }
+        nowApi = mount(document.getElementById("stageNow"), "now", kind);
+        nextApi = mount(document.getElementById("stageNext"), "next", kind);
+        nextApi.setText(SAMPLE);
+      }
+      const SAMPLE = "- [ ] 明天交电费\n- [ ] 续借图书\n#家务 #本周";
+
+      for (const btn of document.querySelectorAll("[data-page]")) {
+        btn.addEventListener("click", () => openFromPage(btn.dataset.page));
+      }
+
+      document.getElementById("themeBtn").addEventListener("click", (e) => {
+        const dark = document.documentElement.dataset.theme === "dark";
+        document.documentElement.dataset.theme = dark ? "light" : "dark";
+        e.target.textContent = dark ? "深色主题" : "浅色主题";
+      });
+
+      document.getElementById("resetBtn").addEventListener("click", () => {
+        nowApi.setText("");
+        nextApi.setText(SAMPLE);
+      });
+
+      // 开局：现状窗留空（看它的空属性行），方案窗预填一段含清单与标签的样例
+      nowApi.setText("");
+      nextApi.setText(SAMPLE);
+    </script>
+  </body>
+</html>

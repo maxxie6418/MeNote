@@ -772,6 +772,38 @@ button {
   color: var(--text-2);
 }
 
+/*
+  折叠槽（`foldGutter()`，2026-10-01 加）：默认**藏起来**，鼠标移上去才显形。
+  藏而不是删，是因为它不能是唯一入口——键盘侧还有 `foldKeymap`
+  （Ctrl+Shift+[ / ]），所以触屏与键盘用户都有路走（DESIGN.md 移动端底线第 2 条）。
+*/
+[data-editor] .cm-foldGutter .cm-gutterElement {
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.16s;
+}
+
+[data-editor] .cm-editor:hover .cm-foldGutter .cm-gutterElement,
+[data-editor] .cm-editor.cm-focused .cm-foldGutter .cm-gutterElement {
+  opacity: 1;
+}
+
+[data-editor] .cm-foldGutter .cm-gutterElement > span {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* 折叠起来的区间：一片带底色的小胶囊，告诉用户"这后面收起来了、点一下能展开" */
+[data-editor] .cm-foldPlaceholder {
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
 [data-editor] .cm-placeholder {
   color: var(--muted);
 }

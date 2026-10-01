@@ -13,7 +13,8 @@ import type { ThemeMode } from "../../../app/theme/useTheme";
 import { SETTINGS_PAGES, type SettingsPageId } from "../../../app/router";
 import { APP_VERSION, PROJECT_REPO_URL } from "../../../app/about";
 import { CardQuickMenu } from "./CardQuickMenu";
-import { EditorLabPage } from "../../editor-lab/ui/EditorLabPage";
+// 「编辑试验」暂时收起（2026-10-01，与 `router.ts` / `PAGE_META` 同步注释）：
+// import { EditorLabPage } from "../../editor-lab/ui/EditorLabPage";
 import { InstancePage } from "./InstancePage";
 
 /**
@@ -27,10 +28,11 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   general: { title: "通用", summary: "启动视图、时区、主题、笔记本树与快捷菜单" },
   account: { title: "账户与安全", summary: "登录密码与会话" },
   editor: { title: "编辑器", summary: "打开笔记时用哪一档、正文区能切到哪几档" },
-  "editor-lab": {
-    title: "编辑试验",
-    summary: "三篇隔离样文，用来看编辑和切换卡不卡。不写入正式笔记",
-  },
+  // 「编辑试验」暂时收起（2026-10-01）：与 `router.ts` 的 `SETTINGS_PAGES` 同步注释。
+  // "editor-lab": {
+  //   title: "编辑试验",
+  //   summary: "三篇隔离样文，用来看编辑和切换卡不卡。不写入正式笔记",
+  // },
   privacy: { title: "隐私锁", summary: "加密空间、门禁与隐私密码" },
   versions: { title: "版本与回收站", summary: "版本封存与保留策略、回收站保留天数" },
   instance: { title: "实例管理", summary: "本实例的注册开关与用量（仅管理员）" },
@@ -397,7 +399,9 @@ export function SettingsPanel({
           </>
         ) : null}
 
-        {page === "editor-lab" ? <EditorLabPage /> : null}
+        {/* 「编辑试验」暂时收起（2026-10-01，与 `router.ts` / `PAGE_META` 同步注释）：
+            试验区按桌面稿排布，窄面板里会挤成一条。恢复时把这一行与 import 一起放回即可。 */}
+        {/* {page === "editor-lab" ? <EditorLabPage /> : null} */}
 
         {page === "editor" ? (
           <section className="setcard" aria-label="编辑器">

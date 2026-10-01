@@ -1,7 +1,7 @@
 {
   "name": "menote",
   "private": true,
-  "version": "0.6.5",
+  "version": "0.6.7",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @menote/shared build && pnpm --filter @menote/mdcore build && pnpm --filter @menote/web dev",
+    "dev:seed": "node scripts/dev-seed-admin.mjs",
     "build": "pnpm --filter @menote/shared build && pnpm --filter @menote/mdcore build && pnpm --filter @menote/web build && node scripts/write-deploy-config.mjs",
     "typecheck": "tsc -b && pnpm -r --if-present typecheck",
     "lint": "eslint .",

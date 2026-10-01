@@ -10,13 +10,18 @@
  */
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { bracketMatching, foldGutter, foldKeymap, indentOnInput } from "@codemirror/language";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   EditorView,
   drawSelection,
+  dropCursor,
   highlightActiveLine,
+  highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  placeholder as placeholderExt,
+  rectangularSelection,
 } from "@codemirror/view";
 import { useEffect, useRef, useState } from "react";
 import { type FormatCommandId } from "./format-commands";
@@ -88,6 +93,14 @@ export interface EditorProps {
    * 生产侧不传即不报：这里不做任何统计、不读时钟、不影响保存策略。
    */
   onLifecycle?: (event: EditorLifecycleEvent) => void;
+  /**
+   * 空正文时的占位提示（2026-10-01 接上，**默认不显示**）。
+   *
+   * 为什么默认空：空正文该写什么属于**产品文案**，按 `DESIGN.md` §5.4「说明性文字
+   * 不平铺、由实现自行发明文案」不由实现决定，所以这里只留口子，调用方给了才出现。
+   * 参照外部项目 inkstone 的 `CodeEditor.tsx`，它默认给的是 `t("editor.start_writing")`。
+   */
+  placeholder?: string;
   className?: string;
   ariaLabel?: string;
 }
@@ -123,6 +136,7 @@ export function Editor({
   onFiles,
   onSlashQuery,
   onLifecycle,
+  placeholder,
   className,
   ariaLabel,
 }: EditorProps) {
@@ -208,14 +222,41 @@ export function Editor({
           */
           markdown({ base: markdownLanguage }),
           /*
+            —— 以下一组是「编辑手感」，全部只依赖已声明的 CM6 包，不新增依赖 ——
+            参照外部项目 inkstone 的 `CodeEditor.tsx` 扩展清单，挑了不改变编辑语义的补上。
+          */
+
+          /*
             `drawSelection` 修的是**跨行选区**：没有它时浏览器原生选区会在换行处断开、
             看起来是几段不相干的高亮，而选区正是"复制出来仍是带标记的 md"这条交互
             （即时渲染设计 §三-1）要依赖的东西。
           */
           drawSelection(),
+          /*
+            `dropCursor`：从别处拖文字进来时，在落点显示一条竖线。原先只有光标会在"原地不动"，
+            用户根本不知道这段要插到哪——这正是 DESIGN.md §6.1「操作要有可见反馈」的一条。
+          */
+          dropCursor(),
+          /* Alt + 拖拽 = 列选；`allowMultipleSelections` 让 Ctrl/Alt+点击能开多个光标 */
+          rectangularSelection(),
+          EditorState.allowMultipleSelections.of(true),
+          /* 回车继承上一行缩进：Markdown 里就是"列表/引用续写"，少按一次 Tab */
+          indentOnInput(),
+          /* 配对括号高亮：`(`, `[`, `*` 旁边亮出对应的那一个 */
+          bracketMatching(),
           editorBaseTheme(),
           highlightActiveLine(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          /*
+            占位提示。**默认不显示**——空正文该写什么属于产品文案，
+            按 DESIGN.md §5.4 不由实现自行发明；调用方传 `placeholder` 才出现。
+          */
+          placeholderExt(placeholder ?? ""),
+          /*
+            键位优先级：我们自己的 > 折叠 > 撤销重做 > 默认。
+            **刻意不加 `indentWithTab`**：那会让 Tab 插入缩进而不是移走焦点，
+            与 DESIGN.md §6.2「焦点与键盘可达（底线）」冲突。外部项目加了，我们不跟。
+          */
+          keymap.of([...defaultKeymap, ...foldKeymap, ...historyKeymap]),
           EditorView.lineWrapping,
           // 即时渲染下不显示行号（渲染视图里行号只是噪声）；两档都由这一个 Compartment 管
           viewModeCompartment.of(viewModeExtensions(live)),
@@ -322,13 +363,16 @@ export function Editor({
 }
 
 /**
- * "查看档位"那一组扩展：即时渲染（`livePreview`）或普通编辑（行号）。
+ * "查看档位"那一组扩展：即时渲染（`livePreview`）或普通编辑（行号 + 折叠 + 活动行槽）。
  *
- * 两者**互斥**：渲染视图里行号是噪声；而即时渲染藏掉标记之后，行号会给"这一行是源码还是渲染结果"
- * 添乱。它单独成函数是为了让创建时与重配置时**用的是同一份**，不会两边写岔。
+ * 两者**互斥**：渲染视图里行号是噪声；而即时渲染藏掉标记之后，行号与折叠箭头会给
+ * "这一行是源码还是渲染结果"添乱。行号槽的活动行高亮（`highlightActiveLineGutter`）
+ * 也只在这一档——它没有底色（见 `app.css`），只是把当前行号提亮成 `--text-2`。
+ *
+ * 它单独成函数是为了让创建时与重配置时**用的是同一份**，不会两边写岔。
  */
 function viewModeExtensions(live: boolean): Extension {
-  return live ? [livePreview()] : [lineNumbers()];
+  return live ? [livePreview()] : [lineNumbers(), highlightActiveLineGutter(), foldGutter()];
 }
 
 /** 句柄：读 / 插入 / 按标记替换 / 执行格式命令——都直接落在 `EditorView` 上，不持有全局状态 */

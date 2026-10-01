@@ -15,6 +15,7 @@ import { APP_VERSION, PROJECT_REPO_URL } from "../../../app/about";
 import { CardQuickMenu } from "./CardQuickMenu";
 // 「编辑试验」暂时收起（2026-10-01，与 `router.ts` / `PAGE_META` 同步注释）：
 // import { EditorLabPage } from "../../editor-lab/ui/EditorLabPage";
+import { BackupPage } from "../../backup/ui/BackupPage";
 import { InstancePage } from "./InstancePage";
 
 /**
@@ -28,6 +29,7 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   general: { title: "通用", summary: "启动视图、时区、主题、笔记本树与快捷菜单" },
   account: { title: "账户与安全", summary: "登录密码与会话" },
   editor: { title: "编辑器", summary: "打开笔记时用哪一档、正文区能切到哪几档" },
+  backup: { title: "备份与导出", summary: "把数据导成 zip，或从备份恢复" },
   // 「编辑试验」暂时收起（2026-10-01）：与 `router.ts` 的 `SETTINGS_PAGES` 同步注释。
   // "editor-lab": {
   //   title: "编辑试验",
@@ -443,6 +445,8 @@ export function SettingsPanel({
             })}
           </section>
         ) : null}
+
+        {page === "backup" ? <BackupPage /> : null}
 
         {page === "privacy" ? (
           privacyPage ?? (

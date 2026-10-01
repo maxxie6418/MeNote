@@ -70,9 +70,13 @@ const SafeSegmentSchema = v.pipe(
 );
 
 /**
- * 附件在包内的路径：`attachments/<sha256>--<原文件名>`。
+ * 附件在包内的路径：`snapshot/attachments/<sha256>--<原文件名>`。
  *
  * 内容寻址的好处是同一张图被十篇引用只存一份，改名也不影响去重（设计 §2.3）。
+ *
+ * **带 `snapshot/` 前缀**：manifest 里的 `path` 必须是**包内相对路径**，而
+ * `normalizeSnapshotPath` 要求它落在 `snapshot/` 内。两边必须由同一个函数产出，
+ * 否则清单里的路径会和包里的实际条目对不上——往返测试就是盯这条的。
  */
 export function attachmentPath(sha256: string, filename: string): string {
   if (!/^[0-9a-f]{64}$/.test(sha256)) {
@@ -82,7 +86,7 @@ export function attachmentPath(sha256: string, filename: string): string {
   if (!isSafeSegment(filename)) {
     throw new Error(`附件文件名不合法：${filename}`);
   }
-  return `${ATTACHMENTS_DIR}/${sha256}--${filename}`;
+  return `${SNAPSHOT_DIR}/${ATTACHMENTS_DIR}/${sha256}--${filename}`;
 }
 
 /** 条目正文在包内的路径。一篇一个文件，id 即文件名。 */
@@ -90,7 +94,22 @@ export function notePath(itemId: string): string {
   if (!isSafeSegment(itemId)) {
     throw new Error(`条目 id 不合法：${itemId}`);
   }
-  return `${NOTES_DIR}/${itemId}.md`;
+  return `${SNAPSHOT_DIR}/${NOTES_DIR}/${itemId}.md`;
+}
+
+/** 文件夹树在包内的路径 */
+export function foldersPath(): string {
+  return `${SNAPSHOT_DIR}/${FOLDERS_NAME}`;
+}
+
+/** `COMPLETE` 标记在包内的路径 */
+export function completePath(): string {
+  return `${SNAPSHOT_DIR}/${COMPLETE_NAME}`;
+}
+
+/** `manifest.json` 在包内的路径 */
+export function manifestPath(): string {
+  return `${SNAPSHOT_DIR}/${MANIFEST_NAME}`;
 }
 
 /**

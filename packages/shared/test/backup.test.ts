@@ -14,7 +14,10 @@ import {
   NOTES_DIR,
   SNAPSHOT_DIR,
   attachmentPath,
+  completePath,
+  foldersPath,
   isSafeSegment,
+  manifestPath,
   normalizeSnapshotPath,
   notePath,
   parseComplete,
@@ -55,7 +58,7 @@ describe("备份：包内固定名与路径", () => {
   });
 
   it("附件按内容寻址：同一张图被十篇引用只存一份，改名也不影响去重", () => {
-    expect(attachmentPath(SHA, "照片.png")).toBe(`attachments/${SHA}--照片.png`);
+    expect(attachmentPath(SHA, "照片.png")).toBe(`snapshot/attachments/${SHA}--照片.png`);
   });
 
   it("附件 sha256 或文件名不合法就抛错（文件名是路径穿越的第二条入口）", () => {
@@ -66,8 +69,17 @@ describe("备份：包内固定名与路径", () => {
   });
 
   it("条目正文一篇一个文件，id 即文件名", () => {
-    expect(notePath("01ABC")).toBe("notes/01ABC.md");
+    expect(notePath("01ABC")).toBe("snapshot/notes/01ABC.md");
     expect(() => notePath("../evil")).toThrow();
+  });
+
+  it("**包内路径必须带 `snapshot/` 前缀**——清单里的 path 和包里的实际条目得是同一个函数产出", () => {
+    // 这条是往返测试的看门狗：曾经手拼过 `notes/x.md`（无前缀），
+    // 而 normalizeSnapshotPath 要求落在 snapshot/ 内，于是清单与包对不上
+    for (const path of [notePath("01ABC"), attachmentPath(SHA, "a.png"), foldersPath(), completePath(), manifestPath()]) {
+      expect(() => normalizeSnapshotPath(path)).not.toThrow();
+      expect(path.startsWith("snapshot/")).toBe(true);
+    }
   });
 });
 

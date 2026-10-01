@@ -19,10 +19,9 @@ describe("设置分类的路由往返", () => {
 
   it("清单覆盖全部设置分类（漏一个就会落到「通用」）", () => {
     // 期望值独立写在这里：往 SettingsPageId 里加分类时，必须同时进 SETTINGS_PAGES
-    // 「编辑试验」2026-10-01 暂时收起（用户 2026-10-01）：试验区按桌面稿排布，
-    // 窄面板里会挤成一条，改为直接在正式编辑器上迭代。恢复时把它加回下面这一行即可。
+    // 「编辑试验」2026-10-01 暂时收起（用户 2026-10-01）；「备份与导出」同日新增（M5）
     expect([...SETTINGS_PAGES].sort()).toEqual(
-      ["general", "account", "editor", "privacy", "versions", "instance", "about"].sort(),
+      ["general", "account", "editor", "backup", "privacy", "versions", "instance", "about"].sort(),
     );
   });
 

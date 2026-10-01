@@ -73,12 +73,24 @@ describe("级联覆盖（同选择器同属性不许被后置规则改值）", (
    * - `.tkhead` 不能是 flex（否则右侧控件挤在页头中间）；
    * - 看板下滚动容器必须 `flex:none`（否则 `width:80%` 在 flex 行里根本不生效）。
    */
-  it("即时渲染正文与仅预览共享同一内容边界", () => {
-    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "max-width")).toBe("740px");
-    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "margin")).toBe("0 auto");
-    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "padding")).toBe(
+  /**
+   * 2026-10-01 更新：内容边界从**即时渲染专属**提到**编辑器通用**。
+   *
+   * 此前 740px 只挂在 `[data-editor="live"] .cm-scroller` 上，仅编辑档满幅铺开——切档时
+   * 整块正文横向跳一次，而且满幅那档本来就没守住 `DESIGN.md` §2.3 的 740px。现在由基础档
+   * （两档共有）给边界，live 档**只**覆盖字族与行高。后面三条空断言就是防着它哪天
+   * 又长出一条自己的宽度——那正是这一条最初要抓的漂移。
+   */
+  it("编辑器各档与仅预览共享同一内容边界", () => {
+    expect(effectiveValue(rules, "[data-editor] .cm-scroller", "max-width")).toBe("740px");
+    expect(effectiveValue(rules, "[data-editor] .cm-scroller", "margin")).toBe("0 auto");
+    expect(effectiveValue(rules, "[data-editor] .cm-scroller", "padding")).toBe(
       "var(--sp-5) var(--sp-6) 80px",
     );
+    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "max-width")).toBe("");
+    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "margin")).toBe("");
+    expect(effectiveValue(rules, '[data-editor="live"] .cm-scroller', "padding")).toBe("");
+    expect(effectiveValue(rules, ".docpane__body .markdown-body", "max-width")).toBe("740px");
   });
 
   it("memo / 待办那三条显示修复的取值被钉住", () => {

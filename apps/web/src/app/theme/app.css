@@ -691,6 +691,12 @@ button {
   border-left: 1px solid var(--line);
 }
 
+/*
+  —— 正文编辑器（CodeMirror 6）——
+  逻辑在 `app/editor/`：视图只在挂载时建一次，档位切换走 `Compartment` 重配置。
+  **结构性**覆盖（焦点环、浮层底色、面板层级）在 `app/editor/theme.ts` 的 `baseTheme` 里；
+  这里只管观感，取值一律走 `DESIGN.md` §3.3 的令牌。
+*/
 [data-editor] {
   min-height: 100%;
 }
@@ -698,58 +704,186 @@ button {
 [data-editor] .cm-editor {
   min-height: 100%;
   background: transparent;
+  color: var(--text);
 }
 
+/*
+  阅读列**两档同宽**（`DESIGN.md` §2.3 已定：Markdown 正文上限 740px）。
+  此前只有即时渲染档收窄、仅编辑档满幅铺开：切档时整块正文横向跳一次，而且满幅那档
+  本来就没守住 740px 这条定稿。宽度挂在 `.cm-scroller` 上（不是 `.cm-content`），
+  行号槽才会跟着正文一起居中，不会脱在左边留一道空档。
+*/
 [data-editor] .cm-scroller {
-  font-family: var(--mono);
-  font-size: var(--fs-body);
-}
-
-/* 即时渲染与 MarkdownPreview 使用相同的正文阅读边界，避免左右起止线错位。 */
-[data-editor="live"] .cm-scroller {
   max-width: 740px;
   margin: 0 auto;
   padding: var(--sp-5) var(--sp-6) 80px;
+  font-family: var(--mono);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+}
+
+[data-editor] .cm-content {
+  min-height: 100%;
+  caret-color: var(--primary);
+}
+
+/* 即时渲染：正文换界面字族，行高与预览的 `.markdown-body` 同一个值 */
+[data-editor="live"] .cm-scroller {
   font-family: var(--sans);
   line-height: 1.75;
 }
 
-[data-editor="live"] .cm-content {
-  min-height: 100%;
+/*
+  —— CodeMirror 自带外观的收口 ——
+  【2026-10-01 补】此前下面这些**一条都没有**：光标、选区、活动行、行号槽、占位符、
+  搜索面板、自动补全浮层全是库默认外观（浏览器原生蓝选区 + 白底黑边面板），
+  这就是"编辑器看起来跟整个应用不像一套"的直接原因。
+*/
+[data-editor] .cm-cursor,
+[data-editor] .cm-dropCursor {
+  border-left: 2px solid var(--primary);
+  border-radius: 1px;
+}
+
+[data-editor] .cm-selectionBackground,
+[data-editor] .cm-content ::selection {
+  background: var(--primary-soft);
+}
+
+/* 活动行只在编辑器真的聚焦时给底色；失焦时不留一条灰带 */
+[data-editor] .cm-activeLine {
+  background: transparent;
+}
+
+[data-editor] .cm-focused .cm-activeLine {
+  background: var(--bg-soft);
+}
+
+[data-editor] .cm-gutters {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+}
+
+[data-editor] .cm-activeLineGutter {
+  background: transparent;
+  color: var(--text-2);
+}
+
+[data-editor] .cm-placeholder {
+  color: var(--muted);
+}
+
+[data-editor] .cm-matchingBracket,
+[data-editor] .cm-nonmatchingBracket {
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+/* 浮层：结构由 `theme.ts` 拆掉默认底，外观在这里按令牌重上（层级同 `.cmd-menu`） */
+[data-editor] .cm-tooltip {
+  font-family: var(--sans);
+  font-size: var(--fs-small);
+}
+
+[data-editor] .cm-panels {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-small);
+}
+
+[data-editor] .cm-panel.cm-search {
+  padding: var(--sp-2) var(--sp-3);
+}
+
+[data-editor] .cm-panel.cm-search input {
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+[data-editor] .cm-panel.cm-search input:focus {
+  border-color: var(--primary-line);
+  /* 焦点环走与全局 `:focus-visible` 同一套（描边色 + 外扩阴影），不是只换个边框色 */
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+[data-editor] .cm-panel.cm-search button {
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+[data-editor] .cm-panel.cm-search button:hover {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+[data-editor] .cm-searchMatch {
+  background: var(--amber-soft);
+  border-radius: 2px;
+}
+
+[data-editor] .cm-searchMatch-selected {
+  background: var(--amber-line);
+  outline: 1px solid var(--amber);
 }
 
 /*
-  —— 即时渲染（live preview）——
+  —— Markdown 排版：预览与即时渲染**共用同一份规则** ——
   逻辑在 `app/editor/live-preview.ts`：基于 Lezer 语法树的装饰，光标所在行显示源码。
 
-  取值纪律：**只用现有令牌**——字号取 6 档刻度（h1 20 / h2 17 / h3 14 / h4 13 / h5 12 / h6 11），
-  颜色取 `--text-2` / `--muted` / `--primary-ink` / `--panel-2` / `--line*` / `--bg-soft`，
-  不新增令牌、不写裸色值与裸 px 字号。h5/h6 比正文小是刻意的（与 Obsidian 一致）。
+  【2026-10-01 改】此前这里是 `.cm-live-*` 与下面 `.markdown-body` **各写一套**，
+  注释里靠"与预览同口径"人工对齐——实际早就漂了：预览侧压根没有 `strong / em / del /
+  标题字号 / 引用 / 分隔线` 的规则，同一篇文档在两档里标题大小完全不同
+  （浏览器默认 h1 约 32px，对上编辑器侧的 20px）。现在按**选择器成组**合并：
+  一个值只写一次，渲染档与预览档不可能再分叉。
+
+  取值纪律：**只用现有令牌**——字号取 6 档刻度，颜色取 `--text-2` / `--muted` /
+  `--primary-ink` / `--panel-2` / `--line*` / `--bg-soft`，不新增令牌、不写裸色值与裸 px 字号。
+  h5/h6 比正文小是刻意的（与 Obsidian 一致）。
 */
+
+/* 标题：预览侧是 h1–h6 元素，编辑器侧是整行装饰类，字号映射必须同表 */
+.markdown-body h1,
 .cm-live-h1 {
   font-size: var(--fs-display);
   font-weight: 700;
   line-height: 1.35;
 }
 
+.markdown-body h2,
 .cm-live-h2 {
   font-size: var(--fs-title);
   font-weight: 700;
   line-height: 1.4;
 }
 
+.markdown-body h3,
 .cm-live-h3 {
   font-size: var(--fs-body-lg);
   font-weight: 700;
   line-height: 1.45;
 }
 
+.markdown-body h4,
 .cm-live-h4 {
   font-size: var(--fs-body);
   font-weight: 700;
   line-height: 1.5;
 }
 
+.markdown-body h5,
 .cm-live-h5 {
   font-size: var(--fs-small);
   font-weight: 700;
@@ -757,6 +891,7 @@ button {
   color: var(--text-2);
 }
 
+.markdown-body h6,
 .cm-live-h6 {
   font-size: var(--fs-micro);
   font-weight: 700;
@@ -764,21 +899,26 @@ button {
   color: var(--muted);
 }
 
-/* 强调三件套：与预览（`markdown-body strong` / `em` / `del`）同口径 */
+/* 强调三件套 */
+.markdown-body strong,
 .cm-live-strong {
   font-weight: 650;
 }
 
+.markdown-body em,
 .cm-live-em {
   font-style: italic;
 }
 
+.markdown-body del,
 .cm-live-strike {
   text-decoration: line-through;
   text-decoration-color: var(--line-2);
+  color: var(--text-2);
 }
 
-/* 行内代码：底色 + 等宽（与预览 `.markdown-body code` 同一套取值） */
+/* 行内代码：底色 + 等宽 */
+.markdown-body code,
 .cm-live-code {
   padding: 1px 5px;
   border-radius: var(--radius-sm);
@@ -787,27 +927,56 @@ button {
   font-size: var(--fs-small);
 }
 
-/* 链接：地址藏起来（它是内部标识/长 URL），文字走 `--primary-ink`（橙色不能直接当浅色主题文字色） */
+/*
+  代码块里的 `code` 不该再套一层行内代码的底色与内边距——此前两条规则叠着，
+  同一个底色套自己（等于没底色）却留了内边距和圆角，看着像一块描过边的灰。
+*/
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+/* 链接：编辑器侧把地址藏起来（它是内部标识/长 URL），两边文字色一致。
+   橙色不能直接当浅色主题的文字色（`DESIGN.md` §3.3 硬结论 2），一律走 `--primary-ink` */
+.markdown-body a,
 .cm-live-link {
   color: var(--primary-ink);
   text-decoration: underline;
   text-decoration-color: var(--primary-line);
 }
 
-/* 引用：左侧一条竖线 + 次一级文字色（`>` 已在非活动行隐藏） */
-.cm-live-quote {
-  padding-left: var(--sp-3);
+/* 引用：左侧一条竖线 + 次一级文字色。编辑器侧是整行装饰（`>` 已在非活动行隐藏），
+   预览侧是块元素，机制不同但取值同表。 */
+.cm-live-quote,
+.markdown-body blockquote {
   border-left: 2px solid var(--line-2);
   color: var(--text-2);
 }
 
-/* 代码块：只上底色，围栏与语言保持源码可见（首期不做语言高亮） */
+.cm-live-quote {
+  padding-left: var(--sp-3);
+}
+
+.markdown-body blockquote {
+  margin: var(--sp-3) 0;
+  padding-left: var(--sp-3);
+}
+
+/* 代码块：编辑器侧只上底色，围栏与语言保持源码可见（首期不做语言高亮） */
 .cm-live-codeblock {
   background: var(--bg-soft);
 }
 
-/* 分隔线：`---` 藏掉之后由这一条上边框画出来 */
+/* 分隔线：编辑器侧藏掉 `---` 之后由这一条上边框画出来 */
 .cm-live-hr {
+  border-top: 1px solid var(--line);
+}
+
+/* 预览侧要先把浏览器默认的四边 inset 描边清干净，否则横线是双层的 */
+.markdown-body hr {
+  margin: var(--sp-4) 0;
+  border: none;
   border-top: 1px solid var(--line);
 }
 
@@ -853,18 +1022,18 @@ button {
   padding: var(--sp-5) var(--sp-6) 80px;
 }
 
+/*
+  标题的**上下留白**只归预览侧：编辑器侧的标题是整行装饰，没有块级外边距可谈。
+  字号与行高已经并进上面那组 `.markdown-body hN, .cm-live-hN` 成组规则——
+  此前这里又写了一遍 `line-height: 1.3`，因为位置更靠后还会把它盖掉。
+*/
 .markdown-body h1,
 .markdown-body h2,
-.markdown-body h3 {
-  line-height: 1.3;
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
   margin: var(--sp-5) 0 var(--sp-2);
-}
-
-.markdown-body code {
-  font-family: var(--mono);
-  background: var(--panel-2);
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
 }
 
 .markdown-body pre {
@@ -872,10 +1041,6 @@ button {
   padding: var(--sp-3);
   border-radius: var(--radius);
   overflow-x: auto;
-}
-
-.markdown-body a {
-  color: var(--primary-ink);
 }
 
 /* 正文底部状态栏（DESIGN.md §2.7：固定在正文区底部） */

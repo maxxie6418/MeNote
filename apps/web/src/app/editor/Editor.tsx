@@ -11,10 +11,17 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view";
+import {
+  EditorView,
+  drawSelection,
+  highlightActiveLine,
+  keymap,
+  lineNumbers,
+} from "@codemirror/view";
 import { useEffect, useRef, useState } from "react";
 import { type FormatCommandId } from "./format-commands";
 import { livePreview } from "./live-preview";
+import { editorBaseTheme } from "./theme";
 import { applyFormatAt, triggerAt } from "./trigger";
 
 /** 交给外部的编辑器句柄：读、在光标处插入、按标记替换、执行格式命令 */
@@ -200,6 +207,13 @@ export function Editor({
             免得"同一个文档在不同模式下解析结果不一样"。
           */
           markdown({ base: markdownLanguage }),
+          /*
+            `drawSelection` 修的是**跨行选区**：没有它时浏览器原生选区会在换行处断开、
+            看起来是几段不相干的高亮，而选区正是"复制出来仍是带标记的 md"这条交互
+            （即时渲染设计 §三-1）要依赖的东西。
+          */
+          drawSelection(),
+          editorBaseTheme(),
           highlightActiveLine(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           EditorView.lineWrapping,

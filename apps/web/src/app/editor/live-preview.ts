@@ -9,7 +9,8 @@
  * 三条实现纪律（每条都对应一个真实的坑）：
  * 1. **只算视口**：Lezer 的树是**懒解析**的（建 state 后只覆盖开头一小段），所以插件里用
  *    `ensureSyntaxTree(state, 视口末端, 预算)` 把可见区补上；预算不够就退回部分树——
- *    那一屏先按源码显示，下一帧再渲染。**不要对整篇算装饰**。
+ *    那一屏先按源码显示，下一帧再渲染。**不要对整篇算装饰**。另见插件类上的
+ *    「重算时机」表：打字路径还要等停手 90ms 才重算。
  * 2. **中文输入法**：`view.composing` 期间**不重算**装饰，只把已有装饰按变更映射
  *    （`RangeSet.map`）。重算会把输入法正在组合的字/候选区替换掉，中文优先的产品不能踩这条。
  * 3. **隐藏掉的标记要进 `atomicRanges`**：否则方向键与退格会"钻"进看不见的 `**` 里，
@@ -344,10 +345,38 @@ export function activeRangeOf(state: EditorState): { from: number; to: number } 
   return { from, to };
 }
 
-/** 视图里那个只算视口的插件 */
+/**
+ * 打字之后的静默窗口：停手这么久才重算装饰。
+ *
+ * 取 90ms 是跟着"一个连打停顿"的经验值定的：短了没效果（长文档里一次
+ * `ensureSyntaxTree` 的补解析预算就是几十毫秒），长了会看见"敲完的那一行迟迟不渲染"。
+ * 这段窗口里**不会**出现"敲了字没反应"——光标行本来就显示源码（§三-1），
+ * 而新敲出来的标记在语法树里还不存在，本来就该以源码示人。
+ */
+const REBUILD_IDLE_MS = 90;
+
+/**
+ * 视图里那个只算视口的插件。
+ *
+ * **重算时机**（2026-10-01 改，原先是无条件同步重算）：
+ *
+ * | 触发 | 策略 | 为什么 |
+ * |---|---|---|
+ * | `docChanged` | 停手 `REBUILD_IDLE_MS` 后重算 | 连续打字时一次都不补解析语法树。位置已由上面的 `map` 保住，装饰不会指向已消失的区间 |
+ * | `selectionSet` / `focusChanged` | 下一帧重算（同帧多次合并成一次） | "光标那一行露源码"是即时渲染的核心交互，必须跟手；但一帧内的多次更新只需算一次 |
+ * | `viewportChanged` | 下一帧重算 | 滚进新区域要有装饰，延迟一帧不可见 |
+ *
+ * 与外部项目 inkstone 的 `live-preview.ts` 同一思路（那边是块级缓存 + 90ms 防抖），
+ * 差别是我们装饰的是**语法节点**而不是渲染好的 HTML，所以没有"复用未变块的 HTML"这一层，
+ * 只做时机上的合并。
+ */
 class LivePreviewPlugin {
   decorations: DecorationSet;
   atomic: DecorationSet;
+  /** 打字重算的定时器（0 = 当前没有排期） */
+  private idleTimer = 0;
+  /** 帧合并的句柄（0 = 当前没有排期） */
+  private frame = 0;
 
   constructor(view: EditorView) {
     const built = buildFor(view);
@@ -363,12 +392,42 @@ class LivePreviewPlugin {
     }
     // 输入法组合期间**不重算**（位置已由映射保住）：重算会把组合中的字替换掉、光标乱跳
     if (update.view.composing) return;
-    // `focusChanged` 要一起看：聚焦时"光标那一行"才露源码，失焦时整篇渲染（见 `buildFor`）
-    if (update.docChanged || update.viewportChanged || update.selectionSet || update.focusChanged) {
-      const built = buildFor(update.view);
-      this.decorations = built.decorations;
-      this.atomic = built.atomic;
+    if (update.docChanged) {
+      this.scheduleIdle(update.view);
+      return;
     }
+    if (update.viewportChanged || update.selectionSet || update.focusChanged) {
+      this.scheduleFrame(update.view);
+    }
+  }
+
+  /** 停手后再算：连续打字期间一次都不重解析 */
+  private scheduleIdle(view: EditorView): void {
+    if (this.idleTimer) globalThis.clearTimeout(this.idleTimer);
+    this.idleTimer = globalThis.setTimeout(() => {
+      this.idleTimer = 0;
+      this.rebuild(view);
+    }, REBUILD_IDLE_MS);
+  }
+
+  /** 同一帧里的多次更新合并成一次重算 */
+  private scheduleFrame(view: EditorView): void {
+    if (this.frame) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      this.rebuild(view);
+    });
+  }
+
+  private rebuild(view: EditorView): void {
+    const built = buildFor(view);
+    this.decorations = built.decorations;
+    this.atomic = built.atomic;
+  }
+
+  destroy(): void {
+    if (this.idleTimer) globalThis.clearTimeout(this.idleTimer);
+    if (this.frame) cancelAnimationFrame(this.frame);
   }
 }
 

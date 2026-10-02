@@ -126,6 +126,13 @@ export interface NoteWorkspaceProps {
    * **锁定态不可用**（与切换条同一口径）：锁定时正文都看不了，更不该导出。
    */
   onExportMarkdown?: (includeAttachments: boolean) => void;
+  /**
+   * 分享（M14）：组件只报事件，创建 / 管理在 `features/shares` 的弹窗里。
+   * **隐私边界**（M14-01 定稿）：单篇加密与加密空间内的内容不可分享——入口置灰并说明原因。
+   */
+  onShare?: () => void;
+  /** 这一篇当前有生效中的分享链接（M14-01 的"公开标记"） */
+  shared?: boolean;
   /** 版本历史入口为什么不可用（锁定态时给原因，`DESIGN.md` §6.1） */
   versionsDisabledReason?: string;
   /**
@@ -165,6 +172,8 @@ export function NoteWorkspace({
   onOpenVersions,
   onDegrade,
   onExportMarkdown,
+  onShare,
+  shared = false,
   versionsDisabledReason,
   attachments,
   onFiles,
@@ -351,6 +360,13 @@ export function NoteWorkspace({
           </div>
         )}
 
+        {/* 公开标记（M14-01）：有生效中的分享链接时可见，入口指向设置 › 分享 */}
+        {shared ? (
+          <span className="pill" title="这篇有生效中的分享链接；在设置 › 分享 可管理">
+            公开
+          </span>
+        ) : null}
+
         {encryption ? (
           <DropdownMenu
             label="更多"
@@ -419,6 +435,23 @@ export function NoteWorkspace({
                       disabled: bodyLocked,
                       title: bodyLocked ? "解锁后才能导出这一篇" : undefined,
                       onSelect: () => onExportMarkdown(true),
+                    },
+                  ] satisfies MenuItemSpec[])
+                : []),
+              // 分享（M14）：隐私条目不可分享（创建接口也有同语句硬校验，双保险）
+              ...(onShare
+                ? ([
+                    {
+                      id: "share",
+                      label: shared ? "分享（生效中）" : "分享",
+                      icon: "plus" as const,
+                      disabled: bodyLocked || item.enc_self === 1 || item.in_enc_space === 1,
+                      title: bodyLocked
+                        ? "解锁后才能分享"
+                        : item.enc_self === 1 || item.in_enc_space === 1
+                          ? "单篇加密与加密空间内的内容不能分享"
+                          : undefined,
+                      onSelect: () => onShare(),
                     },
                   ] satisfies MenuItemSpec[])
                 : []),

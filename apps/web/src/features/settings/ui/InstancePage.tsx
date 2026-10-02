@@ -11,9 +11,11 @@
  * 3. 未实现的项（成员账户管理）**保持可见的里程碑标记**（`DESIGN.md` §6.1：禁用要说明原因，
  *    且不能只靠悬停），详细背景收进 `InfoHint`。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../../../app/ui/Controls";
 import { InfoHint } from "../../../app/ui/InfoHint";
+import { pushToast } from "../../../app/ui/Toast";
+import { adminApi } from "../../../data/api/endpoints";
 import { toDeadlineValue, toDeadlineTimestamp } from "../deadline";
 
 export interface InstancePageProps {
@@ -34,6 +36,41 @@ export function InstancePage({
    * 初值取当前到期日；改开关或外部值变化由 `key` 重置整块（见下面的 `key`）。
    */
   const [deadlineDraft, setDeadlineDraft] = useState(toDeadlineValue(registrationCloseAt));
+  /**
+   * 分享子域（M5-S2，用户拍板存实例设置）：这一行**自带取数与保存**，
+   * 不经过 SettingsPanel 的 props 链——它只属于实例管理这一卡，别的页用不到。
+   */
+  const [shareOriginDraft, setShareOriginDraft] = useState<string | null>(null);
+  const [shareOriginLoaded, setShareOriginLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void adminApi
+      .getShareOrigin()
+      .then((state) => {
+        if (!cancelled) {
+          setShareOriginDraft(state.origin);
+          setShareOriginLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setShareOriginLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveShareOrigin(value: string): Promise<void> {
+    const normalized = value.trim();
+    try {
+      const state = await adminApi.setShareOrigin(normalized.length > 0 ? normalized : null);
+      setShareOriginDraft(state.origin);
+      pushToast(state.origin === null ? "已清除分享子域" : "分享子域已保存", "success");
+    } catch (cause) {
+      pushToast(cause instanceof Error ? cause.message : "保存失败，请稍后重试", "error");
+    }
+  }
 
   return (
     <section className="setcard" aria-label="实例管理">
@@ -113,6 +150,32 @@ export function InstancePage({
         </div>
         {/* 未实现的原因保持可见（不能只靠悬停）：这里是里程碑标记 */}
         <span className="setrow__desc">M6</span>
+      </div>
+
+      <div className="setrow">
+        <div className="setrow__label">
+          <span className="setrow__name">分享子域</span>
+          <InfoHint label="分享子域说明">
+            配置后（如 share.example.com），创建的分享链接用这个域；访客查看器与主应用隔离。
+            需要先在 Cloudflare 把这个子域路由到本 Worker。留空 = 用当前站点地址分享。
+          </InfoHint>
+        </div>
+        <div className="setrow__control">
+          <input
+            type="text"
+            className="field__input"
+            aria-label="分享子域"
+            placeholder="share.example.com（留空用当前站点）"
+            value={shareOriginDraft ?? ""}
+            disabled={!shareOriginLoaded}
+            onChange={(event) => setShareOriginDraft(event.target.value)}
+            onBlur={(event) => {
+              const current = shareOriginDraft ?? "";
+              const input = event.target.value.trim();
+              if (input !== current) void saveShareOrigin(input);
+            }}
+          />
+        </div>
       </div>
     </section>
   );

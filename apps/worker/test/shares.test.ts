@@ -407,3 +407,47 @@ describe("改密 / 改期 / 撤销", () => {
     expect(past.status).toBe(422);
   });
 });
+
+describe("分享子域（实例设置，仅 owner）", () => {
+  it("owner 可设置、读取与清除；member 访问被拒（403）", async () => {
+    const cookie = await registerUser("origin-owner", 21);
+
+    // 未配置 = null
+    const initial = await SELF.fetch(`${ORIGIN}/api/admin/share-origin`, { headers: { Cookie: cookie } });
+    expect(((await initial.json()) as { origin: string | null }).origin).toBeNull();
+
+    // 设置（尾部斜杠会被剥掉）
+    const put = await SELF.fetch(`${ORIGIN}/api/admin/share-origin`, {
+      method: "PUT",
+      headers: headers(cookie),
+      body: JSON.stringify({ origin: "https://share.example.com/" }),
+    });
+    expect(((await put.json()) as { origin: string | null }).origin).toBe("https://share.example.com");
+
+    // member 访问被拒
+    await openRegistration(cookie);
+    const memberCookie = await registerUser("origin-member", 22);
+    const forbidden = await SELF.fetch(`${ORIGIN}/api/admin/share-origin`, {
+      headers: { Cookie: memberCookie },
+    });
+    expect(forbidden.status).toBe(403);
+
+    // 清除（null）
+    const clear = await SELF.fetch(`${ORIGIN}/api/admin/share-origin`, {
+      method: "PUT",
+      headers: headers(cookie),
+      body: JSON.stringify({ origin: null }),
+    });
+    expect(((await clear.json()) as { origin: string | null }).origin).toBeNull();
+  });
+
+  it("非法 origin（非 http(s) 主机形式）被拒（422）", async () => {
+    const cookie = await registerUser("origin-bad", 23);
+    const res = await SELF.fetch(`${ORIGIN}/api/admin/share-origin`, {
+      method: "PUT",
+      headers: headers(cookie),
+      body: JSON.stringify({ origin: "not a url" }),
+    });
+    expect(res.status).toBe(422);
+  });
+});

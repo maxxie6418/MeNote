@@ -4422,6 +4422,12 @@ button.chip--tag:hover {
   font-size: var(--fs-small);
   color: var(--muted);
 }
+/* 分享链接（M5-S2）：长链接在窄面板里断行显示，不撑破 setrow */
+.sharelink {
+  font-size: var(--fs-small);
+  color: var(--muted);
+  word-break: break-all;
+}
 
 /* 单选组（互斥配置选项；`DESIGN.md` §5.3）。
    本类也被解锁框（`UnlockModal`）复用——这里只把**间距收进刻度**，不动颜色与形态。 */

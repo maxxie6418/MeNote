@@ -7,11 +7,14 @@
  *    都来自隐私锁组装层，界面只负责呈现原因（禁用必须带 `title`）。
  */
 import type { EditorMode, PrivacyGate } from "@menote/shared";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/Controls";
 import { Modal } from "../ui/Modal";
 import { moveToTrash, undoTrash } from "../../features/trash/useTrash";
 import { restoreNotice } from "../../features/trash/model";
+import { revokeItemShares } from "../../features/shares/model";
+import { ShareDialog } from "../../features/shares/ui/ShareDialog";
+import { sharesApi } from "../../data/api/endpoints";
 import type { NotesWorkspace } from "../../features/notes/useNotesWorkspace";
 import type { DocMode } from "../../features/notes/ui/NoteWorkspace";
 import { NoteList } from "../../features/notes/ui/NoteList";
@@ -87,6 +90,33 @@ export function NotesPane({
   const versions = useVersions((notice) => onToast(notice.message, notice.tone));
   /** 编辑器句柄（M4-10：附件占位与最终片段都要改正文） */
   const [editorHandle, setEditorHandle] = useState<EditorHandle | null>(null);
+  /** 分享弹窗（M14）：打开时针对当前选中条目 */
+  const [shareOpen, setShareOpen] = useState(false);
+  /** 有生效中分享的条目 id（公开标记的数据源；弹窗开关与撤销后刷新） */
+  const [sharedItemIds, setSharedItemIds] = useState<ReadonlySet<string>>(new Set());
+  const refreshSharedItems = useCallback(() => {
+    void sharesApi
+      .list()
+      .then(({ shares }) => {
+        const now = Date.now();
+        setSharedItemIds(
+          new Set(
+            shares
+              .filter(
+                (share) =>
+                  share.kind === "item" &&
+                  share.item_id !== null &&
+                  (share.expires_at === null || share.expires_at > now),
+              )
+              .map((share) => share.item_id as string),
+          ),
+        );
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    refreshSharedItems();
+  }, [refreshSharedItems]);
   const attachments = useAttachments({
     itemId: workspace.selectedId,
     handle: editorHandle,
@@ -314,6 +344,15 @@ export function NotesPane({
               if (!workspace.selectedId) return;
               if (next && !encryption.enabled) return;
               onToggleEncryption(workspace.selectedId, next);
+              // 自动失效接线（M14-04）：加密这篇后把它的分享行清掉（链接已实时失效）
+              if (next) {
+                void revokeItemShares(workspace.selectedId).then((count) => {
+                  if (count > 0) {
+                    onToast("相关分享已自动撤销", "warn");
+                    refreshSharedItems();
+                  }
+                });
+              }
             },
             onLockAll: encryption.onLockAllItems,
           }}
@@ -378,6 +417,10 @@ export function NotesPane({
                 onToast(error instanceof Error ? error.message : "导出失败，请稍后重试", "error");
               });
           }}
+          onShare={() => {
+            if (workspace.selectedId) setShareOpen(true);
+          }}
+          shared={workspace.selectedId !== null && sharedItemIds.has(workspace.selectedId)}
         />
         )
       }
@@ -406,6 +449,12 @@ export function NotesPane({
                   .then(async () => {
                     await workspace.refresh();
                     onToast(`「${pendingTitle}」已移入回收站，30 天内可恢复`, "warn");
+                    // 自动失效接线（M14-04）：进回收站后把这篇的分享行清掉（链接已实时失效）
+                    const revoked = await revokeItemShares(id);
+                    if (revoked > 0) {
+                      onToast("相关分享已自动撤销", "warn");
+                      refreshSharedItems();
+                    }
                     // 「撤销」放进面板提示（轻提示不承载需要用户行动的信息，DESIGN.md §6.6）
                     setUndoNotice({
                       message: `「${pendingTitle}」已移入回收站`,
@@ -438,6 +487,17 @@ export function NotesPane({
       >
         <p>删除后这一篇会从列表里消失；在回收站里可以在 30 天内恢复。</p>
       </Modal>
+
+      {/* 分享弹窗（M14）：对当前选中条目创建 / 查看分享链接；关闭后刷新公开标记 */}
+      {shareOpen && selected ? (
+        <ShareDialog
+          item={{ id: selected.id, title: selected.title }}
+          onClose={() => {
+            setShareOpen(false);
+            refreshSharedItems();
+          }}
+        />
+      ) : null}
     </>
   );
 }

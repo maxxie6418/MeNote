@@ -118,3 +118,16 @@ export type ShareContent = v.InferOutput<typeof ShareContentSchema>;
 
 /** 访问令牌的承载请求头（GET content / att 时携带；不放查询串） */
 export const SHARE_TOKEN_HEADER = "X-Menote-Share";
+
+/** PUT /api/admin/share-origin：实例的分享子域（用户 2026-10-02 拍板走实例设置）；null = 清除 */
+export const ShareOriginUpdateSchema = v.object({
+  origin: v.nullable(
+    v.pipe(v.string(), v.regex(/^https?:\/\/[^\s/]+(:\d+)?\/?$/i, "须是 http(s):// 主机形式")),
+  ),
+});
+export type ShareOriginUpdate = v.InferOutput<typeof ShareOriginUpdateSchema>;
+
+/** GET /api/admin/share-origin 与 PUT 的响应；origin 为 null 表示未配置（用当前站点 origin） */
+export interface ShareOriginState {
+  origin: string | null;
+}

@@ -12,6 +12,8 @@ import {
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
   SearchResponseSchema,
+  ShareListResponseSchema,
+  ShareRecordSchema,
   SyncResponseSchema,
   TrashFolderResponseSchema,
   TrashItemResponseSchema,
@@ -25,13 +27,8 @@ import {
   type CryptoResetResponse,
   type CryptoState,
   type CryptoWrite,
+  type CreateShareRequest,
   type FolderCreate,
-  type SearchResponse,
-  type TrashFolderResponse,
-  type TrashItemResponse,
-  type VersionMeta,
-  type UserSettingsPayload,
-  type UserSettingsWrite,
   type FolderPatch,
   type FolderWriteResponse,
   type ItemBodyWriteResponse,
@@ -39,10 +36,20 @@ import {
   type ItemMetaWriteResponse,
   type ItemWriteMeta,
   type MeResponse,
+  type PatchShareRequest,
   type PreloginResponse,
   type PublicRegistrationState,
   type RegistrationState,
+  type SearchResponse,
+  type ShareListResponse,
+  type ShareOriginState,
+  type ShareRecord,
   type SyncResponse,
+  type TrashFolderResponse,
+  type TrashItemResponse,
+  type VersionMeta,
+  type UserSettingsPayload,
+  type UserSettingsWrite,
 } from "@menote/shared";
 import * as v from "valibot";
 import { apiFetch, apiRequest } from "./client";
@@ -348,11 +355,52 @@ export const settingsApi = {
   },
 };
 
-export const adminApi = {  getRegistration: () => apiRequest<RegistrationState>("/api/admin/registration"),
+export const adminApi = {
+  getRegistration: () => apiRequest<RegistrationState>("/api/admin/registration"),
 
   setRegistration: (open: boolean, closeAt?: number) =>
     apiRequest<RegistrationState>("/api/admin/registration", {
       method: "PUT",
       body: closeAt === undefined ? { open } : { open, close_at: closeAt },
     }),
+
+  /** 分享子域（M5-S2；null = 未配置，用当前站点 origin） */
+  getShareOrigin: () => apiRequest<ShareOriginState>("/api/admin/share-origin"),
+
+  setShareOrigin: (origin: string | null) =>
+    apiRequest<ShareOriginState>("/api/admin/share-origin", {
+      method: "PUT",
+      body: { origin },
+    }),
+};
+
+/**
+ * 分享（M5-S2 的前端接线；服务端在 M5-S1）。
+ * 响应都过一遍共享 schema——不无条件信任服务端返回的形状。
+ */
+export const sharesApi = {
+  create: async (input: CreateShareRequest): Promise<ShareRecord> => {
+    const raw = await apiRequest<unknown>("/api/shares", { method: "POST", body: input });
+    return v.parse(ShareRecordSchema, raw);
+  },
+
+  list: async (): Promise<ShareListResponse> => {
+    const raw = await apiRequest<unknown>("/api/shares");
+    return v.parse(ShareListResponseSchema, raw);
+  },
+
+  patch: async (id: string, input: PatchShareRequest): Promise<ShareRecord> => {
+    const raw = await apiRequest<unknown>(`/api/shares/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: input,
+    });
+    return v.parse(ShareRecordSchema, raw);
+  },
+
+  revoke: async (id: string): Promise<ShareRecord> => {
+    const raw = await apiRequest<unknown>(`/api/shares/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return v.parse(ShareRecordSchema, raw);
+  },
 };

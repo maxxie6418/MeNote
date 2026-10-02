@@ -419,6 +419,8 @@ export const SQL_INSERT_ENC_SPACE = `INSERT INTO folders (id, user_id, parent_id
 SELECT ?, ?, NULL, 1, 0, ?, 0, 0, 1, (SELECT sync_seq + 1 FROM users WHERE id = ?), ?, ?, NULL
  WHERE NOT EXISTS (SELECT 1 FROM folders WHERE user_id = ? AND is_enc_space = 1)`;
 
+export const SQL_DELETE_APP_META = "DELETE FROM app_meta WHERE key = ?";
+
 export const SQL_BUMP_SYNC_SEQ_ON_ENC_SPACE = `UPDATE users SET sync_seq = sync_seq + 1
  WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND is_enc_space = 1 AND created_at = ?)`;
 

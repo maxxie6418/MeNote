@@ -25,6 +25,7 @@ export const SETTINGS_PAGES = [
   // 在窄面板里会挤成一条，且本轮改为直接在正式编辑器上迭代。**试验代码全部保留**，
   // 恢复只需把这一行放回来 + 恢复 `SettingsPanel` 里的两处（PAGE_META 与渲染分支）。
   // "editor-lab",
+  "shares",
   "privacy",
   "versions",
   "instance",

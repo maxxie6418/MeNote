@@ -21,6 +21,7 @@ import * as v from "valibot";
 import {
   SQL_BUMP_SYNC_SEQ_ON_SETTINGS,
   SQL_COUNT_USERS,
+  SQL_DELETE_APP_META,
   SQL_SELECT_APP_META,
   SQL_SELECT_USER_SETTINGS,
   SQL_UPSERT_APP_META,
@@ -29,10 +30,29 @@ import {
 
 const KEY_REGISTRATION_OPEN = "registration_open";
 const KEY_REGISTRATION_CLOSE_AT = "registration_close_at";
+/** 分享子域（M5-S2；用户 2026-10-02 拍板存实例设置）。空值 = 未配置，分享链接退回当前站点 origin */
+const KEY_SHARE_ORIGIN = "share_origin";
 
 async function readMeta(db: D1Database, key: string): Promise<string | null> {
   const row = await db.prepare(SQL_SELECT_APP_META).bind(key).first<{ value: string }>();
   return row?.value ?? null;
+}
+
+/** 读分享子域；未配置返回 null */
+export async function getShareOrigin(db: D1Database): Promise<string | null> {
+  const raw = await readMeta(db, KEY_SHARE_ORIGIN);
+  return raw && raw.length > 0 ? raw : null;
+}
+
+/** 写分享子域：去尾部斜杠、空串视为清除（存 null 语义的删除） */
+export async function setShareOrigin(db: D1Database, origin: string | null): Promise<string | null> {
+  const normalized = origin === null ? "" : origin.trim().replace(/\/+$/, "");
+  if (normalized.length === 0) {
+    await db.prepare(SQL_DELETE_APP_META).bind(KEY_SHARE_ORIGIN).run();
+    return null;
+  }
+  await db.prepare(SQL_UPSERT_APP_META).bind(KEY_SHARE_ORIGIN, normalized).run();
+  return normalized;
 }
 
 /** 读注册开关；`close_at` 已过期即视为关闭（到期自动关闭不依赖 Cron） */

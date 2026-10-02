@@ -223,6 +223,11 @@ export function BackupPage() {
               其中 {summary.itemsFromTrash} 篇原本在回收站；同步完成后，服务端那边也会回到回收站。
             </p>
           ) : null}
+          {summary.itemsOverwritten > 0 ? (
+            <p className="hint-line">
+              其中 {summary.itemsOverwritten} 篇与本机现有内容不同，本机内容已被备份内容覆盖；若与云端也不一致，同步时备份内容会另存为冲突副本（标题带后缀）。
+            </p>
+          ) : null}
           {summary.attachmentsFailed > 0 ? (
             <p className="hint-line">{summary.attachmentsFailed} 个附件没能恢复，正文里的链接会缺图。</p>
           ) : null}
@@ -245,7 +250,8 @@ export function BackupPage() {
           </>
         }
       >
-        <p>恢复会把备份里的笔记与文件夹写进**当前实例**，与现有内容并存。</p>
+        <p>恢复会把备份里的笔记与文件夹写进当前实例：没有的会新增，与设备上现有条目同 id 的会覆盖本机内容。</p>
+        <p>被覆盖的条目在同步时若与云端也不一致，备份内容会另存为冲突副本（标题带后缀），不会静默丢失。</p>
         <p>同一个备份反复恢复不会产生重复条目；但恢复过程中请不要关闭页面。</p>
         <p>如果包不完整或校验不通过，会整包拒收，不会只恢复一半。</p>
       </Modal>

@@ -25,6 +25,7 @@ import {
 } from "@menote/shared";
 import type { ItemType } from "@menote/shared";
 import { createLocalFolder } from "../../data/db/repository";
+import { getLocalItem } from "../../data/db";
 import { restoreLocalItem } from "./restore";
 import { browserUploadDeps, uploadAttachment } from "../attachments/upload";
 import { attachmentsApi } from "../../data/api/endpoints";
@@ -59,6 +60,16 @@ export interface ImportSummary {
    * 便于对照「上传失败」列表核对，不默默变。
    */
   itemsFromTrash: number;
+  /**
+   * 与**本机现有条目**同 id 且内容（正文哈希）不同的数量。
+   *
+   * 用户 2026-10-02 拍板：不做恢复预览，冲突走既有链路——这些条目导入后**本机内容
+   * 被备份内容覆盖**；推送时若服务端那侧也不一致（`rev_conflict`），备份内容会经
+   * 既有冲突路径**另存为副本**（标题带后缀），不静默丢失。这个数在导入时从本地库
+   * 统计，让「覆盖了多少」在结果里可见；与云端的不一致要到推送时才知道，文案里
+   * 说清去哪里看，不假装这里能预知。
+   */
+  itemsOverwritten: number;
   attachmentsRestored: number;
   attachmentsFailed: number;
 }
@@ -122,6 +133,7 @@ export async function importBackup(
     foldersRestored: 0,
     itemsRestored: 0,
     itemsFromTrash: 0,
+    itemsOverwritten: 0,
     attachmentsRestored: 0,
     attachmentsFailed: 0,
   };
@@ -179,6 +191,12 @@ export async function importBackup(
     if (!entry) continue;
     const bytes = readPackageFile(files, entry.path);
     const body = decoder.decode(bytes);
+    // 覆盖统计（用户 2026-10-02 拍板：不做预览，但在结果里如实交代覆盖了多少）：
+    // 本地已有同 id 且内容不同 → 导入会覆盖本机内容；与云端的不一致在推送时以副本兜底
+    const existing = await getLocalItem(entry.id);
+    if (existing && existing.content_hash !== (await sha256Hex(body))) {
+      summary.itemsOverwritten += 1;
+    }
     await restoreLocalItem(
       {
         id: entry.id,

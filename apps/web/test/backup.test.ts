@@ -20,6 +20,7 @@ import {
 } from "@menote/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  createLocalItem,
   createLocalNote,
   db,
   listLocalItems,
@@ -94,7 +95,7 @@ describe("备份往返", () => {
     expect(restored?.body).toBe(md);
   });
 
-  it("**幂等**：同一份备份连导两次，条目数不变", async () => {
+  it("**幂等**：同一份备份连导两次，条目数不变，且内容相同时不报覆盖", async () => {
     await createLocalNote("01AAA", "一", "正文一", 1_000);
     await createLocalNote("01BBB", "二", "正文二", 2_000);
     const bytes = await exportToBytes();
@@ -105,11 +106,39 @@ describe("备份往返", () => {
     await db.outbox.clear();
 
     const file = new File([bytes as BlobPart], "b.zip");
-    await importBackup(file, { onProgress: () => {}, restoreAttachment: async () => {} });
+    const first = await importBackup(file, { onProgress: () => {}, restoreAttachment: async () => {} });
     expect(await listLocalItems()).toHaveLength(2);
+    // 库已清空后首次导入：没有"同 id 内容不同"的覆盖
+    expect(first.itemsOverwritten).toBe(0);
 
-    await importBackup(file, { onProgress: () => {}, restoreAttachment: async () => {} });
+    const second = await importBackup(file, { onProgress: () => {}, restoreAttachment: async () => {} });
     expect(await listLocalItems()).toHaveLength(2);
+    // 内容逐字相同（哈希相等）：覆盖了 id 但不算"内容不同"
+    expect(second.itemsOverwritten).toBe(0);
+  });
+
+  it("**覆盖如实回报**：本机已有同 id 但内容不同的条目，导入后计入 itemsOverwritten", async () => {
+    await createLocalNote("01AAA", "一", "正文一", 1_000);
+    const bytes = await exportToBytes();
+
+    await db.items.clear();
+    await db.bodies.clear();
+    await db.drafts.clear();
+    await db.outbox.clear();
+
+    // 本机出现了一份内容不同的同 id 条目（比如另一台设备后来改过并同步到了本机）
+    await createLocalItem(
+      { id: "01AAA", type: "note", title: "一", folder_id: null, tags: [], memo_at: null, body: "正文一（已改动）" },
+      5_000,
+    );
+    await db.outbox.clear();
+
+    const file = new File([bytes as BlobPart], "b.zip");
+    const summary = await importBackup(file, { onProgress: () => {}, restoreAttachment: async () => {} });
+    expect(summary.itemsOverwritten).toBe(1);
+    // 导入后本机内容回到备份里的版本
+    const cached = await db.bodies.get("01AAA");
+    expect(cached?.body).toBe("正文一");
   });
 
   it("还原的是**当时的状态**，不是新建时的状态（置顶/收藏/单篇加密/创建时间）", async () => {

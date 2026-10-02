@@ -17,49 +17,12 @@ export function attachmentUrl(sha256: string, options: { thumb?: boolean } = {})
   return options.thumb ? `${base}?thumb=1` : base;
 }
 
-/** 正文里的附件引用（图片或链接） */
-const ATTACHMENT_REF_PATTERN = /\/api\/attachments\/h\/([0-9a-f]{64})/gi;
-
 /**
- * 带文件名的完整引用：`![照片.png](/api/attachments/h/<sha>)` → `{ sha256, filename }`。
- *
- * 与 {@link extractAttachmentRefs} 同一条正则、同一种去重保序语义，**只是多带一个文件名**——
- * 因为备份要在包里把附件存成 `attachments/<sha>--<文件名>`（设计 §2.3），
- * 而 URL 里只有哈希，文件名只存在于正文的 alt / 链接文字里。
- *
- * 文件名缺失时退回 `attachment`（不编造，也不让整次导出失败）。
+ * 正文引用解析的两条纯函数（`extractAttachmentRefs` / `extractAttachmentRefsWithNames`）
+ * 收进 `packages/shared/src/attachments.ts`（M5 分享起 Worker 侧公开附件接口也要按同一条
+ * 契约解析当前稿引用，两端必须共用一份定义）；这里按原样再导出，既有导入方不受影响。
  */
-const ATTACHMENT_REF_WITH_NAME_PATTERN =
-  /!\[([^\]]*)\]\(\/api\/attachments\/h\/([0-9a-f]{64})\)|\[([^\]]*)\]\(\/api\/attachments\/h\/([0-9a-f]{64})\)/gi;
-
-/** 从正文里抽出所有引用的哈希（**去重且保序**：上报给服务端的 `attachment_refs` 要用它） */
-export function extractAttachmentRefs(body: string): string[] {
-  const found: string[] = [];
-  for (const match of body.matchAll(ATTACHMENT_REF_PATTERN)) {
-    const sha = (match[1] ?? "").toLowerCase();
-    if (sha && !found.includes(sha)) found.push(sha);
-  }
-  return found;
-}
-
-/**
- * 同 {@link extractAttachmentRefs}，但连文件名一起给（备份用）。
- *
- * 同一个 sha 在正文里出现多次时**取第一次出现的文件名**——与去重语义一致。
- * 两条分支（`![alt](…)` 与 `[文字](…)`）分别取各自的捕获组。
- */
-export function extractAttachmentRefsWithNames(
-  body: string,
-): Array<{ sha256: string; filename: string }> {
-  const found: Array<{ sha256: string; filename: string }> = [];
-  for (const match of body.matchAll(ATTACHMENT_REF_WITH_NAME_PATTERN)) {
-    const sha = (match[2] ?? match[4] ?? "").toLowerCase();
-    if (!sha) continue;
-    if (found.some((item) => item.sha256 === sha)) continue;
-    found.push({ sha256: sha, filename: (match[1] ?? match[3] ?? "").trim() || "attachment" });
-  }
-  return found;
-}
+export { extractAttachmentRefs, extractAttachmentRefsWithNames } from "@menote/shared";
 
 /** 正文里插入图片的 Markdown（文件名里的 `]` `(` 会破坏语法，替换成安全字符） */
 export function imageSnippet(filename: string, sha256: string): string {

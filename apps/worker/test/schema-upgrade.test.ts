@@ -93,7 +93,8 @@ describe("迁移演练 0003 → 0004", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.version).toBe(EXPECTED_SCHEMA_VERSION);
 
-    expect(await readSchemaVersion()).toBe(4);
+    // 0005（分享两表）起，从 3 升级会一次推到最新版本，不再停在 4
+    expect(await readSchemaVersion()).toBe(EXPECTED_SCHEMA_VERSION);
     const names = await listObjects();
     const missing = [...TABLES, ...INDEXES].filter((name) => !names.has(name));
     expect(missing, `升级后仍缺对象：${missing.join(", ")}`).toEqual([]);
@@ -116,7 +117,7 @@ describe("迁移演练 0003 → 0004", () => {
     resetSchemaCacheForTests();
     const again = await ensureSchema(env.DB);
     expect(again.ok).toBe(true);
-    expect(await readSchemaVersion()).toBe(4);
+    expect(await readSchemaVersion()).toBe(EXPECTED_SCHEMA_VERSION);
     expect(await legacySnapshot()).toBe(after);
   });
 

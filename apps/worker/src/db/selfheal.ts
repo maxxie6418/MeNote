@@ -18,6 +18,11 @@ import {
   M4_TABLE_NAMES,
   migration0004,
 } from "./migrations/0004_content_integrity";
+import {
+  M5_SHARE_INDEX_NAMES,
+  M5_SHARE_TABLE_NAMES,
+  migration0005,
+} from "./migrations/0005_shares";
 
 /** 全部迁移脚本，按 version 升序 */
 export const MIGRATIONS: readonly MigrationScript[] = [
@@ -25,6 +30,7 @@ export const MIGRATIONS: readonly MigrationScript[] = [
   migration0002,
   migration0003,
   migration0004,
+  migration0005,
 ];
 
 /** 代码期望的表结构版本 */
@@ -50,6 +56,8 @@ const REQUIRED_TABLES = [
   "user_crypto",
   // 0004：内容完整性六表（M4）
   ...M4_TABLE_NAMES,
+  // 0005：分享两表（M5）
+  ...M5_SHARE_TABLE_NAMES,
 ] as const;
 
 const REQUIRED_INDEXES = [
@@ -67,6 +75,8 @@ const REQUIRED_INDEXES = [
   ...TASK_TRIGGER_NAMES,
   // 0004：内容完整性六表的索引（逐条登记，见迁移文件里的说明）
   ...M4_INDEX_NAMES,
+  // 0005：分享两表的索引（M5）
+  ...M5_SHARE_INDEX_NAMES,
 ] as const;
 
 export type EnsureSchemaResult =

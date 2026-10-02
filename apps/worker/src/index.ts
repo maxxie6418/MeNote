@@ -15,8 +15,10 @@ import { runScheduled } from "./services/jobs";
 import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
+import publicShares from "./routes/public";
 import search from "./routes/search";
 import settings from "./routes/settings";
+import shares from "./routes/shares";
 import sync from "./routes/sync";
 import trash from "./routes/trash";
 import versions from "./routes/versions";
@@ -53,6 +55,8 @@ app.route("/api", sync);
 app.route("/api", settings);
 app.route("/api", search);
 app.route("/api", crypto);
+app.route("/api", shares);
+app.route("/api", publicShares);
 
 app.notFound((c) => {
   applySecurityHeaders(c);

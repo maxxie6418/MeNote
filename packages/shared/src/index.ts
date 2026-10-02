@@ -58,6 +58,7 @@ export interface HealthResponse {
 }
 
 // —— 以下按主题分模块，统一从这里再导出（两端只 import "@menote/shared"）——
+export * from "./attachments";
 export * from "./auth";
 export * from "./backup";
 export * from "./base64url";
@@ -70,6 +71,7 @@ export * from "./limits";
 export * from "./privacy";
 export * from "./search";
 export * from "./settings";
+export * from "./shares";
 export * from "./sync";
 export * from "./text";
 export * from "./ulid";

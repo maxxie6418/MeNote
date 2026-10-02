@@ -421,3 +421,41 @@ SELECT ?, ?, NULL, 1, 0, ?, 0, 0, 1, (SELECT sync_seq + 1 FROM users WHERE id = 
 
 export const SQL_BUMP_SYNC_SEQ_ON_ENC_SPACE = `UPDATE users SET sync_seq = sync_seq + 1
  WHERE id = ? AND EXISTS (SELECT 1 FROM folders WHERE id = ? AND is_enc_space = 1 AND created_at = ?)`;
+
+// —— 分享（M5-S1；架构 §十）——
+//
+// 创建走 INSERT … SELECT 同语句校验（架构定稿："服务端在同一语句中校验条目非隐私条目、
+// 未删除，不满足则拒绝"）：条目不存在 / 已删 / enc_self / in_enc_space 任一命中，changes = 0。
+// 密码材料三列只在创建与改密时写入，任何 SELECT 不回显。
+
+export const SQL_INSERT_SHARE = `INSERT INTO shares (id, user_id, kind, item_id, title, pw_salt, pw_kdf, pw_verifier, expires_at, created_at, revoked_at)
+SELECT ?, ?, 'item', ?, NULL, ?, ?, ?, ?, ?, NULL
+ FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND enc_self = 0 AND in_enc_space = 0`;
+
+/** 实时有效性检查的数据源：分享行 + 条目侧的删除与隐私标记（LEFT JOIN，缺行也要能判失效） */
+export const SQL_SELECT_SHARE_FULL = `SELECT s.id, s.user_id, s.kind, s.item_id, s.title, s.pw_salt, s.pw_kdf, s.pw_verifier, s.expires_at, s.created_at, s.revoked_at, i.id AS item_row_id, i.title AS item_title, i.type AS item_type, i.deleted_at AS item_deleted_at, i.enc_self AS item_enc_self, i.in_enc_space AS item_in_enc_space
+ FROM shares s LEFT JOIN items i ON i.id = s.item_id WHERE s.id = ?`;
+
+/** 「我的分享」：只列未撤销的；条目标题随行带出（回显给创建者，不涉密） */
+export const SQL_SELECT_SHARES_BY_USER = `SELECT s.id, s.kind, s.item_id, s.title, (s.pw_verifier IS NOT NULL) AS has_password, s.expires_at, s.created_at, s.revoked_at, i.title AS item_title, i.type AS item_type
+ FROM shares s LEFT JOIN items i ON i.id = s.item_id WHERE s.user_id = ? AND s.revoked_at IS NULL ORDER BY s.created_at DESC`;
+
+export const SQL_UPDATE_SHARE_EXPIRY =
+  "UPDATE shares SET expires_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL";
+
+export const SQL_UPDATE_SHARE_PASSWORD =
+  "UPDATE shares SET pw_salt = ?, pw_kdf = ?, pw_verifier = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL";
+
+export const SQL_UPDATE_SHARE_CLEAR_PASSWORD =
+  "UPDATE shares SET pw_salt = NULL, pw_kdf = NULL, pw_verifier = NULL WHERE id = ? AND user_id = ? AND revoked_at IS NULL";
+
+export const SQL_REVOKE_SHARE =
+  "UPDATE shares SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL";
+
+/** 分享正文：item_bodies 按 item_id 主键一行（当前稿），标题与类型取条目行 */
+export const SQL_SELECT_SHARE_BODY = `SELECT b.body, i.id AS item_id, i.type, i.title, i.updated_at, i.user_id
+ FROM item_bodies b JOIN items i ON i.id = b.item_id WHERE b.item_id = ?`;
+
+/** 公开附件只按「原图行」放行：键在 attachments.r2_key，mime / filename 决定响应头 */
+export const SQL_SELECT_ATTACHMENT_FOR_SHARE =
+  "SELECT r2_key, mime, filename FROM attachments WHERE user_id = ? AND sha256 = ? AND kind = 'original'";

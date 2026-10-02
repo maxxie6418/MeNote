@@ -5786,3 +5786,57 @@ button.chip--tag:hover {
 .editor-lab__quick-input {
   position: relative;
 }
+
+/* —— 分享查看器（M5-S3；架构 §十）——
+   访客页：单列正文、表格只读网格、图册。全用既有令牌，不新增色值与刻度。 */
+.viewerbody {
+  background: var(--bg);
+}
+
+.viewer {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5);
+}
+
+.viewer__title {
+  font-size: var(--fs-title);
+  font-weight: 650;
+  margin-bottom: var(--sp-3);
+}
+
+.viewer__note {
+  color: var(--muted);
+}
+
+.viewer__error {
+  color: var(--red);
+}
+
+.viewer__switch {
+  margin-bottom: var(--sp-4);
+}
+
+.viewer__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.viewer__table th,
+.viewer__table td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  font-size: var(--fs-body);
+}
+
+.viewer__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--sp-3);
+}
+
+.viewer__gallery img {
+  width: 100%;
+  border-radius: var(--radius-sm);
+}

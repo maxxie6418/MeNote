@@ -12,6 +12,9 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(rootPackage.version),
   },
+  // 分享查看器（M5-S3）**不另建 html 入口**：@cloudflare/vite-plugin v1.60 的客户端
+  // 入口由插件接管，手写 `build.rollupOptions.input` 会让入口解析失败（UNRESOLVED_ENTRY）。
+  // 改为 `main.tsx` 按 `/s/<分享ID>` 路径分流（两边动态导入，访客不拉主应用 chunk）。
   plugins: [
     react(),
     cloudflare({

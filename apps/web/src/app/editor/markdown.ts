@@ -69,6 +69,15 @@ export interface AttachmentRenderMeta {
 export interface RenderMarkdownOptions {
   /** 本地已知的附件（`sha256 -> 元数据`）：用来标"不可用"与补大小 */
   attachments?: Record<string, AttachmentRenderMeta>;
+  /**
+   * 放行 `blob:` 图片（M5-S3 分享查看器专用）。
+   *
+   * DOMPurify 默认的 URI 白名单里**没有** `blob:`，所以分享页把附件取回后改写成的
+   * object URL 会被净化掉、`src` 直接消失（本开关正是为此而加）。只给查看器开：
+   * 那些 blob URL 全部由本会话用令牌现取的字节 `createObjectURL` 造出来，
+   * 页面里没有别的 blob 源。
+   */
+  allowBlobUris?: boolean;
 }
 
 interface MarkdownEnv {
@@ -88,10 +97,19 @@ function sizeLabel(bytes: number): string {
   return `${(bytes / 1_048_576).toFixed(1)} MB`;
 }
 
+/**
+ * DOMPurify 默认 URI 白名单 + `blob:`（语义与默认值一致，只多放行一种协议）。
+ * 整体抄一遍默认正则容易随库升级漂移，所以这里只明确"多一条 blob"。
+ */
+const BLOB_ALLOWED_URI_REGEXP =
+  /^(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|mid|xmpp|blob):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$)/i;
+
 /** Markdown → 安全 HTML 字符串（仅供 `dangerouslySetInnerHTML` 使用） */
 export function renderMarkdown(source: string, options: RenderMarkdownOptions = {}): string {
   const html = md.render(source, { attachments: options.attachments } satisfies MarkdownEnv);
-  return DOMPurify.sanitize(html);
+  return options.allowBlobUris
+    ? DOMPurify.sanitize(html, { ALLOWED_URI_REGEXP: BLOB_ALLOWED_URI_REGEXP })
+    : DOMPurify.sanitize(html);
 }
 
 /**

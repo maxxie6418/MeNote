@@ -16,9 +16,11 @@ export interface MarkdownPreviewProps {
   source: string;
   /** 本地已知的附件（`sha256 -> 元数据`）：标"不可用"与补大小用 */
   attachments?: Record<string, AttachmentRenderMeta>;
+  /** 放行 `blob:` 图片（分享查看器用；见 `markdown.ts` 的 `allowBlobUris`） */
+  allowBlobUris?: boolean;
 }
 
-export function MarkdownPreview({ source, attachments }: MarkdownPreviewProps) {
+export function MarkdownPreview({ source, attachments, allowBlobUris = false }: MarkdownPreviewProps) {
   /*
     **必须记忆化**：`renderMarkdown` 是 markdown-it 全文解析 + DOMPurify 净化 + 附件大小正则，
     而这个组件在正文区的**每次渲染**都会跑（切换条目重挂一次、分隔屏下每个键都还要再跑一次）。
@@ -27,9 +29,9 @@ export function MarkdownPreview({ source, attachments }: MarkdownPreviewProps) {
     两者不变时结果完全一致，没有记忆化的风险。
   */
   const html = useMemo(() => {
-    const rendered = renderMarkdown(source, { attachments });
+    const rendered = renderMarkdown(source, { attachments, allowBlobUris });
     return attachments ? decorateAttachmentSizes(rendered, attachments) : rendered;
-  }, [source, attachments]);
+  }, [source, attachments, allowBlobUris]);
 
   return (
     <div

@@ -209,8 +209,10 @@ export async function deleteCryptoMaterials(db: D1Database, userId: string): Pro
  * 这是唯一剩下的"缺机密"分支，而且与 `config-guard` 同一条理由：用空密钥算出来的东西
  * 看起来能用、实则不安全（会静默降级成一个谁都能复算的包裹键）。
  * 正常情况下走不到这里——缺 `AUTH_PEPPER` 时注册/登录已经 503，用户根本进不来。
+ *
+ * 分享服务（M5-S1）的访问令牌也用它派生签名密钥，所以开放导出（同层服务间复用）。
  */
-function requirePepper(env: EnvBindings): string {
+export function requirePepper(env: EnvBindings): string {
   const pepper = env.AUTH_PEPPER;
   if (typeof pepper !== "string" || pepper.length === 0) {
     throw new DomainError(

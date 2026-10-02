@@ -13,7 +13,7 @@
  *
  * 参考做法来自外部项目 inkstone 的 `src/client/editor/theme.ts`（同为 9 行量级的收口）。
  * 那边还有一整套 `closeBrackets` / `drawSelection` / `search` 等功能扩展——那些要引新依赖，
- * 不在本轮范围（见 `docs/todo/Menote-编辑器性能与样式收口-实施计划-v1.md` §三）。
+ * 不在本轮范围（见 `docs/archive/Menote-编辑器性能与样式收口-实施计划-v1.md` §三）。
  */
 import { EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";

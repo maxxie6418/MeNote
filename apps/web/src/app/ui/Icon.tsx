@@ -36,6 +36,8 @@ export type IconName =
   | "grid"
   | "image"
   | "bolt"
+  /* 笔记本 `+` 菜单的「导入笔记」（2026-10-02 补：原型没有这一项，故无原型对应） */
+  | "import"
   /* 待办页的「列表 / 看板」切换（2026-09-29 补：此前只有文字，原型 `#i-kanban` 那个字形没有） */
   | "kanban";
 
@@ -163,6 +165,14 @@ export function IconSprite() {
         <rect x="2.2" y="3.3" width="3" height="9.4" rx="1" />
         <rect x="6.6" y="3.3" width="3" height="6.2" rx="1" />
         <rect x="11" y="3.3" width="3" height="8.2" rx="1" />
+      </symbol>
+      {/*
+        「导入笔记」（2026-10-02）：箭头向下落进一条底线 = 文件进到本子里。与 `#i-plus` 同为
+        1.6px 描边、16 网格。
+      */}
+      <symbol id="i-import" viewBox="0 0 16 16">
+        <path d="M8 2.6v7.2M5.2 7.2 8 10l2.8-2.8" />
+        <path d="M3 11.4v1.2a.8.8 0 0 0 .8.8h8.4a.8.8 0 0 0 .8-.8v-1.2" />
       </symbol>
     </svg>
   );

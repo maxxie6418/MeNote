@@ -9,7 +9,7 @@
  * 3. 打开后每个文件夹最多列 50 条，超出给「还有 N 条…」，点它切到那个文件夹；
  * 4. 点条目直接打开（回调带上条目 id）。
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LocalFolder, LocalItem } from "../src/data/db";
 import { FolderTree, TREE_ITEMS_LIMIT } from "../src/features/notes/ui/FolderTree";
@@ -174,12 +174,18 @@ describe("笔记本树的空态与入口", () => {
         onCreateFolder={vi.fn(async () => undefined)}
         onRenameFolder={async () => undefined}
         onMoveFolder={async () => undefined}
+        onImportNotes={async () => ({ created: 0, skipped: [] })}
+        onCreateTable={async () => undefined}
       />,
     );
 
     expect(screen.getByText("还没有文件夹")).toBeTruthy();
-    // 用**精确**名字：`+` 菜单那颗按钮的无障碍名是「新建文件夹 / 表格」，模糊匹配会同时命中两颗
-    fireEvent.click(screen.getByRole("button", { name: "新建文件夹" }));
+    /*
+      点**空态里那颗**可见按钮，不点 `+`：`+` 的无障碍名也含"新建文件夹"（它列出管的三项），
+      按名字找会点到 `+`、只把菜单打开。按容器定位才是这条断言真正要验的东西。
+    */
+    const empty = screen.getByText("还没有文件夹").closest(".tree-empty") as HTMLElement;
+    fireEvent.click(within(empty).getByRole("button", { name: "新建文件夹" }));
     expect(screen.getByLabelText("新文件夹名称")).toBeTruthy();
   });
 
@@ -193,6 +199,8 @@ describe("笔记本树的空态与入口", () => {
         onCreateFolder={async () => undefined}
         onRenameFolder={async () => undefined}
         onMoveFolder={async () => undefined}
+        onImportNotes={async () => ({ created: 0, skipped: [] })}
+        onCreateTable={async () => undefined}
       />,
     );
 

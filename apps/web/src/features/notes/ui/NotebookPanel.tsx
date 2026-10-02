@@ -13,17 +13,22 @@
  *    下面还有子文件夹），与服务端校验口径一致。
  * 4. 计数与 `待上传` 标记直接来自本地状态。
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { LocalFolder, LocalItem } from "../../../data/db";
 import { progressLabel, type BatchProgress, type BatchResult } from "../batch";
 import { Icon } from "../../../app/ui/Icon";
 import { Button } from "../../../app/ui/Controls";
 import { Modal } from "../../../app/ui/Modal";
 import { NavItem } from "../../../app/ui/NavItem";
+import type { TableDoc } from "@menote/mdcore";
+import { emptyTableDoc } from "../../tables/model";
+import { TableColumnManager } from "../../tables/ui/TableColumnManager";
 import { FolderTree } from "./FolderTree";
 import { FolderRenameModal } from "./FolderRenameModal";
+import { ImportNotesFlow, type ImportNotesFlowHandle } from "./ImportNotesFlow";
 import { NbAddButton } from "./NbAddButton";
 import { canCreateChildFolder, folderMoveTargets, type MoveTarget } from "../folders";
+import type { ImportNotesSummary } from "../import-md";
 import type { NotesView } from "../views";
 
 export interface NotebookPanelProps {
@@ -66,6 +71,19 @@ export interface NotebookPanelProps {
   onOpenItem?: (itemId: string) => void;
   /** 正文区当前打开的那一篇（树里给这一行选中底色；2026-10-01 问题 5） */
   selectedItemId?: string | null;
+  /**
+   * 导入本地 `.md`（v0.6.16）。落点由 workspace 侧按当前选中的笔记本算（与新建笔记同一条路径），
+   * 面板只把文件递过去、把结果说出来。
+   *
+   * **必填**而不是可选：菜单项是固定三项，缺了实现就会出现"点了没反应"的空按钮
+   * （`DESIGN.md` §6.1）。
+   */
+  onImportNotes: (files: readonly File[]) => Promise<ImportNotesSummary>;
+  /**
+   * 新建表格（v0.6.16）：**先在面板里定列结构**，定完才建条目。给的是渲染好的表格文档。
+   * 取消定义 = 不建（`TableColumnManager` 的 `mode="create"` 不可点遮罩关闭，只能「创建表格」或「取消」）。
+   */
+  onCreateTable: (doc: TableDoc) => Promise<unknown>;
 }
 
 export function NotebookPanel({
@@ -82,6 +100,8 @@ export function NotebookPanel({
   itemsByFolder,
   onOpenItem,
   selectedItemId = null,
+  onImportNotes,
+  onCreateTable,
 }: NotebookPanelProps) {
   const [creatingIn, setCreatingIn] = useState<{ parentId: string | null } | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -96,6 +116,10 @@ export function NotebookPanel({
     progress: BatchProgress | null;
     failures: BatchResult<LocalItem>["failures"];
   } | null>(null);
+  /** 正在定义列结构（新建表格的中间态；非 null 即弹 `TableColumnManager`） */
+  const [definingColumns, setDefiningColumns] = useState<TableDoc | null>(null);
+  /** 菜单项在 `DropdownMenu` 里，文件选择器在 `ImportNotesFlow` 里，靠 ref 把两者接上 */
+  const importRef = useRef<ImportNotesFlowHandle | null>(null);
 
   async function runFolderMove(folder: LocalFolder, direction: "in" | "out"): Promise<void> {
     const action = direction === "in" ? vault?.onMoveIn : vault?.onMoveOut;
@@ -132,6 +156,18 @@ export function NotebookPanel({
   const selectedFolderId = view.kind === "notebook" ? (view.folderId ?? null) : null;
   const totalCount = Object.values(counts).reduce((sum, value) => sum + value, 0);
 
+  /**
+   * 导入落点的名字（确认框与结果里给用户看）。
+   *
+   * **非笔记本视图（最近编辑 / 收藏 / 标签）没有笔记本上下文，导入落根目录**——
+   * 与 `useNoteCreation.resolveTarget` 同一口径，所以这里显示"根目录"而不是当前视图名，
+   * 免得用户以为进了"最近编辑"（那不是一个能落东西的地方）。
+   */
+  const importTargetLabel =
+    (selectedFolderId !== null
+      ? folders.find((folder) => folder.id === selectedFolderId)?.name
+      : undefined) ?? "根目录";
+
   /** 新建位置：选中的是第 1 层 → 建在它下面（第 2 层）；选中的是第 2 层 → 建在它的父层 */
   function beginCreate(parent: LocalFolder | null): void {
     if (parent && !canCreateChildFolder(parent)) {
@@ -165,6 +201,8 @@ export function NotebookPanel({
           onCreateFolder={() =>
             beginCreate(folders.find((folder) => folder.id === selectedFolderId) ?? null)
           }
+          onCreateTable={() => setDefiningColumns(emptyTableDoc())}
+          onImportNotes={() => importRef.current?.open()}
         />
       </div>
 
@@ -330,6 +368,30 @@ export function NotebookPanel({
       >
         <p>原路径会保留；恢复时如果原文件夹已不在，内容会回到根目录。</p>
       </Modal>
+
+      {/* 导入笔记（v0.6.16）：文件选择器藏在 `ImportNotesFlow` 里，由 `+` 菜单的 ref 唤起 */}
+      <ImportNotesFlow
+        ref={importRef}
+        targetLabel={importTargetLabel}
+        onImport={onImportNotes}
+      />
+
+      {/*
+        新建表格的列定义（v0.6.16）：`mode="create"` 不可点遮罩关闭——一点外面就把刚定的列丢了，
+        只能「创建表格」或「取消」。条件渲染，每次打开都是新挂载、草稿从空白起算。
+      */}
+      {definingColumns ? (
+        <TableColumnManager
+          open
+          mode="create"
+          doc={definingColumns}
+          onCancel={() => setDefiningColumns(null)}
+          onConfirm={(doc) => {
+            setDefiningColumns(null);
+            void onCreateTable(doc);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

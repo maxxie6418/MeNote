@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 /**
- * 笔记本面板（M2-3 验收点）：
+ * 笔记本面板（M2-3 验收点；v0.6.16 补导入笔记与新建表格）：
  * - **两层限制**：第 2 层不出现"新建子文件夹"入口；在选中第 2 层时点 `+`，新文件夹建在它的父层；
- * - `+` 菜单：新建文件夹可用、新建表格**禁用并说明原因**（M5）；
+ * - `+` 菜单：三项都在（新建文件夹 / 新建表格 / 导入笔记），表格**不再禁用**（M4 已交付编辑器，
+ *   此前一直挂着"M5 提供"的过期理由且 `mode="create"` 无调用方）；
  * - 内联命名：Enter 确认、Esc 取消、空名字不创建；
  * - 树：两层渲染 + 节点计数 + `待上传` 标记。
  */
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TableDoc } from "@menote/mdcore";
 import type { LocalFolder } from "../src/data/db";
+import type { ImportNotesSummary } from "../src/features/notes/import-md";
 import { NotebookPanel } from "../src/features/notes/ui/NotebookPanel";
 import { assertLabelledControls } from "./helpers/a11y";
 import { assertSinglePrimaryAction } from "./helpers/design";
@@ -49,6 +52,10 @@ function renderPanel(overrides: Partial<Parameters<typeof NotebookPanel>[0]> = {
   const onRenameFolder = vi.fn(async () => undefined);
   const onMoveFolder = vi.fn(async () => undefined);
   const onViewChange = vi.fn();
+  const onImportNotes = vi.fn<(files: readonly File[]) => Promise<ImportNotesSummary>>(
+    async () => ({ created: 0, skipped: [] }),
+  );
+  const onCreateTable = vi.fn<(doc: TableDoc) => Promise<unknown>>(async () => undefined);
   const { container } = render(
     <NotebookPanel
       view={{ kind: "notebook", folderId: null }}
@@ -58,14 +65,19 @@ function renderPanel(overrides: Partial<Parameters<typeof NotebookPanel>[0]> = {
       onCreateFolder={onCreateFolder}
       onRenameFolder={onRenameFolder}
       onMoveFolder={onMoveFolder}
+      onImportNotes={onImportNotes}
+      onCreateTable={onCreateTable}
       {...overrides}
     />,
   );
   // 读屏底线（渲染层断言，见 helpers/a11y.ts）
   assertLabelledControls(container, { buttons: 1 });
   assertSinglePrimaryAction(container);
-  return { container, onCreateFolder, onRenameFolder, onMoveFolder, onViewChange };
+  return { container, onCreateFolder, onRenameFolder, onMoveFolder, onViewChange, onImportNotes, onCreateTable };
 }
+
+/** `+` 菜单的无障碍名（三项都在，名字得说全） */
+const ADD_MENU = "新建文件夹 / 表格 / 导入笔记";
 
 /**
  * 取树行的按钮。
@@ -95,19 +107,125 @@ describe("笔记本面板", () => {
     expect(onViewChange).toHaveBeenCalledWith({ kind: "notebook", folderId: "f1" });
   });
 
-  it("`+` 菜单：新建文件夹可用，新建表格禁用并说明是 M5 提供", async () => {
+  it("`+` 菜单：三项都在，且都不再禁用（v0.6.16：表格入口接上、导入笔记加入）", async () => {
     const user = userEvent.setup();
     renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "新建文件夹 / 表格" }));
-    const menu = screen.getByRole("menu", { name: "新建文件夹 / 表格" });
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    const menu = screen.getByRole("menu", { name: ADD_MENU });
 
-    const folderItem = within(menu).getByRole("menuitem", { name: "新建文件夹" });
-    expect((folderItem as HTMLButtonElement).disabled).toBe(false);
+    for (const name of ["新建文件夹", "新建表格", "导入笔记"]) {
+      const item = within(menu).getByRole("menuitem", { name }) as HTMLButtonElement;
+      expect(item.disabled, `${name} 不该是禁用态`).toBe(false);
+    }
+  });
 
-    const tableItem = within(menu).getByRole("menuitem", { name: "新建表格" }) as HTMLButtonElement;
-    expect(tableItem.disabled).toBe(true);
-    expect(tableItem.title).toContain("M5");
+  it("`+` 菜单 → 新建表格：先弹列定义面板，取消不建条目", async () => {
+    const user = userEvent.setup();
+    const { onCreateTable } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    await user.click(screen.getByRole("menuitem", { name: "新建表格" }));
+
+    // 面板标题就是"定义列结构"（TableColumnManager 的 mode="create"）
+    expect(screen.getByRole("dialog", { name: "定义列结构" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(onCreateTable).not.toHaveBeenCalled();
+  });
+
+  it("`+` 菜单 → 新建表格：定了列才建条目（文档带数据列）", async () => {
+    const user = userEvent.setup();
+    const { onCreateTable } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    await user.click(screen.getByRole("menuitem", { name: "新建表格" }));
+    // 空白表格没有数据列，「创建表格」禁用并写明原因（面板的既有口径）
+    const create = screen.getByRole("button", { name: "创建表格" }) as HTMLButtonElement;
+    expect(create.disabled).toBe(true);
+    expect(create.title).toContain("至少需要一列");
+
+    // 空态里与底部各有一颗"添加一列"，取第一颗即可（面板既有结构）
+    const addColumnButtons = screen.getAllByRole("button", { name: "添加一列" });
+    await user.click(addColumnButtons[0] as HTMLElement);
+    await user.click(screen.getByRole("button", { name: "创建表格" }));
+
+    expect(onCreateTable).toHaveBeenCalledTimes(1);
+    const doc = onCreateTable.mock.calls[0]?.[0];
+    // 除受保护的 `_id` 外确实多了一列数据列
+    expect(doc?.columns.filter((column) => column.id !== "_id")).toHaveLength(1);
+  });
+
+  it("`+` 菜单 → 导入笔记：多选先确认，确认后把文件交给上层", async () => {
+    const user = userEvent.setup();
+    const { onImportNotes } = renderPanel({ view: { kind: "notebook", folderId: "f1" } });
+
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    await user.click(screen.getByRole("menuitem", { name: "导入笔记" }));
+
+    const input = screen.getByLabelText("选择要导入的 Markdown 文件") as HTMLInputElement;
+    expect(input.multiple).toBe(true);
+    expect(input.accept).toContain(".md");
+
+    fireEvent.change(input, {
+      target: { files: [new File(["a"], "A.md"), new File(["b"], "B.md")] },
+    });
+
+    // 目标笔记本是当前选中的「学习」；确认前什么都不建
+    expect(screen.getByRole("dialog", { name: "把 2 个文件导入「学习」？" })).toBeTruthy();
+    expect(onImportNotes).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "导入" }));
+    expect(onImportNotes).toHaveBeenCalledTimes(1);
+    expect(onImportNotes.mock.calls[0]?.[0]).toHaveLength(2);
+  });
+
+  it("`+` 菜单 → 导入笔记：单选直接进，不多问一句", async () => {
+    const user = userEvent.setup();
+    const { onImportNotes } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    await user.click(screen.getByRole("menuitem", { name: "导入笔记" }));
+
+    const input = screen.getByLabelText("选择要导入的 Markdown 文件");
+    fireEvent.change(input, { target: { files: [new File(["x"], "只有一篇.md")] } });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onImportNotes).toHaveBeenCalledTimes(1);
+  });
+
+  it("`+` 菜单 → 导入笔记：非笔记本视图落根目录，确认框据实说", async () => {
+    const user = userEvent.setup();
+    const { onImportNotes } = renderPanel({ view: { kind: "recent" } });
+
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    await user.click(screen.getByRole("menuitem", { name: "导入笔记" }));
+    const input = screen.getByLabelText("选择要导入的 Markdown 文件");
+    fireEvent.change(input, { target: { files: [new File(["a"], "A.md"), new File(["b"], "B.md")] } });
+
+    // 「最近编辑」不是能落东西的地方，如实说落根目录，不拿视图名糊弄
+    expect(screen.getByRole("dialog", { name: "把 2 个文件导入「根目录」？" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(onImportNotes).not.toHaveBeenCalled();
+  });
+
+  it("导入结果：有文件没进来时列清单，不靠会自动消失的提示", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      onImportNotes: vi.fn(async () => ({
+        created: 1,
+        skipped: [{ name: "坏文件.md", reason: "读取失败" }],
+      })),
+    });
+
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
+    await user.click(screen.getByRole("menuitem", { name: "导入笔记" }));
+    const input = screen.getByLabelText("选择要导入的 Markdown 文件");
+    fireEvent.change(input, { target: { files: [new File(["a"], "A.md"), new File(["b"], "坏文件.md")] } });
+    await user.click(screen.getByRole("button", { name: "导入" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "这些文件没能导入" });
+    expect(dialog.textContent).toContain("坏文件.md");
+    expect(dialog.textContent).toContain("读取失败");
   });
 
   it("内联命名：Enter 用输入的名字创建；Esc 取消（不创建）", async () => {
@@ -115,7 +233,7 @@ describe("笔记本面板", () => {
 
     // Enter 确认
     const first = renderPanel();
-    await user.click(screen.getByRole("button", { name: "新建文件夹 / 表格" }));
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
     await user.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
     await user.type(screen.getByLabelText("新文件夹名称"), "项目{Enter}");
     expect(first.onCreateFolder).toHaveBeenCalledWith("项目", null);
@@ -124,7 +242,7 @@ describe("笔记本面板", () => {
 
     // Esc 取消
     const second = renderPanel();
-    await user.click(screen.getByRole("button", { name: "新建文件夹 / 表格" }));
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
     await user.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
     await user.type(screen.getByLabelText("新文件夹名称"), "不要了{Escape}");
     expect(second.onCreateFolder).not.toHaveBeenCalled();
@@ -134,7 +252,7 @@ describe("笔记本面板", () => {
     const user = userEvent.setup();
     const { onCreateFolder } = renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "新建文件夹 / 表格" }));
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
     await user.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
     await user.type(screen.getByLabelText("新文件夹名称"), "   {Enter}");
 
@@ -147,7 +265,7 @@ describe("笔记本面板", () => {
       view: { kind: "notebook", folderId: "f2" },
     });
 
-    await user.click(screen.getByRole("button", { name: "新建文件夹 / 表格" }));
+    await user.click(screen.getByRole("button", { name: ADD_MENU }));
     await user.click(screen.getByRole("menuitem", { name: "新建文件夹" }));
     await user.type(screen.getByLabelText("新文件夹名称"), "同级新夹{Enter}");
 

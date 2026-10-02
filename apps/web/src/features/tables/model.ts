@@ -33,6 +33,25 @@ import {
 /** 大小档位（与笔记同一套阈值：软上限 1MB 变色提示、硬上限 1,900,000 阻止保存） */
 export type TableSizeLevel = "ok" | "soft" | "hard";
 
+/**
+ * 空白表格文档（v0.6.16）：新建表格时列定义面板的起点。
+ *
+ * **只有 `_id` 一列、零行**——数据列由用户在面板里加（`hasDataColumn` 没过时
+ * 「创建表格」是禁用的并写明原因）。`_id` 是隐藏且受保护的列（`isProtectedColumn`），
+ * 面板里只给一个显示开关，删不掉也改不了类型。
+ */
+export function emptyTableDoc(): TableDoc {
+  return {
+    columns: [{ id: ROW_ID_COLUMN, name: ROW_ID_COLUMN, type: "text", hidden: true }],
+    rowIdColumn: ROW_ID_COLUMN,
+    views: { default: "table" },
+    rows: [],
+    attachments: [],
+    notices: [],
+    preservedLines: [],
+  };
+}
+
 export interface TableSize {
   bytes: number;
   level: TableSizeLevel;

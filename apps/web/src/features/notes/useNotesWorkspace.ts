@@ -41,7 +41,7 @@ import {
 } from "./views";
 import { folderDepthFor, MAX_FOLDER_DEPTH } from "./folders";
 import { indexItemsByFolder } from "./groups";
-import { useNoteCreation } from "./useNoteCreation";
+import { useNoteCreation, type NoteCreationActions } from "./useNoteCreation";
 import { useVaultScope } from "./useVaultScope";
 import { useItemPatchActions } from "./useItemPatchActions";
 import { useMemoWrite } from "../memos/useMemoWrite";
@@ -71,7 +71,14 @@ function sameItems(left: LocalItem[], right: LocalItem[]): boolean {
   return true;
 }
 
-export interface NotesWorkspace {
+/**
+ * 工作区的对外形状。
+ *
+ * `extends NoteCreationActions`：创建类动作（新建笔记 / 文件夹、导入笔记、新建表格）由
+ * `useNoteCreation` 整组提供并在下面 spread 进来。逐字段列在这里会让本文件顶破 500 行预算
+ * （架构 §2.3.1），字段说明随实现住在 `useNoteCreation.ts`。
+ */
+export interface NotesWorkspace extends NoteCreationActions {
   /** 当前视图下的条目（已过滤、已排序） */
   items: LocalItem[];
   /** 全部未删除条目（计数与标签云用，不受视图过滤影响） */
@@ -134,7 +141,6 @@ export interface NotesWorkspace {
   snapshot: NoteEditorSnapshot | null;
   refresh: () => Promise<void>;
   open: (id: string) => Promise<void>;
-  createNote: (options?: { title?: string; body?: string }) => Promise<string>;
   changeTitle: (title: string) => Promise<void>;
   /** 时间轴上的 Memo（不含已删除的；按 memo_at 倒序，置顶由界面层再排） */
   memos: LocalItem[];
@@ -151,8 +157,6 @@ export interface NotesWorkspace {
   ) => Promise<void>;
   /** 编辑 Memo 正文（Q19：`memo_at` 不变，只改正文与派生标签） */
   updateMemo: (itemId: string, text: string) => Promise<void>;
-  /** 新建文件夹（深度超限时抛错，界面本该不给出入口） */
-  createFolder: (name: string, parentId: string | null) => Promise<void>;
   /** 重命名文件夹（走 meta_rev，不生成冲突副本） */
   renameFolder: (folderId: string, name: string) => Promise<void>;
   /** 移动文件夹到某个父级（`null` = 根目录） */
@@ -455,8 +459,8 @@ export function useNotesWorkspace(
     ],
   );
 
-  /** 新建动作：新建笔记与新建文件夹（M3-6 起在 `useNoteCreation` 里） */
-  const { createNote, createFolder } = useNoteCreation({
+  /** 创建类动作：新建笔记 / 新建文件夹（M3-6 起在 `useNoteCreation` 里）；v0.6.16 加导入笔记与新建表格 */
+  const creation = useNoteCreation({
     folders,
     view,
     refresh,
@@ -672,9 +676,8 @@ export function useNotesWorkspace(
       snapshot,
       refresh,
       open,
-      createNote,
+      ...creation,
       changeTitle,
-      createFolder,
       memos,
       memoContents,
       publishMemo,
@@ -716,8 +719,7 @@ export function useNotesWorkspace(
       allItems,
       applyInitialBody,
       changeTitle,
-      createFolder,
-      createNote,
+      creation,
       docEpoch,
       docLoading,
       folderCounts,

@@ -162,6 +162,9 @@ export function navPanels(input: NavPanelsInput): {
           workspace.moveFolderOutOfVault(folder.id, { onProgress }),
       }}
       onDeleteFolder={input.onDeleteFolder}
+      /* v0.6.16：`+` 菜单的「导入笔记」与「新建表格」——落点由 workspace 按当前选中的笔记本算 */
+      onImportNotes={workspace.importNotes}
+      onCreateTable={workspace.createTable}
       /* 树里列条目（B2 批）：开关来自设置（默认关），条目来自 workspace 那张稳定的索引表 */
       showItems={input.showItems}
       itemsByFolder={workspace.itemsByFolder}

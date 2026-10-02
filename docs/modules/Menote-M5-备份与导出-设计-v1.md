@@ -1,8 +1,8 @@
-# Menote 备份与导出设计 v1（文档版本 v4）
+# Menote 备份与导出设计 v1（文档版本 v5）
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v4 |
+| 文档版本 | v5 |
 | 文档状态 | 生效（导出 / 导入 / 设置页 / 回收站条目的服务端还原均已落地；冲突预览经用户拍板不做，见 §五 / §八-2） |
 | 目的和适用范围 | M5 的「备份 / 导出 / 导入」：**备份包长什么样、谁来生成、怎么恢复、重复导入会不会刷出重复条目**。本文定格式契约与取舍，不含界面稿；界面另走「界面怎么做」。产品口径见 `wiki/Menote-功能拆解-v2` M06/M07（**只读，不改**） |
 | 权威级别 | 模块规则（格式契约另需回写 `wiki/`，见 §九） |
@@ -16,6 +16,7 @@
 | v2 | v0.6.9 | 2026-10-01 | 导出/导入/设置页三批落地后回写：新增 §4.1（第三处被推翻的判断——`createLocalItem` 不能用，另写 `restoreLocalItem`）与 §4.2（回收站条目在服务端要补一次软删）、补全 §七 落点与 §八 待办、记录 zip 库选型 | MiniMax-M3.1-Flash-Preview |
 | v3 | v0.6.10 | 2026-10-02 | §4.2 的软删时序已落地（v0.6.10）：outbox 新增 `trash_item` 操作，回收站条目按「`create` → `trash_item`」入队，推送器以本地为准补服务端软删；§4.2 与 §八-1 改写为实施结果，更正 §4.2 原写的端点路径（实际是 `DELETE /api/items/:id`） | GLM-5.3-Flash |
 | v4 | v0.6.11 | 2026-10-02 | 冲突预览经用户拍板**不做**：§五与 §八-2 改写为定论（维持既有 rev_conflict → 另存副本链路），新增导入结果 `itemsOverwritten`（与本机内容不同被覆盖的条目数）；二次确认弹窗补覆盖说明并修掉会被原样渲染的 `**` 标记 | GLM-5.3-Flash |
+| v5 | v0.6.12 | 2026-10-02 | 单篇导出落地（M15，用户拍板做、附件可选）：§七 落点表补 `export-note.ts`——`.md` 逐字、草稿优先、可选附件按备份布局打包（哈希不符整次失败）；入口在笔记「更多」菜单，锁定态禁用并说明 | GLM-5.3-Flash |
 
 ---
 
@@ -138,6 +139,7 @@ manifest 里的每个 `path` 在读盘前都要过一遍：拒绝绝对路径、
 | `packages/shared/test/backup.test.ts`（新增） | 纯函数用例：COMPLETE 解析、哈希比对、路径穿越拒绝、坏 manifest 拒收、**所有包内路径都带 `snapshot/` 前缀** |
 | `apps/web/src/features/backup/build.ts`（新增） | 纯构建层：条目 + 正文 + 附件 → manifest 与文件清单。不做 IO，可在 jsdom 里断言 |
 | `apps/web/src/features/backup/export.ts`（新增） | 导出编排：读 IndexedDB（**草稿优先**）、下载附件、算哈希、可见进度与可中断、fflate 异步打包 |
+| `apps/web/src/features/backup/export-note.ts`（新增，v0.6.12） | 单篇导出（M15）：`.md` 逐字 + 可选附件打包；`zip` 布局与备份一致（`attachments/<sha256>--<文件名>`），附件重算哈希、不符整次失败 |
 | `apps/web/src/features/backup/restore.ts`（新增） | 还原专用的本地写入（见 §4.1） |
 | `apps/web/src/features/backup/import.ts`（新增） | 导入编排：解包 → 校验 → 文件夹 → 条目 → 附件 |
 | `apps/web/src/features/backup/ui/BackupPage.tsx`（新增） | 设置页「备份与导出」：导出无确认但有进度与取消；导入先出摘要再二次确认 |

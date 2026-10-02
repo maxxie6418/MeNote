@@ -1,9 +1,9 @@
-# Menote 分享设计 v1（文档版本 v1.1）
+# Menote 分享设计 v1（文档版本 v1.3）
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.2 |
-| 文档状态 | 生效（用户 2026-10-02 确认开工；**S1 服务端 v0.6.13 / S2 管理端 v0.6.14 已落地**，S3/S4 进行中） |
+| 文档版本 | v1.3 |
+| 文档状态 | 生效（用户 2026-10-02 确认开工；**S1 服务端 v0.6.13 / S2 管理端 v0.6.14 / S3 查看器 v0.6.15 已落地**，S4 进行中） |
 | 目的和适用范围 | M5 的「分享」半边（功能拆解 M14-01~05 / 需求 §16.1）：创建 / 管理 / 撤销分享链接与访客只读查看器。机制本身是 `wiki/Menote-项目架构-v1` §十的**架构定**，本文只做落地细化与批次划分，不推翻任何定稿 |
 | 权威级别 | 模块规则（与架构 §十冲突时以架构为准，停下确认） |
 | 最后更新日期 | 2026-10-02 |
@@ -15,6 +15,7 @@
 | v1 | v0.6.12 | 2026-10-02 | 初稿：核对架构 §十 / 设计文档 DDL / 功能拆解 M14 与现网代码（Cookie host-only、渲染器依赖已在），按用户 origin 拍板整理落地方案与批次 | GLM-5.3-Flash |
 | v1.1 | v0.6.13 | 2026-10-02 | 用户确认开工（首期合集后置、子域走实例设置）；S1 服务端落地：迁移 0005、管理侧四接口（`routes/shares.ts` + `services/shares.ts`）、访客侧四接口（`routes/public.ts` + `services/share-public.ts`，限速与令牌在此）、`packages/shared/src/shares.ts` 契约与 `attachments.ts`（引用解析收进 shared）；`schema-upgrade` 用例按新事实改写（0003 一步升到 5） | GLM-5.3-Flash |
 | v1.2 | v0.6.14 | 2026-10-02 | S2 管理端落地：更多菜单「分享」（隐私条目置灰）、`features/shares/`（model + ShareDialog + MySharesPage）、公开标记、加密/进回收站的自动撤销接线（行清理 + 提示）、分享子域存实例设置（`app_meta` 键 + `/api/admin/share-origin`，仅 owner）、设置导航新增「分享」分类。**弹窗只做创建/复制/撤销，改密改期在设置页**（避免两套编辑面），S3 查看器进行中 | GLM-5.3-Flash |
+| v1.3 | v0.6.15 | 2026-10-02 | S3 查看器落地：由于 `@cloudflare/vite-plugin` v1.60 接管客户端入口、第二个 html 入口会 `UNRESOLVED_ENTRY`，按 Static Assets SPA 定稿改为 `main.tsx` 按 `/s/<sid>` 路径动态分流（两边动态 import，访客不拉编辑器与同步 chunk）；新增分享状态 / 密码解锁 / 无状态令牌 / 内容呈现 / 附件带令牌取回并改写 blob URL；表格只读网格 + 有附件时图册切换；DOMPurify 增加查看器专用 `allowBlobUris` 开关。**偏离架构入口表的原因与回写项已留在 `main.tsx` 注释** | GLM-5.3-Flash |
 
 ---
 
@@ -55,7 +56,7 @@ share.example.com  ← 分享查看器 + 公开 API，**同一个 Worker**（架
 |---|---|---|
 | **S1 服务端** | ✅ **完成（v0.6.13）** | 迁移 0005；shared 补分享令牌 HKDF 与访客 KDF 契约；`services/shares.ts`；`routes/shares.ts` + `routes/public.ts`（六接口 + 实时失效检查 + unlock 限速）；worker 用例 11 条 | `apps/worker/src/**`、`packages/shared/src/**`、`db/migrations/` |
 | **S2 分享管理（客户端）✅ 完成（v0.6.14）** | 「更多」菜单加「分享」（隐私条目置灰并说明）；创建弹窗（可选密码 + 过期 1 天 / 7 天 / 30 天 / 自定义 / 永不过期）；创建后链接 + 复制；条目公开标记；设置 › 分享「我的分享」（复制 / 改密 / 改期 / 撤销，撤销立即生效）；**自动撤销接线**：加密 / 移入加密空间 / 移入回收站时调撤销并提示（M14-04） | `features/shares/**`（ui + model 两件套）、`NoteWorkspace`、`SettingsPanel` |
-| **S3 查看器** | `apps/web/share.html` 独立入口（≤50 行，架构入口预算表）；`features/share-viewer/`：状态页 / 密码解锁页 / 渲染页 / 失效页；md 渲染（markdown-it + DOMPurify 清洗）；表格只读 + 图册切换（Q18）；清单 Memo 只读状态 / 单条 Memo 含图；附件经公开接口取 | `apps/web/share.html`、`features/share-viewer/**` |
+| **S3 查看器 ✅ 完成（v0.6.15）** | `main.tsx` 按 `/s/<分享ID>` 动态分流（Static Assets SPA 回退；查看器 chunk 不拉编辑器 / 同步）；`features/share-viewer/`：状态页 / 密码解锁页 / 渲染页 / 失效页；md 渲染（markdown-it + DOMPurify，查看器专用 `allowBlobUris`）；表格只读 + 图册切换（Q18）；附件带令牌取回后改写 blob URL | `apps/web/src/main.tsx`、`features/share-viewer/**`、`app/editor/markdown.ts` |
 | **S4 收口** | 部署文档（子域配置步骤）；wiki 回写清单；真机点验清单 | 文档 |
 
 ## 五、安全底线

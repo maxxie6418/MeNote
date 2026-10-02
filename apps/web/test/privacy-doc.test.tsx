@@ -55,6 +55,7 @@ const SNAPSHOT: NoteEditorSnapshot = {
 function renderWorkspace(options: {
   item?: LocalItem;
   encryption?: Partial<NonNullable<Parameters<typeof NoteWorkspace>[0]["encryption"]>>;
+  onExportMarkdown?: (includeAttachments: boolean) => void;
 } = {}) {
   const handlers = {
     onUnlock: vi.fn(),
@@ -78,6 +79,7 @@ function renderWorkspace(options: {
         ...handlers,
         ...options.encryption,
       }}
+      onExportMarkdown={options.onExportMarkdown}
     />,
   );
   return { container, ...handlers };
@@ -182,5 +184,41 @@ describe("「更多」菜单里的加密动作", () => {
     fireEvent.click(screen.getByRole("button", { name: "更多" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /锁上全部单篇/ }));
     expect(second.onLockAll).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("「更多」菜单里的单篇导出（M15）", () => {
+  it("两项各司其职：只导 .md 回调 false，含附件回调 true", () => {
+    const onExportMarkdown = vi.fn();
+    renderWorkspace({ onExportMarkdown });
+
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "导出 Markdown" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "导出 Markdown（含附件）" }));
+
+    expect(onExportMarkdown).toHaveBeenNthCalledWith(1, false);
+    expect(onExportMarkdown).toHaveBeenNthCalledWith(2, true);
+  });
+
+  it("不给 onExportMarkdown 时菜单里不出现导出入口（未接线的视图不显示假按钮）", () => {
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    expect(screen.queryByRole("menuitem", { name: /导出 Markdown/ })).toBeNull();
+  });
+
+  it("锁定态两项都禁用并说明原因（正文都看不了，更不该导出）", () => {
+    renderWorkspace({
+      item: item({ enc_self: 1 }),
+      encryption: { encrypted: true, unlocked: false },
+      onExportMarkdown: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+    for (const name of ["导出 Markdown", "导出 Markdown（含附件）"]) {
+      const entry = screen.getByRole("menuitem", { name }) as HTMLButtonElement;
+      expect(entry.disabled).toBe(true);
+      expect(entry.title).toContain("解锁");
+    }
   });
 });

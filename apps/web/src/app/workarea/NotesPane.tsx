@@ -18,6 +18,7 @@ import { NoteList } from "../../features/notes/ui/NoteList";
 import { VaultTree } from "../../features/privacy/ui/VaultTree";
 import { isInVault } from "../../features/privacy/vault";
 import { groupNotesByFolder } from "../../features/notes/groups";
+import { exportNoteMarkdown } from "../../features/backup/export-note";
 import { NoteWorkspace } from "../../features/notes/ui/NoteWorkspace";
 import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPanel";
 import { useVersions } from "../../features/versions/useVersions";
@@ -360,6 +361,21 @@ export function NotesPane({
               .then(() => onToast("已降级为普通笔记；原文已封存为一个版本", "success"))
               .catch((error: unknown) => {
                 onToast(error instanceof Error ? error.message : "降级失败，请稍后重试", "error");
+              });
+          }}
+          /*
+            单篇导出（M15）：取正文 / 打包 / 下载都在 `features/backup/export-note.ts`。
+            失败（离线取不到附件、哈希对不上）要给可见提示，别让菜单点了没反应。
+          */
+          onExportMarkdown={(includeAttachments) => {
+            const item = selected;
+            if (!item) return;
+            void exportNoteMarkdown({ id: item.id, title: item.title, includeAttachments })
+              .then(() =>
+                onToast(includeAttachments ? "已导出 Markdown（含附件）" : "已导出 Markdown", "success"),
+              )
+              .catch((error: unknown) => {
+                onToast(error instanceof Error ? error.message : "导出失败，请稍后重试", "error");
               });
           }}
         />

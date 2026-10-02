@@ -120,6 +120,12 @@ export interface NoteWorkspaceProps {
    * 组件只负责弹确认框与报事件，**不碰网络**——接线在 `NotesPane`（→ 工作区 `degradeToNote`）。
    */
   onDegrade?: () => void;
+  /**
+   * 单篇导出 Markdown（M15）：`includeAttachments` 决定只下 `.md` 还是连引用附件打包 zip。
+   * 组件只报事件，取正文 / 打包 / 下载在 `features/backup/export-note.ts`。
+   * **锁定态不可用**（与切换条同一口径）：锁定时正文都看不了，更不该导出。
+   */
+  onExportMarkdown?: (includeAttachments: boolean) => void;
   /** 版本历史入口为什么不可用（锁定态时给原因，`DESIGN.md` §6.1） */
   versionsDisabledReason?: string;
   /**
@@ -158,6 +164,7 @@ export function NoteWorkspace({
   onDelete,
   onOpenVersions,
   onDegrade,
+  onExportMarkdown,
   versionsDisabledReason,
   attachments,
   onFiles,
@@ -394,6 +401,27 @@ export function NoteWorkspace({
                 title: encryption.unlockedCount === 0 ? "当前没有已解密的单篇" : undefined,
                 onSelect: () => encryption.onLockAll(),
               },
+              // 单篇导出（M15）：锁定态不可用并说明原因（与切换条同一口径）
+              ...(onExportMarkdown
+                ? ([
+                    {
+                      id: "export-md",
+                      label: "导出 Markdown",
+                      icon: "note" as const,
+                      disabled: bodyLocked,
+                      title: bodyLocked ? "解锁后才能导出这一篇" : undefined,
+                      onSelect: () => onExportMarkdown(false),
+                    },
+                    {
+                      id: "export-md-zip",
+                      label: "导出 Markdown（含附件）",
+                      icon: "image" as const,
+                      disabled: bodyLocked,
+                      title: bodyLocked ? "解锁后才能导出这一篇" : undefined,
+                      onSelect: () => onExportMarkdown(true),
+                    },
+                  ] satisfies MenuItemSpec[])
+                : []),
               // 版本历史（M4-11）：锁定态整体不可用，并说明原因
               ...(onOpenVersions
                 ? ([

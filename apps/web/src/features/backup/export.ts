@@ -50,7 +50,8 @@ export function backupFileName(now: number): string {
   return `menote-backup-${stamp}.zip`;
 }
 
-function defaultSaveBlob(blob: Blob, fileName: string): void {
+/** 触发浏览器下载（单篇导出同源复用，`export-note.ts` 也用它） */
+export function defaultSaveBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -60,7 +61,8 @@ function defaultSaveBlob(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-async function fetchAttachmentBytes(sha256: string): Promise<Uint8Array> {
+/** 按 sha256 下载附件原始字节（内容寻址接口，与备份导出共用一条通道） */
+export async function fetchAttachmentBytes(sha256: string): Promise<Uint8Array> {
   const response = await fetch(attachmentUrl(sha256));
   if (!response.ok) {
     throw new Error(`附件下载失败（${response.status}）：${sha256.slice(0, 8)}…`);

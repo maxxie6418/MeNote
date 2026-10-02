@@ -64,6 +64,7 @@ function fakePushApi(): PushApi {
     createItem: vi.fn(async (id: string) => ({ id, rev: 1, bytes: 1, chars: 1 })),
     saveBody: vi.fn(async (id: string, baseRev: number) => ({ id, rev: baseRev + 1, bytes: 1, chars: 1 })),
     patchMeta: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
+    trashItem: vi.fn(async (id: string) => ({ id, meta_rev: 2, deleted_at: 1_000, folder_id: null })),
     createFolder: vi.fn(async (input: { id: string }) => ({ id: input.id, meta_rev: 1 })),
     patchFolder: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
     putSettings: vi.fn(async (input: { settings: unknown }) => ({

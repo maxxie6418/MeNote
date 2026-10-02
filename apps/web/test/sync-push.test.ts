@@ -16,6 +16,7 @@ import {
 } from "../src/data/db";
 import { FAILED_RETRY_AT, backoffDelayMs } from "../src/data/sync/backoff";
 import { pushQueue, type PushApi } from "../src/data/sync/push";
+import { restoreLocalItem } from "../src/features/backup/restore";
 import { createNoteEditor } from "../src/features/notes/model";
 
 function serverItem(partial: Partial<ItemMeta> & { id: string }): ItemMeta {
@@ -64,6 +65,7 @@ function fakeApi(overrides: Partial<PushApi> = {}): PushApi {
       chars: [...body].length,
     })),
     patchMeta: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
+    trashItem: vi.fn(async (id: string) => ({ id, meta_rev: 2, deleted_at: 1_000, folder_id: null })),
     createFolder: vi.fn(async (input: { id: string }) => ({ id: input.id, meta_rev: 1 })),
     patchFolder: vi.fn(async (id: string) => ({ id, meta_rev: 2 })),
     putSettings: vi.fn(async (input: { settings: unknown }) => ({
@@ -93,6 +95,88 @@ describe("退避", () => {
     expect(backoffDelayMs(1, () => 1)).toBe(1_200);
     // 上抖动也不能越过 60 秒上限
     expect(backoffDelayMs(20, () => 1)).toBe(60_000);
+  });
+});
+
+describe("推送：备份恢复的回收站收尾（trash_item）", () => {
+  it("create 之后紧跟 trash_item：先建成、再软删，本地与服务端最终都在回收站", async () => {
+    const id = newUlid();
+    // 导入路径（M5 设计 §4.2）：restoreLocalItem 对回收站条目按序入队 create 与 trash_item
+    await restoreLocalItem(
+      { id, type: "note", title: null, folder_id: null, body: "正文", deletedAt: 900 },
+      1_000,
+    );
+    const api = fakeApi();
+
+    const result = await pushQueue({ api, now: () => 1_000 });
+
+    expect(result).toMatchObject({ processed: 2, succeeded: 2, conflicted: 0, failed: 0, more: false });
+    expect(api.createItem).toHaveBeenCalledTimes(1);
+    expect(api.trashItem).toHaveBeenCalledTimes(1);
+    expect(api.trashItem).toHaveBeenCalledWith(id);
+    expect(await listOutbox()).toEqual([]);
+    const item = await getLocalItem(id);
+    expect(item?.deleted_at).toBe(900);
+    // 服务端软删推进的 meta_rev 要记回来，之后的元数据补丁才不会故意落后一截
+    expect(item?.meta_rev).toBe(2);
+  });
+
+  it("到出队时本地已不是回收站态（用户先恢复了）：不调服务端，直接出队", async () => {
+    const id = newUlid();
+    await restoreLocalItem(
+      { id, type: "note", title: null, folder_id: null, body: "正文", deletedAt: 900 },
+      1_000,
+    );
+    // 用户在推送前把这条恢复回了正常条目
+    await db.items.update(id, { deleted_at: null, deleted: false });
+    const api = fakeApi();
+
+    const result = await pushQueue({ api, now: () => 1_000 });
+
+    expect(result).toMatchObject({ processed: 2, succeeded: 2, failed: 0 });
+    expect(api.createItem).toHaveBeenCalledTimes(1);
+    expect(api.trashItem).not.toHaveBeenCalled();
+    expect(await listOutbox()).toEqual([]);
+  });
+
+  it("本地条目已不在（例如又被永久删除）：什么都不调，出队", async () => {
+    const id = newUlid();
+    await restoreLocalItem(
+      { id, type: "note", title: null, folder_id: null, body: "正文", deletedAt: 900 },
+      1_000,
+    );
+    await db.items.delete(id);
+    const api = fakeApi();
+
+    const result = await pushQueue({ api, now: () => 1_000 });
+
+    expect(result).toMatchObject({ processed: 2, succeeded: 2, failed: 0 });
+    expect(api.trashItem).not.toHaveBeenCalled();
+    expect(await listOutbox()).toEqual([]);
+  });
+
+  it("服务端 404（create 没成功过）：按不可重试失败处理，留在上传失败列表里可见", async () => {
+    const id = newUlid();
+    await restoreLocalItem(
+      { id, type: "note", title: null, folder_id: null, body: "正文", deletedAt: 900 },
+      1_000,
+    );
+    const api = fakeApi({
+      trashItem: vi.fn(async () => {
+        throw new ApiError("not_found", "回收站里没有这条", 404);
+      }),
+    });
+
+    const result = await pushQueue({ api, now: () => 1_000 });
+
+    expect(result).toMatchObject({ processed: 2, succeeded: 1, failed: 1 });
+    expect(api.trashItem).toHaveBeenCalledTimes(1);
+    const rows = await listOutbox();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.op).toBe("trash_item");
+    expect(rows[0]?.next_retry_at).toBe(FAILED_RETRY_AT);
+    // 本地回收站态保持不变：失败是可见的，不是默默改成正常条目
+    expect((await getLocalItem(id))?.deleted_at).toBe(900);
   });
 });
 

@@ -30,9 +30,10 @@ export type RestoreLocalItemInput = Omit<NewLocalItemInput, "task"> & {
   createdAt?: number;
   updatedAt?: number;
   /**
-   * 备份里的回收站时间。本地行会按它写，但**服务端那边还要另做一次软删**才能真正
-   * 回到回收站——`POST /api/trash/items/:id` 是服务端操作，不在 outbox 里，
-   * 只能在条目先推上去之后补做。首期由调用方如实回报这个数，不能默默变成正常条目。
+   * 备份里的回收站时间。本地行按它写；服务端那边的软删由紧随其后的 `trash_item`
+   * 出队补做（同条目 `create` 成功之后才轮到它，FIFO 保序）——这是"先同步成功、
+   * 再进回收站"的时序（设计 §4.2）。推送失败时条目会在服务端暂时以正常条目出现，
+   * 导入结果里的 `itemsFromTrash` 如实回报这个数。
    */
   deletedAt?: number | null;
 };
@@ -94,6 +95,19 @@ export async function restoreLocalItem(
       base_meta_rev: 0,
       now,
     });
+    // 回收站条目的服务端收尾（设计 §4.2）：create 出队成功后，紧跟的 trash_item
+    // 才会执行——服务端先有这条，软删才有对象。enqueue 是裸追加，不受
+    // "同一实体已有待推 op 就不再入队" 的合并规则影响，两条都保得住。
+    if (input.deletedAt != null) {
+      await enqueue({
+        entity: "item",
+        entity_id: input.id,
+        op: "trash_item",
+        base_rev: 0,
+        base_meta_rev: 0,
+        now,
+      });
+    }
   });
 
   return item;

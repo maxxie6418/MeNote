@@ -220,7 +220,7 @@ export function BackupPage() {
           </p>
           {summary.itemsFromTrash > 0 ? (
             <p className="hint-line">
-              其中 {summary.itemsFromTrash} 篇原本在回收站，恢复后会出现在正常列表里。
+              其中 {summary.itemsFromTrash} 篇原本在回收站；同步完成后，服务端那边也会回到回收站。
             </p>
           ) : null}
           {summary.attachmentsFailed > 0 ? (

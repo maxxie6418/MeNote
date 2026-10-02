@@ -160,6 +160,23 @@ describe("备份往返", () => {
     // 草稿不该留下：它不是"刚敲完还没传"
     expect(await db.drafts.get("01AAA")).toBeUndefined();
   });
+
+  it("回收站条目入队两条且有序：create 在前、trash_item 在后（先建成再软删，设计 §4.2）", async () => {
+    await db.items.clear();
+    await db.bodies.clear();
+    await db.drafts.clear();
+    await db.outbox.clear();
+
+    await restoreLocalItem(
+      { id: "01BBB", type: "note", title: null, folder_id: null, body: "正文", deletedAt: 500 },
+      1_000,
+    );
+    const outbox = await listOutbox();
+    expect(outbox).toHaveLength(2);
+    expect(outbox.map((row) => row.op)).toEqual(["create", "trash_item"]);
+    // 两条都指向同一条目，且 seq 顺序就是执行顺序（FIFO）
+    expect(outbox.map((row) => row.entity_id)).toEqual(["01BBB", "01BBB"]);
+  });
 });
 
 describe("备份校验：坏包一律拒收", () => {

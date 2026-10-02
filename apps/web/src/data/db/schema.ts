@@ -49,6 +49,11 @@ export type OutboxOp =
   | "create"
   | "save_body"
   | "patch_meta"
+  /**
+   * 备份恢复专用（M5，设计 §4.2）：回收站条目要先 `create` 推上去，再补一次服务端软删
+   * 才算真正回到回收站。只在备份导入时入队，排在同条目的 `create` 之后（FIFO 保序）。
+   */
+  | "trash_item"
   | "create_folder"
   | "patch_folder"
   /** 用户设置整份覆盖（M2-7） */

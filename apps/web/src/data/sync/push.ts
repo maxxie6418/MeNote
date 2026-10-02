@@ -24,11 +24,12 @@ import {
   type ItemMetaPatch,
   type ItemMetaWriteResponse,
   type ItemWriteMeta,
+  type TrashItemResponse,
   type UserSettingsPayload,
   type UserSettingsWrite,
 } from "@menote/shared";
 import { ApiError } from "../api/client";
-import { foldersApi, itemsApi, settingsApi } from "../api/endpoints";
+import { foldersApi, itemsApi, settingsApi, trashApi } from "../api/endpoints";
 import {
   clearDraft,
   createLocalItem,
@@ -64,6 +65,8 @@ export interface PushApi {
     body: string,
   ): Promise<ItemBodyWriteResponse>;
   patchMeta(id: string, patch: ItemMetaPatch): Promise<ItemMetaWriteResponse>;
+  /** 服务端软删（移入回收站）。目前只由备份恢复的 `trash_item` 出队触发（M5 设计 §4.2） */
+  trashItem(id: string): Promise<TrashItemResponse>;
   createFolder(input: FolderCreate): Promise<FolderWriteResponse>;
   patchFolder(id: string, patch: FolderPatch): Promise<FolderWriteResponse>;
   /** 用户设置：整份覆盖（M2-7） */
@@ -79,6 +82,7 @@ const httpPushApi: PushApi = {
   createItem: itemsApi.create,
   saveBody: itemsApi.saveBody,
   patchMeta: itemsApi.patchMeta,
+  trashItem: trashApi.deleteItem,
   createFolder: foldersApi.create,
   patchFolder: foldersApi.patch,
   putSettings: settingsApi.put,
@@ -227,6 +231,28 @@ async function pushMetaPatch(row: OutboxRow, ctx: ResolvedContext, seq: number):
   return "done";
 }
 
+/**
+ * 备份恢复的收尾（M5 设计 §4.2）：回收站条目先 `create` 推上去（服务端只会建成正常条目），
+ * 这一步再补一次服务端软删，才算真正回到回收站。
+ *
+ * 本地行在导入时就已写成回收站态，所以这里**以本地为准**：到出队时本地已不是回收站态
+ * （用户等不及先恢复了）或条目已不在，就什么都不调直接出队——不把过时的意图推给服务端。
+ */
+async function pushTrashItem(row: OutboxRow, ctx: ResolvedContext, seq: number): Promise<PushOutcome> {
+  const item = await getLocalItem(row.entity_id);
+  if (!item || item.deleted_at === null) {
+    await removeOutbox(seq);
+    return "done";
+  }
+
+  const result = await ctx.api.trashItem(item.id);
+  // 服务端软删会推进条目的 meta_rev，记回来：之后这条即便再被恢复/改元数据，
+  // 本地的 base_meta_rev 也不会故意落后一截
+  await markItemSynced(item.id, { meta_rev: result.meta_rev });
+  await removeOutbox(seq);
+  return "done";
+}
+
 async function pushCreateFolder(row: OutboxRow, ctx: ResolvedContext, seq: number): Promise<PushOutcome> {
   const folder = await getLocalFolder(row.entity_id);
   if (!folder) {
@@ -367,6 +393,8 @@ async function pushOne(row: OutboxRow, ctx: ResolvedContext): Promise<PushOutcom
         return await pushBodySave(row, ctx, seq);
       case "patch_meta":
         return await pushMetaPatch(row, ctx, seq);
+      case "trash_item":
+        return await pushTrashItem(row, ctx, seq);
       case "create_folder":
         return await pushCreateFolder(row, ctx, seq);
       case "patch_folder":

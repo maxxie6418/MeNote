@@ -51,11 +51,12 @@ export interface ImportSummary {
   foldersRestored: number;
   itemsRestored: number;
   /**
-   * 备份里**原本在回收站**、本次被还原成正常条目的数量。
+   * 备份里**原本在回收站**的条目数量。
    *
-   * 本地行按备份写成了回收站态，但服务端那边的软删要等这条先推上去才能做
-   * （`POST /api/trash/items/:id/restore` 是服务端操作，不在 outbox 里），
-   * 所以首期它们会以正常条目出现。这个数必须**报出来**，不能默默变。
+   * 这些条目本地行写成回收站态，且随 outbox 排了「`create` → `trash_item`」两步：
+   * 服务端先建成条目、紧跟的 `trash_item` 出队再补一次软删，两端最终都在回收站
+   * （设计 §4.2）。推送失败时它们会在服务端暂时以正常条目出现——这个数报出来，
+   * 便于对照「上传失败」列表核对，不默默变。
    */
   itemsFromTrash: number;
   attachmentsRestored: number;
@@ -204,7 +205,7 @@ export async function importBackup(
       Date.now(),
     );
     summary.itemsRestored += 1;
-    // 回收站状态本地写进去了，但服务端那边还得再软删一次才真正回到回收站（见下面）
+    // 回收站条目：本地已写成回收站态，服务端软删由紧跟 create 的 trash_item 出队补做（§4.2）
     if (entry.deleted_at !== null) summary.itemsFromTrash += 1;
     onProgress({ phase: "items", done: index + 1, total: manifest.items.length });
   }

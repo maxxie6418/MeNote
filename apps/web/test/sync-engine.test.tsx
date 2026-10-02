@@ -40,6 +40,7 @@ function emptyPushApi(): PushApi {
     createItem: vi.fn(),
     saveBody: vi.fn(),
     patchMeta: vi.fn(),
+    trashItem: vi.fn(),
     createFolder: vi.fn(),
     patchFolder: vi.fn(),
     putSettings: vi.fn(),

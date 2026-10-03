@@ -61,7 +61,9 @@
 | `apps/worker/src/services/mcp/scope.ts` | 可见性不变式 I1、范围 SQL 片段、目标文件夹是否在范围内 | 120 |
 | `apps/worker/src/services/mcp/jsonrpc.ts` | JSON-RPC 分发、错误码、批量与通知 | 140 |
 | `apps/worker/src/services/mcp/registry.ts` | 11 个工具的注册表：名称 / 描述 / JSON Schema 静态常量 / 权限位 | 260 |
-| `apps/worker/src/services/mcp/tools-read.ts` | `search` / `list_folders` / `list_items` / `read_item` / `list_versions` | 300 |
+| `apps/worker/src/services/mcp/tools-read.ts` | `search` / `list_folders` / `list_items` / `list_versions` | 250 |
+| `apps/worker/src/services/mcp/tools-read-item.ts` | **批 2 补**：只放 `read_item`（区间 / 小节 / 游标 / 版本四种模式，拆出来是为了不把 `tools-read.ts` 顶过 300 行） | 190 |
+| `apps/worker/src/services/mcp/parts.ts` | **批 2 补**：游标编解码、字符切片、参数夹取、条目元数据映射、`McpToolError`——批 3 的写类工具也要用，共用零件单独一份 | 200 |
 | `apps/worker/src/services/mcp/tools-write.ts` | `create_item` / `append_to_item` / `edit_item` / `edit_table_rows` / `organize_item` / `trash_item` | 400 |
 | `apps/worker/src/services/mcp/audit.ts` | 审计写入与查询、幂等记录的读 / 写 / 删 | 120 |
 | `apps/worker/src/routes/mcp.ts` | `POST /mcp`、`POST /mcp/k/:token`、`GET /mcp` | 90 |
@@ -161,6 +163,8 @@
 
 用条件自增而不是「读出来算好再写回去」，是为了并发下不多放行。**已知余量**：两个请求在同一毫秒跨窗口时，第二个可能把计数从 1 覆盖成 1，理论上同一窗口最多多放行 1 次。可接受——这是个人用量下的限速，不是安全边界（真正的边界是令牌哈希 + 权限位 + 范围）。
 
+**【批 2 落地补记】`last_used_at` 的 10 分钟节流刻意不做**（定稿 §17.3 有这一条）。选了 D1 计数之后，每次调用**本来就要写令牌这一行**，`last_used_at` 顺带刷新并不额外花什么，反而比分两次写更省——那条节流到这里已经没有可省之物。在热路径上留一个"每 10 分钟才准写"的判断只会让人以为它不生效。**结果是 `last_used_at` 比定稿更准，不是更松。**
+
 **每日维护**：`rate_window_start` / `rate_call_count` 不需要清理（列在令牌行上，令牌撤销后自然不再更新）。`audit_log` 90 天、`mcp_operations` 7 天，沿用现有每日维护的第 6 步（把 `mcp_idempotency` 改成 `mcp_operations`）。
 
 ---
@@ -216,9 +220,14 @@ AND i.folder_id IN (SELECT id FROM folders
 | `/mcp/k/:token` | POST | 同上 |
 | `/mcp` | GET | 直接 405（无 SSE，设计 §17.1） |
 
-**刻意不挂**：`csrfGuard`（MCP 不用 Cookie 鉴权，没有 CSRF 面）、`requireSession`（令牌鉴权走 §3）、`configGuard`（**不需要 `AUTH_PEPPER`**：令牌是高熵随机串，SHA-256 足够，设计 §17.3 明说「无需慢哈希」）。
+**刻意不挂**：`csrfGuard`（MCP 不用 Cookie 鉴权，没有 CSRF 面）、`requireSession`（令牌鉴权走 §3）、`configGuard`（**不需要 `AUTH_PEPPER`**：令牌是高熵随机串，SHA-256 足够，设计 §17.3 明说「无需慢哈希」）。这让 `/mcp` 成为本项目**唯一一个不受"缺机密就 503"约束**的服务端路径——是有意的，不是遗漏。
 
 `/mcp*` 不在 `app.use("/api/*")` 的覆盖范围内，中间件在 `routes/mcp.ts` 内部挂——入口文件保持只装配。
+
+**【批 2 落地补记】两处容易踩的部署与挂载细节**：
+
+1. **`wrangler.jsonc` 的 `assets.run_worker_first` 必须加上 `/mcp` 与 `/mcp/*`**。否则 Static Assets 的 SPA 回退会把 POST 吃掉，客户端拿到的是一份 HTML——**失败方式极隐蔽**（HTTP 200 + HTML），排查时极易误判成鉴权或协议问题。
+2. **子应用内部路径是相对的**。`app.route("/mcp", mcp)` 之下再写 `/mcp` 就是 `/mcp/mcp`；正确写法是 `/` 与 `/k/:token`。
 
 ### 5.2 JSON-RPC
 

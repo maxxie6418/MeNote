@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.1 |
-| 文档状态 | 执行中（**批 1 已落地**，v0.6.23） |
+| 文档版本 | v1.2 |
+| 文档状态 | 执行中（**批 1、批 2 已落地**，v0.6.23 / v0.6.24） |
 | 目的和适用范围 | 拆步、涉及文件与验收点。设计口径以那份专项设计为准，本文件只管怎么落地 |
 | 权威级别 | 临时规则（M6 第三块的执行清单） |
 | 最后更新日期 | 2026-10-03 |
@@ -14,6 +14,7 @@
 |---|---|---|---|---|
 | v1 | v0.6.22 | 2026-10-03 | 初稿。依据《M6 MCP 设计》v1 拆步，切 4 批 | MiniMax-M3.1-Flash-Preview |
 | v1.1 | v0.6.23 | 2026-10-03 | 回填进度：**批 1（步 1.1–1.9）已落地**，用例 +15。记三处实施中才浮现的事实：①**又抓到一个同类死代码**——`maintenance.ts` 里 `audit_log` 那段清理也是从未执行过的（表没建），而它**把时间列 `at` 写成了 `created_at`**，建表之后第一次真跑就抛 `no such column`；原先只诊断出 `mcp_idempotency` 表名那处，**这一处更严重**（每日维护会天天崩），是被新写的用例当场抓住的（步 1.8 因此新增一条"两段清理都真会执行"的用例，造过期行并断言真的被删）。②令牌服务按设计 §2.1 的落点表**拆成 `tokens.ts`（管理侧）与 `auth.ts`（调用侧，批 2）**——原稿把"生成/鉴权/限速/建/列/撤销/审计分页"都塞进一个 180 行的文件，实际落地装不下，拆开也对得上 `services/shares.ts`（管理侧）与 `services/share-public.ts`（访客侧）那条既有分法。③测试用的第二个账号名不能用中文：用户名 schema 只允许 `[A-Za-z0-9_.-]`，写「家人」注册直接被拒（首轮用例 14 条里 2 条因此挂掉） | MiniMax-M3.1-Flash-Preview |
+| v1.2 | v0.6.24 | 2026-10-03 | 回填进度：**批 2（步 2.1–2.9）已落地**，用例 +23（worker 261→284）另加 mdcore 14 条（65→79）。记四处实施中才浮现的事实：①**`/mcp` 端点必须加进 `wrangler.jsonc` 的 `run_worker_first`**，否则 Static Assets 的 SPA 回退会把 POST 吃掉、客户端拿到一份 HTML——失败方式极隐蔽（HTTP 200 + HTML），排查时容易误判成鉴权或协议问题。②**子应用内部路径是相对的**：`app.route("/mcp", mcp)` 之下再写 `/mcp` 就是 `/mcp/mcp`，首轮 23 条用例全 404 才发现。③**`replaceSection` 原本会吃掉节间空行**（`end` 是下一标题的行首，节尾空行归本节），替换后正文与下一个标题粘成 `new## 乙`——静默的正文损坏，被 mdcore 单测当场抓出；已改成把 `end` 往前收过尾随换行。④`scanHeadings` 原先不剥 CRLF 的 `\r`，正则认不出标题，**CRLF 文档的小节读取会静默失效**。另有两处**偏离定稿的自觉决定**：`last_used_at` 的「最多每 10 分钟写一次」节流**刻意不做**（选了 D1 计数后每次调用本来就要写令牌行，顺带刷新并不额外花钱，那条节流已无可省之物，删掉比留个不生效的判断更清楚）；**MCP 端点不挂 `configGuard`**，因为令牌是高熵随机串、SHA-256 足够，不需要 `AUTH_PEPPER` | MiniMax-M3.1-Flash-Preview |
 
 ---
 
@@ -69,24 +70,31 @@
 
 | 步 | 做什么 | 涉及文件 |
 |---|---|---|
-| 2.1 | 鉴权与处理顺序：取令牌 → 撤销 → 过期 → 限速 → 权限位 → 范围 → 执行 → 审计位。限速按设计 §3.5 的条件自增 + 最多 1 次重试 | `apps/worker/src/services/mcp/tokens.ts` |
+| 2.1 | 鉴权与处理顺序：取令牌 → 撤销 → 过期 → 限速 → 权限位 → 范围 → 执行。限速按设计 §3.5 的条件自增 + 最多 1 次重试 | `apps/worker/src/services/mcp/auth.ts`（新建） |
 | 2.2 | 范围过滤：I1 四个条件的 SQL 片段、`PRIVACY_EXCLUDE_SQL` 引用（**不重写**）、文件夹两层的 `json_each` 子查询、`include_memos = 0` 排除 Memo | `apps/worker/src/services/mcp/scope.ts`（新建） |
 | 2.3 | JSON-RPC 分发：`initialize` / `notifications/initialized`（**202 空体**）/ `ping` / `tools/list` / `tools/call`；业务失败走 `isError: true`，协议错误走 `-32601 / -32602 / -32603 / -32001 / -32029`；限速另带 HTTP 429 | `apps/worker/src/services/mcp/jsonrpc.ts`（新建） |
-| 2.4 | 工具注册表：11 个 name / description / inputSchema（**静态常量**）/ 权限位；只列本批已实现的 5 个只读工具，写类的先不在 `tools/list` 里出现 | `apps/worker/src/services/mcp/registry.ts`（新建） |
+| 2.4 | 工具注册表：name / description / inputSchema（**静态常量**）/ 权限位；只列本批已实现的 5 个只读工具，写类的先不在 `tools/list` 里出现 | `apps/worker/src/services/mcp/registry.ts`（新建） |
 | 2.5 | Markdown 小节切分（纯函数，含同名歧义标记、front matter 偏移换算、CRLF） | `packages/mdcore/src/section.ts` + `test/section.test.ts`（新建） |
-| 2.6 | `search`：`buildSearchSql` 加两个可选参数（片段长度与前导量），MCP 传 200 / 80，界面兜底路径维持 120 / 40；加 `(updated_at, id)` 游标 | `apps/worker/src/services/search.ts`（+3 行）、`services/mcp/tools-read.ts`（新建） |
-| 2.7 | `list_folders` / `list_items` / `read_item` / `list_versions`：含**排除加密空间节点**、计数不含隐私内容、游标为字符偏移 | `apps/worker/src/services/mcp/tools-read.ts` |
-| 2.8 | 端点：`POST /mcp`、`POST /mcp/k/:token`（受 `allow_url` 约束）、`GET /mcp` = 405；挂 `securityHeaders` + `schemaGuard`，**不挂** `csrfGuard` / `requireSession` / `configGuard` | `apps/worker/src/routes/mcp.ts`（新建）、`index.ts` |
-| 2.9 | 用例（走真实端点 + 真实令牌）：`initialize` / `tools/list` 出 5 个 / 只读 5 个各自跑通 / 写类工具被权限位拒 / 范围外读全 404（与不存在同形）/ 加密与空间不可见 / 回收站不可见 / `include_memos` 两种取值 / `allow_url` 关时 URL 方式 401 / `GET /mcp` 405 / 限速窗口重置 / 512 KB 以上禁小节读但区间读可用 | `apps/worker/test/mcp-read.test.ts`（新建） |
+| 2.6 | `search`：`buildSearchSql` 加 `extraConditions` / `extraParams` / `orderBy` / `snippet` 四个可选口子（MCP 叠可见性与游标，界面兜底路径原样不动）；片段 200 / 80 | `apps/worker/src/services/search.ts`、`services/mcp/tools-read.ts`（新建） |
+| 2.7 | `list_folders` / `list_items` / `read_item` / `list_versions`：含**排除加密空间节点**、计数不含隐私内容、游标为字符偏移 | `services/mcp/{tools-read,tools-read-item,parts}.ts`（新建） |
+| 2.8 | 端点：`POST /mcp`、`POST /mcp/k/:token`（受 `allow_url` 约束）、`GET /mcp` = 405；挂 `securityHeaders` + `schemaGuard`，**不挂** `csrfGuard` / `requireSession` / `configGuard`；**`wrangler.jsonc` 的 `run_worker_first` 要加 `/mcp` 与 `/mcp/*`** | `apps/worker/src/routes/mcp.ts`（新建）、`index.ts`、`wrangler.jsonc` |
+| 2.9 | 用例（走真实端点 + 真实令牌）：`initialize` / `tools/list` 出 5 个 / 只读 5 个各自跑通 / 写类工具报「没有这个工具」/ 范围外读与不存在**响应体逐字节相同** / 五类不可见 / `include_memos` 两种取值 / `allow_url` 关时 URL 方式 401 且勾过后两种传输一致 / `GET /mcp` 405 / 限速窗口重置 / 大条目禁小节读但区间读可用 | `apps/worker/test/mcp-read.test.ts`（新建） |
 
-**批 2 验收点**
+**批 2 验收点**（✅ 2026-10-03 全达成）
 
-- [ ] 真实令牌 `POST /mcp` 能完成 `initialize` → `tools/list` → `tools/call` 三步
-- [ ] 写类工具此时**被权限位拒绝**（不是 404 也不是 500）
-- [ ] 令牌范围外的条目 `read_item` 返回 404，且**与真的不存在返回完全相同的响应体**（不泄露存在性）
-- [ ] 单篇加密 / 加密空间内 / 回收站里的条目，一律读不到
-- [ ] `list_folders` 不含加密空间节点；计数与 `list_items` 实数一致
-- [ ] `mcp-read.test.ts` 里有一条**往返用例**：同一个令牌在请求头方式与 URL 方式下鉴权结果一致
+- [x] 真实令牌 `POST /mcp` 能完成 `initialize` → `tools/list` → `tools/call` 三步
+- [x] 写类工具此时报「没有这个工具」（-32601）——不是权限不足，因为那枚令牌确实没有这个能力
+- [x] 撤销 / 过期 / 令牌无效一律 401 且**三者的响应文案完全相同**（不区分原因＝防探测）
+- [x] URL 方式受 `allow_url` 约束；勾过之后与请求头方式的响应**逐字节相同**（往返用例）
+- [x] 限速按分钟窗口计数，超出 429 + `-32029`；把窗口推回过去即自动重置
+- [x] 令牌范围外的条目 `read_item` 返回的响应体与「真的不存在」**逐字节相同**
+- [x] 单篇加密 / 加密空间内 / 回收站 / 未勾 Memo —— 五类一律读不到
+- [x] `list_folders` 不含加密空间节点；文件夹计数与标签计数都只算可见条目
+- [x] 有界读取生效：正文 20000 字符封顶、每页 50 条封顶、超出给 `next_cursor`
+- [x] 小节读取：同名小节如实报 `ambiguous`；找不到小节回 `isError` + 中文原因
+- [x] 业务失败走 `isError: true`（空 query、找不到小节、不可见条目）而不是 JSON-RPC error
+- [x] 跨租户：别人的条目对令牌不可见（owner 也不例外）
+- [x] `pnpm test` 全绿：worker 261 → **284**（+23）、mdcore 65 → **79**（+14），web 1219 / shared 101 无回归；typecheck 4 包 0 error；lint 0 error + 1 条既有 warning
 
 ---
 

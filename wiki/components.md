@@ -5,8 +5,8 @@
 | 文档性质 | 前端组件规划：**组件名、所属 feature / 落点、职责、props 约定、复用关系**，以及与界面原型的对应。是架构文档 §2.3.2「功能 → 代码落点对照表」在**组件层**的展开 |
 | 基准 | 需求文档 `wiki/Menote-设计文档-v7.4.md`（下称“需求文档”）；功能点编号与验收看 `wiki/Menote-功能拆解-v2.md`（下称“功能拆解”）；落点、分层与依赖方向看 `wiki/Menote-项目架构-v1.md`（下称“架构”）§2.3、§3.1；视觉与令牌看根目录 `DESIGN.md`（下称“视觉源”） |
 | 主要来源 | 界面原型 `prototype/menote-prototype.html`（高保真）与 `prototype/menote-framework.html`（线框评审页）。引用原型**只写元素名或选择器**（如 `#topAccount`、`.composer`、`.nav-seg`），不写行号——行号随原型改动会失效 |
-| 版本 | v8（文件名 `components.md` 不变，版本在修订记录内演进） |
-| 日期 | 2026-09-29（v7）/ **2026-10-02（v8 笔记本添加菜单加导入笔记、新建表格接线）** |
+| 版本 | v9（文件名 `components.md` 不变，版本在修订记录内演进） |
+| 日期 | 2026-09-29（v7）/ **2026-10-02（v8 笔记本添加菜单加导入笔记、新建表格接线）** / **2026-10-03（v9 M5 分享收口回写）** |
 | 状态 | 首稿。**代码尚未初始化**：组件名与 props 均为**约定名**，实现时如无充分理由不要改名；若实现中发现更合适的拆法，先回报本文再改 |
 | 不包含 | 颜色 / 字号 / 间距 / 圆角 / 阴影的具体数值（归 `DESIGN.md`，本文只写“走令牌”，不复制令牌值）；接口、表结构、同步算法（归架构文档）；功能规则与验收口径（归需求文档与功能拆解） |
 
@@ -32,6 +32,7 @@
 | v6 | 2026-09-29 | 「添加」按钮改弹窗回写【已定·用户确认 2026-09-29】：①新增 **6.8 `AddEntryDialog` · 添加内容窗口**（一个 `Modal` 结构两种 `kind`、字段复用 `Composer` 的 `ModeExtras`/`TASK_ITEM_PATTERN`、发布回调复用 `fnbarWiring`、关窗先清空再 `onClose`）；②组件地图 FnBar 子树补 `AddEntryDialog`（文件在 `app/fnbar/`，由 App 经 `AddEntrySlot` 挂浮层位，**不在 FnBar 内渲染**）；③6.2 `Composer` 的「复用」行改为——「添加」**不再切 `mode`、不再聚焦**，改开 `AddEntryDialog`（`Composer` 仍须导出 `ModeExtras`/`TASK_ITEM_PATTERN` 作共享件；`mode` 仍由首页「记录 Memo / 新建待办」快捷操作外部驱动）。（应用版本 v0.5.26；修改模型ID：mimo-v2.6-flash） |
 | v7 | 2026-09-29 | 编辑拓展专项（阶段 A–C = v0.6.0 / v0.6.1 / v0.6.2）回写 **`Editor` 与 `DocModeSwitch` 的档位契约**【已定·用户确认 2026-09-29】：①7.2 的 `DocModeSwitch` 改为**只列设置里开着的档**、三档为 `仅编辑` / `仅预览` / `即时渲染`（顺序 `edit → preview → live`），**`分屏` 已从产品移除**（阶段 A / v0.6.0）；②`Editor` 行写明契约——档位不是 `Editor` 的 prop，`live?` 即"即时渲染"开关（与「仅编辑」共用同一个编辑器实例，走 `Compartment` 重配置、**不重建文档**），`readOnly?` 是**内部能力**（仅预览 / 锁定态复用）、**不是用户可见档位**，阅读态由「仅预览」承担；③7.2 不变量补「表格在即时渲染与编辑下都保持源码」。`DESIGN.md`（v1.11）、`wiki/Menote-设计文档-v7.4.md`（内部 v7.5.5）、`wiki/Menote-功能拆解-v2.md`（v2.11）同批回写。（应用版本 v0.6.2；修改模型ID：deepseek-v4.1-flash） |
 | v8 | 2026-10-02 | 笔记本「添加」菜单加「导入笔记」【已定·用户确认 2026-10-02】：①`NbAddButton` 菜单由两项增至三项（**新建文件夹 / 新建表格 / 导入笔记**），触发器无障碍名同步列出三项；②**新建表格自此可用**——M4 交付了表格编辑器与 `TableColumnManager` 的 `mode="create"`，但该模式**一直没有任何调用方**、菜单项还挂着"M5 提供"的过期理由，v0.6.16 接线（先定列结构再建条目）；③新增 **`ImportNotesFlow`**（落 `features/notes/ui/`）：隐藏的文件选择器（可多选 `.md`）+ **多选时的一次确认**（报"几个文件 → 哪个笔记本"）+ 失败清单弹窗（`DESIGN.md` §5.4-2：错误必须保持可见，不用会自动消失的 Toast 承载）；④新增 `import-md.ts`（纯逻辑：文件名→标题、剥 UTF-8 BOM、按正文派生 `type` / 标签 / 待办字段）与 `emptyTableDoc()`（`features/tables/model.ts`）。（应用版本 v0.6.16；修改模型ID：MiniMax-M3.1-Flash-Preview） |
+| v9 | 2026-10-03 | **M5 分享收口回写**【已定·用户确认 2026-10-03】：新增**第十六章「M5 落地后的组件与收敛记录」**——①M5 实际新增三个组件（`ShareDialog` / `MySharesPage` / `ShareViewerApp`）的落点与关键约定，含**查看器由 `main.tsx` 按 `/s/<sid>` 动态 import、不是独立 html 入口**（原定 `share.html` 因 `@cloudflare/vite-plugin` v1.60 报 `UNRESOLVED_ENTRY` 未采用）；②查看器与既有组件的**渲染契约**（复用 `MarkdownPreview`、DOMPurify 的 `allowBlobUris` 只放行本会话取回的 object URL、只读表格直接复用 `TableGrid` / `GalleryView` 不另写一套）；③**订正 §十五.3 第 6 条**——`InfoHint` 已实做于 `app/ui/InfoHint.tsx`（原记「未做、说明文字用可见 `hint-line`」是过期事实）；④**修两处断链**：6.8 `AddEntryDialog` 的「原型 / 需求」两行原指向已归档的 `…-设计-v1.md`，改指 `…-v2.md`；⑤登记 M5 三项已知未实现（Memo 合集 UI、访客侧筛选排序、移动端观感）。（应用版本 v0.6.17；修改模型ID：MiniMax-M3.1-Flash-Preview） |
 
 ---
 
@@ -311,7 +312,7 @@ AppShell                                    app/
 ### 6.8 `AddEntryDialog` · 添加内容窗口
 | 项 | 内容 |
 |---|---|
-| 原型 | 无（**新增**；设计见 `docs/modules/Menote-添加内容窗口-设计-v1.md`） |
+| 原型 | 无（**新增**；设计见 `docs/modules/Menote-添加内容窗口-设计-v2.md`） |
 | 落点 | `app/fnbar/AddEntryDialog.tsx`；装配在 `app/AddEntrySlot.tsx`（`useAddEntrySlot`），由 **App 挂在浮层位**渲染（**不在 FnBar 内**） |
 | 职责 | Memo / 待办视图「添加」的落点：**单独弹窗**录一条 Memo 或待办，点「发布」→ 调发布回调 → 关窗 → toast + 列表立刻刷新（**给明确反馈**）。**不再跳回左侧录入框**【2026-09-29 用户要求】 |
 | 形态 | 一个 `Modal` 结构、两种 `kind`（`memo` / `task`）——「不同类型复用一个窗口结构，但显示的设置不同」（用户 2026-09-29） |
@@ -319,7 +320,7 @@ AppShell                                    app/
 | props | `open`、`kind`、`onClose`、`onPublishMemo`、`onPublishTask` |
 | 发布回调 | 复用 `fnbarWiring` 的 `onPublishMemo` / `onPublishTask`（与录入框**同一口径**）；`publishMemo` 会 `await refresh()`，故关窗后新条目**立刻出现在当前列表** |
 | 关闭 | 点「发布 / 取消 / Esc / 点遮罩」都走组件内 `close()`——**先清空字段、再 `onClose()`**（清空在事件处理器里做，不在 effect 里 `setState`），保证下次打开是干净输入区 |
-| 需求 | M06-10、M07-01（入口二）；设计 `docs/modules/Menote-添加内容窗口-设计-v1.md` |
+| 需求 | M06-10、M07-01（入口二）；设计 `docs/modules/Menote-添加内容窗口-设计-v2.md` |
 
 ---
 
@@ -733,7 +734,39 @@ AppShell                                    app/
 3. ~~**自动降级提示条**~~ → **已实做**（v0.4.26，`TableDegradeNotice`：危险态横幅 + 「查看原文」+「下载当前内容」，**不静默改数据**）；**主动降级**仍缺（要改 `items.type`，属接口变更，待拍板）。
 4. **版本列表页脚的"已保留 N 个"**：保留标记在行上可见（`Chip` "保留"），未做页脚汇总。
 5. **附件引用的集合对齐**：引用只在 `finalize(itemId)` 时落一条；"保存正文时对齐引用集合"要改 `PUT /api/items/:id/body` 的请求结构，留 M6 与附件管理页一起做（期间由孤儿 30 天规则兜底）。
-6. **`Drawer` 与 `InfoHint`**：图册卡片详情与版本历史用 `Modal` / 独立面板页替代；说明文字用可见 `hint-line`。
+6. **~~`Drawer` 与 `InfoHint`~~** → **部分收敛（v1.16 / components v9 订正，2026-10-03）**：`Drawer` **仍未做**（图册卡片详情与版本历史用 `Modal` / 独立面板页替代）；但 **`InfoHint` 已实做**——落 `app/ui/InfoHint.tsx`（ⓘ + 悬停），12+ 处调用，含 M5 的 `ShareDialog` / `MySharesPage` / `InstancePage`。本条原写「说明文字用可见 `hint-line`」是**过期事实**，详见 §十六-3。
 7. **文件夹的永久删除**（v0.4.28 发现）：回收站已能列出并恢复文件夹，但服务端的永久删除只认条目（`permanentDeleteItems` 的 SQL 只扫 `items`）——界面已把该按钮置灰并写明原因，扩服务端属行为变更、待拍板。
 
 > 第 4–7 条均为**实现侧待办**，做完后回写本节。第 5、7 条牵扯接口结构，**需用户点头**后才动。
+
+---
+
+## 十六、M5 落地后的组件与收敛记录【M5 收口回写】
+
+### 16.1 M5 实际新增的组件（实现名 + 落点 + 职责）
+
+| 组件 | 落点 | 职责与关键约定 |
+|---|---|---|
+| `ShareDialog` | `features/shares/ui/ShareDialog.tsx` | 笔记「更多 › 分享」打开的**创建**弹窗。只做创建 / 复制 / 撤销——**改密与改期在设置页**（刻意不维护两套编辑面）。密码可选，留空即「无需密码」；有效期五档取 `model.ts` 的 `SHARE_EXPIRY_CHOICES`，**默认 7 天**。**单篇加密 / 加密空间内条目置灰并说明原因**（服务端 `POST /api/shares` 另有同语句硬校验，双保险），锁定态同样禁用。链接**就地产出**，不靠服务端换链接；`.sharelink` 样式保证长链接断行 |
+| `MySharesPage` | `features/shares/ui/MySharesPage.tsx` | 「设置 › 分享」页：复制链接 / 改密码 / 改有效期 / 撤销。撤销**就地二次确认并写明后果**（破坏性动作必须可见，`DESIGN.md` §5.1-2） |
+| `ShareViewerApp` | `features/share-viewer/ui/ShareViewerApp.tsx`（特性根 `main.tsx`） | 访客只读查看器。**四态**：加载 / 链接已失效 / 密码解锁 / 只读内容；**无密码也走 unlock** 换 1 小时无状态令牌。**由 `apps/web/src/main.tsx` 按 `/s/<sid>` 动态 `import()`——不是独立 html 入口**（原定 `share.html` 因 `@cloudflare/vite-plugin` v1.60 对第二个 html input 报 `UNRESOLVED_ENTRY` 未采用，改走 Static Assets 的 SPA 回退） |
+| 无新组件 | 复用 `features/tables/ui/TableGrid`、`GalleryView` | 查看器的只读表格与图册**直接复用既有组件**，不另写一套；**不提供筛选排序控件**（Q18 建议案） |
+
+### 16.2 查看器与既有组件的渲染契约
+
+- 正文复用 `MarkdownPreview`（markdown-it + DOMPurify），**渲染契约与主应用一致**，不为查看器另起一套。
+- DOMPurify 增加**查看器专用** `allowBlobUris` 开关：只放行**本会话刚取回的 object URL**（附件经 `X-Menote-Share` 头取回字节后本地 `URL.createObjectURL` 改写引用），不放行任意外链 blob；组件卸载时 `revoke`。
+- `<img src>` 无法带自定义令牌头，故**逐个**取附件字节再改写引用；**单个附件失败不阻断整篇正文**。
+- 表格条目按 `mdcore.parseTableDocument` 解析后走只读网格；「表格 / 图册」切换仅在**有图片引用**时出现。
+
+### 16.3 收敛与订正
+
+1. **§十五.3 第 6 条关于 `InfoHint`「未做」的记录作废**——该组件已实落于 `app/ui/InfoHint.tsx`（ⓘ + 悬停，12+ 处调用）。本轮随 M5 分享一并发现并订正。`Drawer` 仍未做。
+2. `ShareDialog` 与 `MySharesPage` **共用 `features/shares/model.ts`**：密码派生走 PBKDF2（与认证同一思路，明文密码不出浏览器）；链接拼装**优先实例配置的分享子域，未配置退回当前站点 origin**（同域 `/s/<id>` 同样可用）。
+3. **两处断链修复**：6.8 `AddEntryDialog` 的「原型 / 需求」两行原指向 `docs/modules/Menote-添加内容窗口-设计-v1.md`（该文件已归档），改指 `…-v2.md`。
+
+### 16.4 已知未实现（M5，登记在案）
+
+1. **Memo 固定合集**（功能拆解 M14-02）：`share_items` 表已随迁移 0005 建好，**UI 不接**，等后续细则。
+2. **访客侧筛选 / 排序**：刻意不做（Q18 建议案）。
+3. **移动端查看器观感**：`DESIGN.md` §2.4 窄屏布局尚未定稿，不据此写码。

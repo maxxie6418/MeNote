@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1.15（**2026-09-29 编辑器档位口径回写**：产品为**三档**（仅编辑 / 仅预览 / 即时渲染），`双栏`（`split`）已从产品移除；§1.6 图节点与 §3.3 同步；用户确认。v1.14 的实例机密收敛维持不变） |
-| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 隐私锁回写、v1.13 M4 回写）** / **2026-09-28（v1.14 单一实例机密）** / **2026-09-29（v1.15 编辑器档位三档）** |
+| 文档版本 | v1.16（**2026-10-03 M5 分享收口回写**：§十 按实际落地补全——**入口偏离订正**（不再有 `share.html` 第二入口，改为 `main.tsx` 按 `/s/<sid>` 动态分流）、访问令牌走 `X-Menote-Share` 头、**独立子域**且与主应用同 Worker、会话 host-only 隔离、附件按正文引用白名单、首期只做单条分享（Memo 合集后置）；§2.1 Static Assets 规则、§2.3 目录树、§2.3.1 入口预算表、§2.3.2 落点表同步。**顺带订正 M5 备份的落点错误**：`packages/crypto-format` 该包不建，格式契约在 `packages/shared/src/backup.ts`。用户 2026-10-03 授权。v1.15 编辑器三档、v1.14 单一实例机密维持不变） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 隐私锁回写、v1.13 M4 回写）** / **2026-09-28（v1.14 单一实例机密）** / **2026-09-29（v1.15 编辑器档位三档）** / **2026-10-03（v1.16 M5 分享收口回写）** |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
@@ -28,6 +28,7 @@
 | v1.13 | 2026-09-27 | M4 设计 §九 回写【已定·用户确认 2026-09-27（授权两点之一）】：①**§5.1** 技术补充的 DDL **不再逐条重述**，权威落点改指《Menote-M4-设计-v1》§六（迁移 `0004_content_integrity`），六表清单写明并**新增 `pending_uploads`**（上传意图登记从 `r2_gc_queue` 的 `reason='pending_upload'` 拆出独立表：待删对象与待确认上传的生命周期不同）；②**§5.2** 缩略图键 `a/{uid}/{sha256}.t` **去掉【待核实】、标为定稿**，并写明原图与缩略图共用同一个 `sha256`、用 `kind` 区分；③**§八 + §2.3.2 + §2.3 目录树 + §3 分层图**：**删除 `workers/media.worker.ts` 落点**（缩略图改浏览器端生成，理由同 M2 砍 `search.worker.ts`），时序图参与者改为编辑器（浏览器）并改为"两段上传"（`check` → `blob` → `finalize`），写明**引用只在 `finalize` 时上报**、`X-Menote-Refs` **未实现**、集合对齐语句留 M6；④**§12.1 / §12.2 / §12.3**：补**游标键名**（`job:gc:cursor` / `job:maintenance:day` / `job:maintenance:step` / `job:sweep:item`）与"**不加锁、容忍重复**"的结论及理由，任务配额按实测定值（快照与备份标为接口位），补版本稀疏化的密度分档与回收站保留期接用户设置，§12.3 补"一次逻辑写共享一个 `sync_seq`"与"快照文件属 M5/M6、M4 只留接口位"。（应用版本 v0.4.25（M4 收口期间的写回；里程碑版本为 v0.5.0）；修改模型ID：deepseek-v4.1-flash） |
 | v1.14 | 2026-09-28 | **实例机密由两个收敛为一个**【已定·用户确认 2026-09-28】：删除 `BACKUP_CRED_KEY`，**唯一根机密是 `AUTH_PEPPER`**；备份包裹键（`k_wrapped_backup`）改为从它**域分离派生**——`SHA-256(AUTH_PEPPER 字节 ‖ 用途后缀)`，后缀常量 `menote-backup-wrap-v1`，常量与 `backupWrapKeyInput()` 定义在 `packages/shared/src/crypto.ts`（唯一定义处），worker 在 `services/crypto.ts` 做一次摘要与导入。**为什么加后缀**：同一根机密还要供登录校验（`HMAC(AUTH_PEPPER, …)`）与将来的分享令牌签名，加用途后缀才能保证各用途的钥匙**互不可推**——这不是"把同一个字节串当两把钥匙"。**失败模式变化**：不再有"缺 `BACKUP_CRED_KEY` 就 503"，缺根机密时统一在 `requirePepper` 处明确报错。**兼容性**：已用真实 `BACKUP_CRED_KEY` 启用过隐私锁的实例，其旧 `k_wrapped_backup` 解不开 → **只影响"忘记隐私密码 → 重置"**（登录 / 解锁 / 改密不受影响，改密时旧包裹原样带回），修复办法是在**解锁态重新包裹一次 K**。波及表述：§7.2 / §7.4 / §12.4 / §13.2 / §15.5。（应用版本 v0.5.14；修改模型ID：deepseek-v4.1-flash） |
 | v1.15 | 2026-09-29 | **编辑器档位口径回写**【已定·用户确认 2026-09-29】：产品只有**三档**——仅编辑（`edit`）/ 仅预览（`preview`）/ 即时渲染（`live`），显示顺序即 `edit → preview → live`；**「双栏」（`split`）已从产品移除**（阶段 A / v0.6.0），旧值只读兼容（`EditorModeSchema` / `EDITOR_MODES` 四值、`normalizeEditorModes()` 唯一归一化入口），UI 与新写入只产生三档。改 **§1.6 分层图**节点（"三种模式"→三档名单）与 **§3.3 编辑器**（删掉"双栏：CodeMirror + 预览面板按滚动位置同步"这一分支，改为三档如何共用同一个 `EditorState`：仅编辑 / 仅预览切换布局可见性、即时渲染走 `Compartment` 重配置并保留同一文档；并写明**没有「默认档」**，打开笔记用本机记住的「上次用的那一档」，阅读态由「仅预览」承担、`readOnly` 只是 `Editor` 内部能力）。与 `wiki/Menote-设计文档-v7.4.md`（内部 v7.5.5）、`wiki/Menote-功能拆解-v2.md`（v2.11）、`wiki/components.md`（v7）、`DESIGN.md`（v1.11）同批回写。（应用版本 v0.6.2；修改模型ID：deepseek-v4.1-flash） |
+| v1.16 | 2026-10-03 | **M5 分享收口回写**【已定·用户确认 2026-10-03】：①**§十 按已落地实现补全**（S1 服务端 v0.6.13 / S2 管理端 v0.6.14 / S3 查看器 v0.6.15）：**入口偏离订正**——原定独立入口页 `apps/web/share.html` **未采用**（`@cloudflare/vite-plugin` v1.60 接管客户端入口，第二个 html input 报 `UNRESOLVED_ENTRY`），改为经 Static Assets 的 SPA 回退由 `apps/web/src/main.tsx` 按 `pathname` 分流、两侧动态 `import()`（访客不拉编辑器与同步 chunk）；补**访问令牌放 `X-Menote-Share` 头不进 URL**（1 小时、无状态不写库）、**origin 决策**（独立子域、与主应用同一个 Worker、子域值存实例设置且**留空回退同域**）、**会话隔离零配置**（Cookie 无 `Domain` → host-only，子域上 `/api/*` 天然 401）、**公开附件按正文当前稿引用白名单**（不查 `attachment_refs`，集合对齐属 M6）、**首期只做单条分享**（M14-02 合集后置，`share_items` 建表不接 UI）、Q18 只读表格 + 有附件时图册切换。②**§2.1** Static Assets 规则补查看器的分流与动态 chunk 事实；**§2.3 目录树**删 `share.html`、`index.html` 标为唯一入口；**§2.3.1 入口预算表**把「`share.html` 对应的入口」改为 `features/share-viewer/main.tsx`（特性根，非独立入口，≤50）；**§2.3.2 落点表**分享行补 `services/share-public.ts` 与 shared 契约两处、备份行订正落点、分享管理端与查看器分行。③**顺带订正一处落点错误**：备份格式契约原写「编解码调 `packages/crypto-format`」，该包**经 M5 设计 §七定论不建**（契约属纯数据 schema），实际在 `packages/shared/src/backup.ts`——`AGENTS.md` 同一处描述同期订正。（应用版本 v0.6.17；修改模型ID：MiniMax-M3.1-Flash-Preview） |
 
 ### 标注约定
 
@@ -120,7 +121,7 @@ flowchart LR
     VIS --> PUB
 ```
 
-**Static Assets 路由规则**【架构定】：`not_found_handling = single-page-application`；只有 `/api/*`、`/mcp`、`/mcp/*` 先进入 Worker（`run_worker_first`），其余路径（含分享页 `/s/<分享ID>`）直接由静态资源返回，不消耗 Worker 请求数与 CPU。
+**Static Assets 路由规则**【架构定】：`not_found_handling = single-page-application`；只有 `/api/*`、`/mcp`、`/mcp/*` 先进入 Worker（`run_worker_first`），其余路径（含分享页 `/s/<分享ID>`）直接由静态资源返回，不消耗 Worker 请求数与 CPU。**【v1.16 落地补充】** 分享查看器因此经 SPA 回退拿到 `index.html`，由 `apps/web/src/main.tsx` 按 `pathname` 分流并**动态 `import()`**——访客只拉查看器 chunk，不拉编辑器与同步 chunk；**没有第二个 html 入口**（原因与取舍见 §十）。
 
 ### 2.2 技术栈
 
@@ -171,8 +172,7 @@ MeNote/
 ├── prototype/                      # 现有原型，保留
 ├── apps/
 │   ├── web/                        # PWA 客户端
-│   │   ├── index.html              # 主应用入口
-│   │   ├── share.html              # 分享查看器入口（同域独立页面，见 §10）
+│   │   ├── index.html              # **唯一** html 入口：主应用与分享查看器共用（分流见 §十）
 │   │   └── src/
 │   │       ├── main.tsx            # 装配：路由表 + Provider + SW 注册，不含业务（见 2.3.1）
 │   │       ├── app/                # 路由、布局、功能栏
@@ -208,7 +208,7 @@ Workers 项目没有也不需要 `server.mjs` 之类的常驻服务文件——*
 |---|---|---|
 | `apps/worker/src/index.ts` | 创建 Hono、`route()` 挂载子路由、`export default { fetch, scheduled }`、全局错误兜底 | ≤ 100 |
 | `apps/web/src/main.tsx` | 创建路由表、挂 Provider（主题/查询/同步）、注册 Service Worker | ≤ 100 |
-| `apps/web/share.html` 对应的分享查看器入口 | 挂载 share-viewer 特性根组件 | ≤ 50 |
+| `features/share-viewer/main.tsx` 分享查看器特性根 | 挂载 `ui/ShareViewerApp.tsx`。**不是独立 html 入口**——由 `apps/web/src/main.tsx` 按 `/s/<sid>` 动态 `import()`（见 §十） | ≤ 50 |
 | `src/workers/*.worker.ts` | `self.onmessage` 分发到处理器模块 | ≤ 50 |
 
 入口超预算或出现 `if (path === ...)`、SQL、状态计算，即视为结构违规（CI 检查，见 2.3.3）。
@@ -229,7 +229,7 @@ Worker 侧（`apps/worker/src/`）：
 | 增量同步（拉取 / 推送 / 墓碑；响应另带 `user_settings`，**不参与游标**） | `sync.ts` | `sync.ts` | — |
 | 版本历史 | `versions.ts` | `versions.ts` | — |
 | 附件上传 / 下载 / GC | `attachments.ts` | `attachments.ts` | adapters/r2.ts、jobs/gc.ts |
-| 分享（创建 / 公开访问 / 撤销） | `shares.ts`、`public.ts` | `shares.ts` | — |
+| 分享（创建 / 公开访问 / 撤销）【M5 落地】 | `shares.ts`（管理侧）、`public.ts`（访客侧） | `shares.ts`、`share-public.ts` | —（契约 `packages/shared/src/shares.ts`；附件引用解析 `packages/shared/src/attachments.ts`，两端共用一份） |
 | MCP | `mcp.ts` | `mcp.ts` | middleware/ 下令牌与限速 |
 | 设置与隐私标记（含 `GET/PUT /api/admin/registration`、`GET /api/admin/usage`；**用户级设置 `GET/PUT /api/settings`** 也归这里） | `settings.ts` | `settings.ts` | — |
 | Cron：快照 / 外部备份 / 维护 | —（无路由） | `jobs.ts` 调度 | jobs/snapshot.ts、jobs/backup.ts、jobs/maintenance.ts；adapters/webdav.ts、s3.ts、git.ts |
@@ -253,12 +253,13 @@ Web 侧（`apps/web/src/`，每个 feature 目录内 `ui/`（组件）+ `model.t
 | 表格（前端）【M4】 | `features/tables/`（`model.ts` 全在纯函数里、`ui/TableEditor.tsx`、`ui/TableGrid.tsx`、`ui/GalleryView.tsx`、`ui/TableToolbar.tsx`、`ui/TableFilterBar.tsx`、`ui/TableColumnManager.tsx`、`ui/TableSizeBar.tsx`、`ui/useVirtualWindow.ts`） |
 | 附件 / 版本（服务端）【M4】 | `apps/worker/src/adapters/r2.ts`（对象键与读写的唯一适配层）、`services/attachments.ts`、`services/versions.ts`、`services/version-retention.ts`（保留与稀疏化单独一摊）、`routes/attachments.ts`、`routes/versions.ts`；后台任务在 `services/jobs.ts` + `jobs/maintenance.ts` |
 | 隐私门禁（解锁框、锁定清理、多设备 verifier） | `features/privacy/` + `crypto/keystore.ts` |
-| 备份导出（信封打包、外部解密工具说明） | `features/backup/` + `crypto/envelope.ts`（编解码调 packages/crypto-format） |
+| 备份导出（全量 zip / 单篇 Markdown、信封与外部解密工具说明）【M5】 | `features/backup/`（`build.ts`、`export.ts`、`import.ts`、`restore.ts`、`export-note.ts`）+ `crypto/envelope.ts`；**格式契约落 `packages/shared/src/backup.ts`**——原写的独立包 `packages/crypto-format` 经 M5 设计 §七定论**不建**（契约属纯数据 schema，不是运行时模块） |
 | Markdown 核心（front matter 读写、标签与任务字段派生；前后端同一份实现）【M2 建】 | `packages/mdcore/`（零运行时依赖；**不得依赖 apps/**） |
 | 同步引擎 / outbox | `data/sync/`（不属于任何 feature） |
 | 本地库 Dexie / 本地仓储 | `data/db/` |
 | 设置（含 MCP 配置、备份目标配置） | `features/settings/` |
-| 分享查看器 | `features/share-viewer/`（独立入口加载） |
+| 分享（管理端）【M5】 | `features/shares/`（`model.ts` 过期档位 / 链接拼装 / PBKDF2 密码派生、`ui/ShareDialog.tsx`、`ui/MySharesPage.tsx`）；入口在笔记「更多」菜单与「设置 › 分享」 |
+| 分享查看器【M5】 | `features/share-viewer/`（`main.tsx` 特性根、`model.ts`、`ui/ShareViewerApp.tsx`）；**由 `apps/web/src/main.tsx` 按 `/s/<sid>` 动态 `import()`**，不是独立 html 入口 |
 
 #### 2.3.3 防膨胀护栏
 
@@ -461,6 +462,8 @@ flowchart LR
 **建表以新隐私模型的权威 DDL 为准**：`docs/modules/Menote-数据模型与迁移设计-v1.md` §3——即需求 18.2 去掉正文密文列、`title_enc`/`name_enc`/`key_id`、`data_keys`、`user_crypto` 密钥列，并**重写**受密文列影响的 `items`/`folders`/`item_bodies` 的 CHECK 约束（原文的三条 CHECK 引用了要删的列，不能直接照抄）。`items.last_edit_at`/`last_device` 已包含其中。该稿的结论会在需求文档 v7.5 同步时并入需求 18.2。
 
 **【v1.13 修订 · M4 已实现】技术补充的 DDL 已定稿**：下表的草案**不再逐条在本文件重述**，权威落点是《Menote-M4-设计-v1》§六（迁移 `0004_content_integrity`），运行时由自愈迁移建表（§15.5）。**六张表的清单**（与迁移文件导出的 `M4_TABLE_NAMES` 一致）：`attachments`、`attachment_refs`、`item_versions`、`tombstones`、`r2_gc_queue`、**`pending_uploads`**（新增：上传意图登记从 `r2_gc_queue` 的 `reason='pending_upload'` 拆出独立表，避免"待删对象"与"待确认上传"两类生命周期混在一张表里）。
+
+**【v1.16 修订 · M5 已实现】迁移 `0005_shares` 已应用**：`shares` 与 `share_items` 两张表（DDL 照《M5 分享设计》定稿；`share_items` 随表建好但**首期不接 UI**——Memo 固定合集后置，见 §十）。运行时自愈按序执行，`app_meta.schema_version` 现为 **5**。
 
 下表保留**原因与原委**（回答"为什么需要这些表"），**具体列与约束请看 §六**：
 
@@ -723,9 +726,14 @@ sequenceDiagram
 | `GET /api/public/shares/:sid/content` | 单篇返回正文原文；Memo 合集按 50 条分页返回 |
 | `GET /api/public/shares/:sid/att/:attId` | 校验该附件属于被分享条目的当前稿引用后，从 R2 流式返回 |
 
-- 每次访问实时检查分享与条目状态（撤销、过期、条目进回收站、条目被加密），任一不满足即返回“链接已失效”（需求 16.1）。
-- 分享查看器是 Static Assets 中的独立入口页（`/s/<分享ID>`），只加载渲染模块，不包含编辑器与同步代码；渲染结果经 DOMPurify 清洗；页面设置 `Referrer-Policy: no-referrer`，避免分享 ID 经外链泄露。
-- 访问令牌的签名密钥由 `AUTH_PEPPER` 经 HKDF 派生（标签 `menote-share-v1`），不新增 Secret。
+- 每次访问实时检查分享与条目状态（撤销、过期、条目进回收站、条目被加密），任一不满足即返回“链接已失效”（需求 16.1）。**不依赖 Cron**——条目态一变，链接下一次访问即失效。【M5 已落地】
+- **入口偏离（v1.16 订正）**：本节原定「独立入口页 `apps/web/share.html`」，**实际未采用**——`@cloudflare/vite-plugin` v1.60 接管客户端入口，手写第二个 html input 会报 `UNRESOLVED_ENTRY`。现按 §2.1 的 Static Assets SPA 规则实现：`/s/<分享ID>` 回退到 `index.html`，由 `apps/web/src/main.tsx` 按 `pathname` 分流并**两侧都动态 `import()`**，访客不拉编辑器与同步 chunk。**这不是第二套页面骨架，也不拆 Worker。**
+- 访问令牌**放 `X-Menote-Share` 请求头、不进 URL**（避免进服务端日志与浏览器历史记录）；签名密钥由 `AUTH_PEPPER` 经 HKDF 派生（标签 `menote-share-v1`），**无状态、不写库、不可续期**（有效期 1 小时），不新增 Secret。
+- **origin 决策**（M5，用户 2026-10-02 拍板）：分享走**独立子域**（如 `share.example.com`），与主应用**指向同一个 Worker**（不拆第二个 Worker）。子域值存**实例设置**（`app_meta` 键 + `GET/PUT /api/admin/share-origin`，仅 owner），**留空即回退当前站点 origin**，同域 `/s/<分享ID>` 同样可用。
+- **会话隔离零配置**：`middleware/session.ts` 的 `setSessionCookie` **不带 `Domain` 属性** → 浏览器默认 host-only，主应用会话 Cookie 永远不会发给分享子域；子域上对 `/api/*` 的会话请求天然 401（纵深防御）。
+- **公开附件只放行「被分享条目当前稿正文引用」的哈希**（`extractAttachmentRefs`，两端共用一份契约），以正文为准、**不查 `attachment_refs` 表**（引用集合对齐属 M6 遗留，该表可能有陈旧行），不提供遍历。
+- **首期范围**：只做单条分享（笔记 / 表格 / 单条 Memo）。Memo 固定合集（功能拆解 M14-02）**后置**——`share_items` 表随迁移 0005 建好但**不接 UI**，等后续细则。
+- 查看器只加载渲染模块，不包含编辑器与同步代码；渲染结果经 DOMPurify 清洗；页面设置 `Referrer-Policy: no-referrer`，避免分享 ID 经外链泄露。表格条目按只读网格呈现，有图片引用时给「表格 / 图册」切换，**不提供筛选排序**（Q18 建议案）。
 
 ---
 

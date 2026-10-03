@@ -7,7 +7,7 @@
 
 - 名称：`MeNote`
 - 一句话：面向个人与家人的轻量多端笔记应用（浏览器 PWA + Cloudflare 自托管），支持 Markdown 笔记、表格、Memo、待办、版本历史与隐私锁。
-- 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared` + `packages/mdcore`（Markdown 核心，M2 建）+ `packages/crypto-format`（备份导出信封的编解码纯函数；**M3 落最小骨架**，可顺延到 M5——其消费方是 M5 的备份导出），见架构文档 §2.3）
+- 仓库形态：单仓多包（pnpm workspace：`apps/web` + `apps/worker` + `packages/shared` + `packages/mdcore`（Markdown 核心，M2 建），见架构文档 §2.3）。**备份导出的格式契约不建独立包**——它属纯数据 schema 而不是运行时模块，实际落在 `packages/shared/src/backup.ts`（M5 设计 §七定论，v0.6.8 落地：manifest、`COMPLETE` 提交标记、`verifySnapshot`、路径安全）。本文件早期描述的 `packages/crypto-format`（含「M3 落最小骨架」）**已作废：该目录从不存在**（2026-10-03 核实订正）。
 - 当前版本：v0.5.0（**M4 已收口**——逐条验收复核、能力矩阵、流程与反例、未验证项与归属见 `docs/modules/Menote-M4-收口验收复核-v1.md`）
 - 技术栈：
   - 前端：`React PWA（Vite + CodeMirror 6，编辑器已接入）`

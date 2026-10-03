@@ -4,7 +4,7 @@
 |---|---|
 | 适用范围 | Menote 单仓多包（apps/web、apps/worker、packages/*）的本地开发全流程 |
 | 权威级别 | 模块规则（仓库结构与技术约束以 `wiki/Menote-项目架构-v1.md` §2.3 为准） |
-| 最后更新日期 | 2026-09-28（v1.14 单一实例机密：§八 机密清单收敛为只有 `AUTH_PEPPER`） |
+| 最后更新日期 | 2026-10-03（§四 补 `pnpm dev:seed`：本地造 owner 账号的唯一入口，此前漏记；M5 分享收口时发现——没有它，本地起服后无可用账号，S4 点验第 1 条根本点不了） |
 
 ## 一、前置环境
 
@@ -48,6 +48,7 @@ wrangler.jsonc    唯一 Worker 配置（仓库根）：main、assets、D1 绑�
 | 命令 | 作用 |
 |---|---|
 | `pnpm dev` | 本地开发服（前端 + Worker + 本地 D1） |
+| `pnpm dev:seed` | 本地造 owner 账号（`admin` / `admin123`），**需先起 `pnpm dev`**。走注册接口 + 浏览器同一套 PBKDF2 派生，**不碰库文件、不读 `AUTH_PEPPER`**，所以不存在「脚本里另写一套哈希、哪天对不上」。**安全边界**：脚本内 `assertLocalOnly` 硬闸只允许 `localhost` / `127.0.0.1`，弱口令账号不可能写进线上库；它也不参与 `build` / `deploy` 任何链路。**幂等**：库里已有用户时直接退出、什么都不做，绝不覆盖既有账号（想重来见 §九 删 `apps/web/.wrangler/state`）。加 `--verify` 只校验这组凭据还能登进去、不建号 |
 | `pnpm lint` | ESLint；含 §2.3.1/§2.3.3 行数预算（入口 ≤ 100 error，路由/服务 ≤ 300 warn，全局 > 500 error） |
 | `pnpm typecheck` | `tsc -b`（构建 shared 产物）+ 各包 `tsc --noEmit` |
 | `pnpm test` | shared 单元测试 + Worker 集成测试（vitest-pool-workers，真实 workerd + 本地 D1） |

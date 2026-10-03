@@ -10,6 +10,7 @@ import { schemaGuard } from "./middleware/schema";
 import { applySecurityHeaders, securityHeaders } from "./middleware/security-headers";
 import auth from "./routes/auth";
 import attachments from "./routes/attachments";
+import backupTargets from "./routes/backup-targets";
 import crypto from "./routes/crypto";
 import { runScheduled } from "./services/jobs";
 import folders from "./routes/folders";
@@ -60,6 +61,7 @@ app.route("/api", crypto);
 app.route("/api", shares);
 app.route("/api", publicShares);
 app.route("/api", mcpTokens);
+app.route("/api", backupTargets);
 
 /**
  * MCP 端点挂在 `/mcp` 而不是 `/api` 下（架构 §十一），因此它**不受**上面那组

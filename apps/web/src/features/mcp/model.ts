@@ -5,8 +5,9 @@
  * （AGENTS.md「UI 只做展示和交互，复杂逻辑下沉到业务模块」）。
  *
  * 三条贯穿的口径：
- * 1. **相对时间自己算**（`formatRelative`），不引依赖也不调 `Intl`——口径要能单测，
- *    也不能因为运行环境的 locale 变掉；
+ * 1. **相对时间自己算**（`formatRelative`，在 `app/format.ts`——M7 定时备份也要用，
+ *    提上来免得备份 feature 反向依赖本 feature），不引依赖也不调 `Intl`——
+ *    口径要能单测，也不能因为运行环境的 locale 变掉；
  * 2. **没勾的权限位不写出来**（`permissionSummary` 列"只读 · 新建和追加"而不是
  *    "未授予修改和移动"）；否定式表述又长又让人以为缺了什么；
  * 3. **加密空间不进范围候选**（`scopeCandidates` 整个空间子树排掉），不给一个
@@ -30,20 +31,7 @@ export function buildMcpAddress(origin: string): string {
   return `${origin.replace(/\/+$/, "")}/mcp`;
 }
 
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-
-/** 相对时间；`null` 给"还没用过"这类口径（`fallback` 由调用方按语义给） */
-export function formatRelative(timestamp: number | null, now: number, fallback: string): string {
-  if (timestamp === null) return fallback;
-  const delta = Math.max(0, now - timestamp);
-  if (delta < MINUTE) return "刚刚";
-  if (delta < HOUR) return `${Math.floor(delta / MINUTE)} 分钟前`;
-  if (delta < DAY) return `${Math.floor(delta / HOUR)} 小时前`;
-  if (delta < 30 * DAY) return `${Math.floor(delta / DAY)} 天前`;
-  return `${Math.floor(delta / (30 * DAY))} 个月前`;
-}
+const DAY = 24 * 60 * 60_000;
 
 /** 权限摘要：只列**已授予**的位（只读恒在，所以永远至少有它） */
 export function permissionSummary(perms: number): string {

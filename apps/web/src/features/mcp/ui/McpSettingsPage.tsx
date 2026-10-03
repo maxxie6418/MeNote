@@ -24,11 +24,11 @@ import { useTicker } from "../../../app/ui/useTicker";
 import { mcpApi } from "../../../data/api/endpoints";
 import { listLocalFolders, listLocalItems } from "../../../data/db/repository";
 import type { LocalFolder } from "../../../data/db/schema";
+import { formatRelative } from "../../../app/format";
 import {
   activeTokenCount,
   buildMcpAddress,
   expirySummary,
-  formatRelative,
   isTokenLimitReached,
   permissionSummary,
   scopeSummary,

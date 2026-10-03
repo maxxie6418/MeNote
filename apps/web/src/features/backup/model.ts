@@ -1,0 +1,196 @@
+/**
+ * 定时自动备份的纯函数（M7 第 4 项 批 1；设计 §三、§四、§六）。
+ *
+ * **这里只放纯函数**：标签文案、校验、拼请求体。组件只做展示与交互
+ * （AGENTS.md「UI 只做展示和交互，复杂逻辑下沉到业务模块」）。
+ *
+ * ## 三条贯穿的口径
+ *
+ * 1. **校验在前端也做一遍，但规则与服务端 schema 同源**（`CreateBackupTargetSchema`）——
+ *    不是抄一份"我觉得对"的规则，是把同一批约束写在这里好让用户就地看到错在哪。
+ *    真正的闸门仍在服务端。
+ * 2. **`append_only` 是默认档**（用户 2026-10-03 拍板 Q3）。远端会积垃圾，
+ *    但误删不会真丢数据——首期宁可信"多留"不信"少留"。
+ * 3. **凭据在表单里是"看不见也拿不回"的东西**：编辑时留空 = 不改，不是"清空"。
+ *    这条如果表达错，用户会以为把口令删了就等于换了新口令。
+ */
+import {
+  BACKUP_BATCH_PUT_LIMIT,
+  BackupSchedules,
+  BackupTargetKinds,
+  type BackupDeletePolicy,
+  type BackupSchedule,
+  type BackupTarget,
+  type BackupTargetKind,
+  type CreateBackupTargetInput,
+  type UpdateBackupTargetInput,
+} from "@menote/shared";
+import { formatRelative } from "../../app/format";
+
+export const KIND_LABEL: Record<BackupTargetKind, string> = {
+  webdav: "WebDAV",
+  s3: "S3 兼容存储",
+};
+
+/** 地址栏的占位提示——让人一眼看出"填目录不是填站点首页" */
+export const KIND_ENDPOINT_PLACEHOLDER: Record<BackupTargetKind, string> = {
+  webdav: "https://dav.example.com/menote",
+  s3: "https://s3.us-east-1.amazonaws.com",
+};
+
+export const POLICY_LABEL: Record<BackupDeletePolicy, string> = {
+  append_only: "只增不删",
+  sync: "与本机保持一致",
+};
+
+export const SCHEDULE_LABEL: Record<BackupSchedule, string> = {
+  daily: "每天",
+  weekly: "每周",
+};
+
+/**
+ * 选了「与本机保持一致」时**必须平铺**的警告（DESIGN.md §5.4-2：破坏性后果不得藏进 ⓘ）。
+ * 返回 `null` 表示当前档位没有需要警告的地方。
+ */
+export function policyRisk(policy: BackupDeletePolicy): string | null {
+  if (policy !== "sync") return null;
+  return "本机删掉的，远端也会删。远端被误删或同步出错时，备份就真的没了——这一档不可恢复。";
+}
+
+/** 一行说清"推到哪里去" */
+export function targetWhere(target: BackupTarget): string {
+  const base = `${KIND_LABEL[target.kind]} · ${target.endpoint}`;
+  return target.kind === "s3" && target.bucket !== null ? `${base}/${target.bucket}` : base;
+}
+
+/**
+ * 最近一次推送的口径。
+ *
+ * `last_run_at` 有了但 `last_result` 是 `null` = 一次都没成功过——
+ * 那要说"从没成功过"而不是"X 小时前失败"，两者的含义差很远。
+ */
+export function lastRunText(target: BackupTarget, now: number): string {
+  if (target.last_run_at === null) return "还没跑过";
+  const when = formatRelative(target.last_run_at, now, "刚刚");
+  if (target.last_result === null) return `从没成功过（${when}试过一次）`;
+  if (target.last_result === "ok") return `最近成功 ${when}`;
+  if (target.last_result === "partial") return `最近只推了一部分（${when}）`;
+  return `最近失败（${when}）`;
+}
+
+/** 游标落后多少条（`0` = 已跟上） */
+export function pendingCount(target: BackupTarget, latestSeq: number): number {
+  return Math.max(0, latestSeq - target.cursor_seq);
+}
+
+export interface TargetForm {
+  kind: BackupTargetKind;
+  label: string;
+  endpoint: string;
+  bucket: string;
+  region: string;
+  username: string;
+  /** 编辑时留空 = **不改凭据**，不是"清空" */
+  secret: string;
+  delete_policy: BackupDeletePolicy;
+  schedule: BackupSchedule;
+}
+
+const DEFAULT_KIND: BackupTargetKind = "webdav";
+
+/** 新建时的初始表单。默认档是安全的那一档（口径 2） */
+export function emptyTargetForm(): TargetForm {
+  return {
+    kind: DEFAULT_KIND,
+    label: "",
+    endpoint: "",
+    bucket: "",
+    region: "",
+    username: "",
+    secret: "",
+    delete_policy: "append_only",
+    schedule: "daily",
+  };
+}
+
+/** 编辑时的初始表单：预填现有值，凭据一律留空（服务端也不回显，没有可填的） */
+export function formFromTarget(target: BackupTarget): TargetForm {
+  return {
+    kind: target.kind,
+    label: target.label,
+    endpoint: target.endpoint,
+    bucket: target.bucket ?? "",
+    region: target.region ?? "",
+    username: target.username ?? "",
+    secret: "",
+    delete_policy: target.delete_policy,
+    schedule: target.schedule,
+  };
+}
+
+export type FormResult =
+  | { ok: true; value: CreateBackupTargetInput | UpdateBackupTargetInput }
+  | { ok: false; error: string };
+
+/**
+ * 校验 + 拼请求体。
+ *
+ * 规则与 `CreateBackupTargetSchema` / `UpdateBackupTargetSchema` 一致（`EndpointSchema`
+ * 那个 `^https?://` 正则也是照抄的），差别只在**把错误翻成人话就地报出来**。
+ * `isNew` 决定 `secret` 是必填还是"留空即不改"。
+ */
+export function buildTargetPayload(form: TargetForm, isNew: boolean): FormResult {
+  const label = form.label.trim();
+  if (label === "") return { ok: false, error: "名称必填——要能一眼认出这是哪个备份" };
+  if (label.length > 64) return { ok: false, error: "名称最多 64 个字" };
+
+  const endpoint = form.endpoint.trim();
+  if (!/^https?:\/\/[^\s]+$/.test(endpoint)) {
+    return { ok: false, error: "地址必须以 http:// 或 https:// 开头，且不能有空格" };
+  }
+
+  const bucket = form.bucket.trim();
+  // S3 的桶名是必填的；WebDAV 没这个字段，填了也不该送（服务端按 kind 忽略，但送了就是误导）
+  if (form.kind === "s3" && bucket === "") return { ok: false, error: "S3 必须填桶名（bucket）" };
+
+  const secret = form.secret.trim();
+  if (isNew && secret === "") return { ok: false, error: "密钥必填——它只提交这一次，之后不再显示" };
+
+  /** 两种模式共用的那部分字段 */
+  const common = {
+    label,
+    endpoint,
+    bucket: form.kind === "s3" ? bucket : null,
+    region: form.region.trim() || null,
+    username: form.username.trim() || null,
+    delete_policy: form.delete_policy,
+    schedule: form.schedule,
+  };
+
+  // 编辑：密钥留空 = 不改凭据，**不送 `secret` 这个键**（送空串会被当成"清空"）
+  if (!isNew) {
+    return { ok: true, value: secret === "" ? common : { ...common, secret } };
+  }
+
+  // 新建：`enabled` 恒 true——先建出来再关掉，比"建的时候默认关着"更安全
+  //（关着的话用户会以为备份在跑，而其实一次都没推过）
+  return { ok: true, value: { ...common, kind: form.kind, secret, enabled: true } };
+}
+
+/** 该不该显示"桶名 / 区域"这两栏（`region` 只有 S3 有意义） */
+export function showsS3Fields(kind: BackupTargetKind): boolean {
+  return kind === "s3";
+}
+
+/** 凭据字段的 label：新建叫"密钥"，编辑时要说清"留空 = 不改" */
+export function secretFieldLabel(hasExisting: boolean, kind: BackupTargetKind): string {
+  const what = kind === "s3" ? "Secret Access Key" : "口令";
+  return hasExisting ? `换${what}（留空 = 不改）` : what;
+}
+
+/** 调一次只推 {limit} 个文件这件事，要在界面上说清，否则用户以为坏了 */
+export function quotaNotice(limit: number = BACKUP_BATCH_PUT_LIMIT): string {
+  return `每轮最多推 ${limit} 个文件，推不完下一轮接着推——不是出错。`;
+}
+
+export { BackupTargetKinds, BackupSchedules };

@@ -28,6 +28,11 @@ import {
   M6_MCP_TABLE_NAMES,
   migration0006,
 } from "./migrations/0006_mcp";
+import {
+  M7_BACKUP_INDEX_NAMES,
+  M7_BACKUP_TABLE_NAMES,
+  migration0007,
+} from "./migrations/0007_backup_targets";
 
 /** 全部迁移脚本，按 version 升序 */
 export const MIGRATIONS: readonly MigrationScript[] = [
@@ -37,6 +42,7 @@ export const MIGRATIONS: readonly MigrationScript[] = [
   migration0004,
   migration0005,
   migration0006,
+  migration0007,
 ];
 
 /** 代码期望的表结构版本 */
@@ -66,6 +72,8 @@ const REQUIRED_TABLES = [
   ...M5_SHARE_TABLE_NAMES,
   // 0006：MCP 三表（M6）
   ...M6_MCP_TABLE_NAMES,
+  // 0007：外部备份目标 + 变更队列（M7）
+  ...M7_BACKUP_TABLE_NAMES,
 ] as const;
 
 const REQUIRED_INDEXES = [
@@ -87,6 +95,8 @@ const REQUIRED_INDEXES = [
   ...M5_SHARE_INDEX_NAMES,
   // 0006：MCP 三表的索引（M6）
   ...M6_MCP_INDEX_NAMES,
+  // 0007：外部备份的索引（M7）
+  ...M7_BACKUP_INDEX_NAMES,
 ] as const;
 
 export type EnsureSchemaResult =

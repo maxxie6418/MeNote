@@ -1,9 +1,10 @@
 /**
- * 设置 › 备份与导出（M5）。
+ * 设置 › 备份与导出（M5 + M7 第 4 项 批 1）。
  *
- * 两件事，一件是安全的（导出），一件是危险的（导入会往库里写）。所以：
- * - **导出**不需要确认，但全程要有**可见进度与可中断**（`DESIGN.md` §5.4-3 / §6.1）；
- * - **导入**先出「这份备份里有什么」的摘要，**再**弹二次确认，理由与影响条数写全
+ * 三件事，危险程度从低到高排：
+ * - **外部备份目标**（批 1）：设好就不用管，失败会在这一屏平铺出来；
+ * - **导出备份**：不需要确认，但全程要有**可见进度与可中断**（`DESIGN.md` §5.4-3 / §6.1）；
+ * - **导入**：先出「这份备份里有什么」的摘要，**再**弹二次确认，理由与影响条数写全
  *   （`DESIGN.md` §5.1-2：多步危险流程要有明确入口与退出方式）。
  *
  * 说明性文字一律收进 `InfoHint`（§5.4-1），只有进度、结果、错误这类**实时状态**平铺。
@@ -14,6 +15,7 @@ import { InfoHint } from "../../../app/ui/InfoHint";
 import { Modal } from "../../../app/ui/Modal";
 import { exportBackup, type ExportProgress } from "../export";
 import { importBackup, type ImportProgress, type ImportSummary } from "../import";
+import { BackupTargetsCard } from "./BackupTargetsCard";
 
 type Phase = "idle" | "exporting" | "importing";
 
@@ -93,6 +95,9 @@ export function BackupPage() {
 
   return (
     <>
+      {/* 排最前：这一屏的名字叫「备份」，而不叫「导出」 */}
+      <BackupTargetsCard />
+
       <section className="setcard" aria-label="导出备份">
         <h3 className="setcard__title">
           导出备份

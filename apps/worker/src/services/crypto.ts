@@ -233,6 +233,49 @@ async function deriveBackupWrapKey(
 }
 
 /**
+ * 用**备份包裹键**加解密一段任意字节（外部备份目标的凭据用，M7 第 4 项）。
+ *
+ * 为什么不新开一把密钥：内容密钥 K 的备份包裹键 M3 起就有了（`k_wrapped_backup`），
+ * 它的定位就是"给要离开浏览器的密钥材料兜底"，凭据正是同一类东西——**同一个用途后缀、
+ * 不新增密钥材料**是本项目的既有口径（架构 §7.2 / §12.4）。
+ *
+ * 返回值用 base64url 文本（`packCryptoBlob` 的既有编码），与 `k_wrapped_backup` 同格式。
+ * 密文格式：`1B 版本 ‖ 12B IV ‖ 密文 ‖ 16B GCM 标签`。
+ */
+export async function sealWithBackupKey(
+  env: EnvBindings,
+  plaintext: Uint8Array<ArrayBuffer>,
+): Promise<string> {
+  const key = await deriveBackupWrapKey(requirePepper(env), ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(CRYPTO_IV_BYTES));
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, key, plaintext),
+  );
+  return cryptoBlobToBase64Url(
+    packCryptoBlob({
+      iv,
+      ciphertext: sealed.slice(0, sealed.length - CRYPTO_TAG_BYTES),
+      tag: sealed.slice(sealed.length - CRYPTO_TAG_BYTES),
+    }),
+  );
+}
+
+/** `sealWithBackupKey` 的逆。密钥不对 / 密文被改过 → 抛错（**不吞**，那是"凭据坏了"要让人知道） */
+export async function openWithBackupKey(
+  env: EnvBindings,
+  encoded: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const key = await deriveBackupWrapKey(requirePepper(env), ["decrypt"]);
+  const { iv, ciphertext, tag } = unpackCryptoBlob(cryptoBlobFromBase64Url(encoded));
+  const sealed = new Uint8Array(ciphertext.length + tag.length);
+  sealed.set(ciphertext, 0);
+  sealed.set(tag, ciphertext.length);
+  return new Uint8Array(
+    await crypto.subtle.decrypt({ name: "AES-GCM", iv, tagLength: 128 }, key, sealed),
+  );
+}
+
+/**
  * 用派生的备份包裹键把内容密钥 K 包起来（**首次启用**与**重新包裹**都走这条路：
  * `input.k` 出现即调用，见 `putCryptoMaterials` 的说明）。
  *

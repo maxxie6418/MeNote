@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | v1.17（**2026-10-03 M6 第一批回写**：§6.1 把 `X-Menote-Refs` 的三条语义写准——**不带 = 引用表不动**、带非空数组 = 整体替换、带空数组 = 清空，且必须与正文**同一次写**对齐（孤儿满 30 天会真删掉仍在正文里的图）；§十 补**失效分两层**：实时检查之外，**软删 / 隐私标记置位时服务端真撤销分享行**（限租户、幂等、不推 `sync_seq`），正确性不再依赖客户端行清理。用户 2026-10-03 授权。v1.16 的 M5 分享收口回写、v1.15 编辑器三档、v1.14 单一实例机密维持不变） |
-| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 隐私锁回写、v1.13 M4 回写）** / **2026-09-28（v1.14 单一实例机密）** / **2026-09-29（v1.15 编辑器档位三档）** / **2026-10-03（v1.16 M5 分享收口回写、v1.17 M6 第一批回写）** |
+| 文档版本 | v1.18（**2026-10-03 M6 收口回写**：§十一 MCP 按已落地实现补全——**限速落地方式改为 D1 计数落令牌行**（偏离需求 §17.3 的「优先 Rate Limiting 绑定」，用户 2026-10-03 拍板，理由与代价写进 §十一）、**令牌哈希必须带 `mn_` 前缀做域分隔**（否则会话令牌能冒充 MCP 令牌越权）、`/mcp` 必须列进 `assets.run_worker_first`、**512 KB 门槛实测结论（原【待核实】已销）**、审计与幂等同批的四步与「参数摘要不能用数组 replacer」；§2.3.2 落点表补 MCP 全套与 `GET /api/attachments`。v1.17 的 M6 第一批回写、v1.16 的 M5 分享收口回写维持不变） |
+| 日期 | 2026-09-25（v1）/ 2026-09-26（v1.1–v1.11 修订）/ **2026-09-27（v1.12 隐私锁回写、v1.13 M4 回写）** / **2026-09-28（v1.14 单一实例机密）** / **2026-09-29（v1.15 编辑器档位三档）** / **2026-10-03（v1.16 M5 分享收口回写、v1.17 M6 第一批回写、v1.18 M6 收口回写）** |
 | 基准 | 仓库根目录 `Menote-设计文档-v7.4.md`（下称“需求文档”）。本文只回答“怎么实现”，不改变需求文档中的任何产品决定；引用需求文档章节时写作“需求 x.y” |
 | 运行环境 | Cloudflare 免费版：Workers（含 Static Assets、Cron Triggers）+ D1 + R2；客户端为浏览器 PWA |
 | 性质 | 架构设计，不含应用代码；接口、表结构、目录结构均为草案，实现时细化 |
@@ -30,6 +30,7 @@
 | v1.15 | 2026-09-29 | **编辑器档位口径回写**【已定·用户确认 2026-09-29】：产品只有**三档**——仅编辑（`edit`）/ 仅预览（`preview`）/ 即时渲染（`live`），显示顺序即 `edit → preview → live`；**「双栏」（`split`）已从产品移除**（阶段 A / v0.6.0），旧值只读兼容（`EditorModeSchema` / `EDITOR_MODES` 四值、`normalizeEditorModes()` 唯一归一化入口），UI 与新写入只产生三档。改 **§1.6 分层图**节点（"三种模式"→三档名单）与 **§3.3 编辑器**（删掉"双栏：CodeMirror + 预览面板按滚动位置同步"这一分支，改为三档如何共用同一个 `EditorState`：仅编辑 / 仅预览切换布局可见性、即时渲染走 `Compartment` 重配置并保留同一文档；并写明**没有「默认档」**，打开笔记用本机记住的「上次用的那一档」，阅读态由「仅预览」承担、`readOnly` 只是 `Editor` 内部能力）。与 `wiki/Menote-设计文档-v7.4.md`（内部 v7.5.5）、`wiki/Menote-功能拆解-v2.md`（v2.11）、`wiki/components.md`（v7）、`DESIGN.md`（v1.11）同批回写。（应用版本 v0.6.2；修改模型ID：deepseek-v4.1-flash） |
 | v1.16 | 2026-10-03 | **M5 分享收口回写**【已定·用户确认 2026-10-03】：①**§十 按已落地实现补全**（S1 服务端 v0.6.13 / S2 管理端 v0.6.14 / S3 查看器 v0.6.15）：**入口偏离订正**——原定独立入口页 `apps/web/share.html` **未采用**（`@cloudflare/vite-plugin` v1.60 接管客户端入口，第二个 html input 报 `UNRESOLVED_ENTRY`），改为经 Static Assets 的 SPA 回退由 `apps/web/src/main.tsx` 按 `pathname` 分流、两侧动态 `import()`（访客不拉编辑器与同步 chunk）；补**访问令牌放 `X-Menote-Share` 头不进 URL**（1 小时、无状态不写库）、**origin 决策**（独立子域、与主应用同一个 Worker、子域值存实例设置且**留空回退同域**）、**会话隔离零配置**（Cookie 无 `Domain` → host-only，子域上 `/api/*` 天然 401）、**公开附件按正文当前稿引用白名单**（不查 `attachment_refs`，集合对齐属 M6）、**首期只做单条分享**（M14-02 合集后置，`share_items` 建表不接 UI）、Q18 只读表格 + 有附件时图册切换。②**§2.1** Static Assets 规则补查看器的分流与动态 chunk 事实；**§2.3 目录树**删 `share.html`、`index.html` 标为唯一入口；**§2.3.1 入口预算表**把「`share.html` 对应的入口」改为 `features/share-viewer/main.tsx`（特性根，非独立入口，≤50）；**§2.3.2 落点表**分享行补 `services/share-public.ts` 与 shared 契约两处、备份行订正落点、分享管理端与查看器分行。③**顺带订正一处落点错误**：备份格式契约原写「编解码调 `packages/crypto-format`」，该包**经 M5 设计 §七定论不建**（契约属纯数据 schema），实际在 `packages/shared/src/backup.ts`——`AGENTS.md` 同一处描述同期订正。（应用版本 v0.6.17；修改模型ID：MiniMax-M3.1-Flash-Preview） |
 | v1.17 | v0.6.20 | 2026-10-03 | **M6 第一批回写**【已定·用户确认 2026-10-03】：①**§6.1** 把 `X-Menote-Refs` 的语义写准——原表只写了头名与「有变化时才带」，现补三条确切语义（**不带 = 引用表一个字不动** / 带非空数组 = 整体替换 / 带空数组 = 清空当前稿引用），并写明**必须与正文同一次写对齐**及其理由（孤儿满 30 天由每日维护真删 R2 对象，正文里仍显示的图会凭空消失）。**注意：这张表里 `X-Menote-Refs` 早在 M4 就已写下，是一直未实现的挂账**——v0.6.20 才真正落地。②**§十** 补「**失效分两层**」：实时检查（`isShareLive`）之外，**软删条目 / 隐私标记置位时服务端真撤销分享行**（`SQL_REVOKE_ITEM_SHARES`，限 `user_id`、幂等、**不推 `sync_seq`**），并说明为何不能只靠客户端 `revokeItemShares`（那段每个 revoke 都被 try/catch 吞掉、且在另一台设备上恢复条目时根本不会跑）。③§2.3.2 落点表待 2c 批做完再补 `GET /api/attachments`。（应用版本 v0.6.20；修改模型ID：MiniMax-M3.1-Flash-Preview） |
+| v1.18 | v0.7.0 | 2026-10-03 | **M6 收口回写（含 MCP 全套）**【已定·用户确认 2026-10-03】：①**§十一 MCP 按已落地实现补全**（v0.6.23–v0.6.26 四批）：**限速落地方式偏离需求 §17.3**——改用 **D1 计数落 `api_tokens` 行**（不建 `rate_counters` 表、不加 Rate Limiting 绑定），理由是令牌查询那次读本来就要做、计数与 `last_used_at` 能合并成同一条 `UPDATE`；并写明**需求那条「`last_used_at` 最多每 10 分钟写一次」的节流刻意不做**（已无可省之物，留着只会让人以为它不生效）。**令牌哈希必须带 `mn_` 前缀做域分隔**——会话令牌存的是裸 32 字节的 SHA-256，而 MCP 令牌恰好也是 32 字节 base64url，两边都哈希裸字节就能互相冒充，那是一条实打实的越权。`/mcp` **必须列进 `wrangler.jsonc` 的 `assets.run_worker_first`**，否则 SPA 回退把 POST 吃掉、客户端拿到 HTTP 200 + HTML（极难与鉴权/协议问题区分）。**512 KB 门槛实测结论**（原文的【待核实】已销）：390,040 字节中文正文的 `read_item(section)` 解析 + 往返 20 ms → **门槛不动**，其作用是防止正文被取回内存而非 CPU 不够。另登记**已知未实现**：`replace_text` 对 >512 KB 条目走 SQL 那条路径。②**审计与幂等同批**的落地细节：四个既有写函数各加一个可选尾随语句参数（默认空 = 行为不变）、幂等四步（预检冲突一行都不写 / 极小竞态补删幂等行 + conflict 审计）、**参数摘要不能用 `JSON.stringify(args, keys)`**（数组 replacer 会过滤嵌套对象的键，导致幂等误判成重放）。③补两条结构性决定：**MCP 不改变内容的加密归属**（不能移入加密空间 / 不能置 `enc_self` / 不能改 `type`），**写前封存 `pre_mcp` 用 `keep = 1`**（否则「可在版本历史撤回」不成立；该枚举值自 M4 起就存在、v0.6.25 才第一次有生产调用方）。④**§2.3.2 落点表**补 MCP 全套（`routes/mcp-tokens.ts` / `routes/mcp.ts` / `services/mcp/` 十一件 / `db/mcp-tables.ts` / `features/mcp/`）与 M6-2c 遗留的 **`GET /api/attachments`**（v1.17 记的"待 2c 批做完再补"在此结清）。（应用版本 v0.7.0；修改模型ID：MiniMax-M3.1-Flash-Preview） |
 
 ### 标注约定
 
@@ -230,8 +231,9 @@ Worker 侧（`apps/worker/src/`）：
 | 增量同步（拉取 / 推送 / 墓碑；响应另带 `user_settings`，**不参与游标**） | `sync.ts` | `sync.ts` | — |
 | 版本历史 | `versions.ts` | `versions.ts` | — |
 | 附件上传 / 下载 / GC | `attachments.ts` | `attachments.ts` | adapters/r2.ts、jobs/gc.ts |
+| 附件列表（`GET /api/attachments`：按 `kind` / `state` 筛、每行带引用条目数，`limit + 1` 判 `has_more`）【M6-2c 落地】 | `attachments.ts` | `attachments.ts` | —（过滤值一律绑两次 `?`，不在服务层拼 SQL 文本） |
 | 分享（创建 / 公开访问 / 撤销）【M5 落地】 | `shares.ts`（管理侧）、`public.ts`（访客侧） | `shares.ts`、`share-public.ts` | —（契约 `packages/shared/src/shares.ts`；附件引用解析 `packages/shared/src/attachments.ts`，两端共用一份） |
-| MCP | `mcp.ts` | `mcp.ts` | middleware/ 下令牌与限速 |
+| **MCP【M6 第三块落地：令牌 / 端点 / 11 个工具】** | `mcp-tokens.ts`（令牌管理四个会话接口）、`mcp.ts`（`POST /mcp`、`POST /mcp/k/:token`、`GET /mcp`=405） | `services/mcp/`：`tokens.ts`（管理侧）/`auth.ts`（鉴权 + 限速）/`scope.ts`（可见性 I1）/`jsonrpc.ts`（协议层）/`registry.ts`（工具表 + 静态 schema）/`parts.ts` + `write-parts.ts`（共用零件）/`seal.ts`（`pre_mcp` 封存）/`audit.ts`（审计 + 幂等）/`tools-read*.ts` / `tools-write*.ts` | `db/mcp-tables.ts`（MCP 专用 SQL，`tables.ts` 已近预算故独立一份）；契约 `packages/shared/src/mcp.ts`；**`/mcp` 必须列进 `wrangler.jsonc` 的 `assets.run_worker_first`**，否则 SPA 回退会把 POST 吃掉、客户端拿到 HTML |
 | 设置与隐私标记（含 `GET/PUT /api/admin/registration`、`GET /api/admin/usage`；**用户级设置 `GET/PUT /api/settings`** 也归这里） | `settings.ts` | `settings.ts` | — |
 | Cron：快照 / 外部备份 / 维护 | —（无路由） | `jobs.ts` 调度 | jobs/snapshot.ts、jobs/backup.ts、jobs/maintenance.ts；adapters/webdav.ts、s3.ts、git.ts |
 | 迁移与自愈 | — | — | db/migrations/（0001 建表；0002 任务字段字面量约束触发器）、db/selfheal.ts |
@@ -249,6 +251,7 @@ Web 侧（`apps/web/src/`，每个 feature 目录内 `ui/`（组件）+ `model.t
 | 首页概括 | `features/home/` |
 | 搜索界面 | `features/search/`（`useSearch.ts` 接线、`model.ts` 检索纯函数、`ui/SearchPanel.tsx`）；本地索引在 `data/db/search.ts`。**`workers/search.worker.ts` 未做**（检索在纯函数模块里，M2 的已知偏离） |
 | 附件 / 媒体处理 | `features/attachments/`（`model.ts` 引用写法与文案、`thumbnail.ts` 缩略图、`upload.ts` 两段上传、`queue.ts` 上传队列、`useAttachments.ts` 接线）；【v1.13 修订 · M4】**哈希与缩略图在浏览器（`thumbnail.ts`），`workers/media.worker.ts` 这个落点已删除** |
+| **MCP【M6 第三块落地】** | `features/mcp/`（`model.ts` 纯函数：权限 / 范围 / 有效期 / 状态 / 审计文案；`ui/McpSettingsPage.tsx` + `ui/CreateTokenDialog.tsx` + `ui/TokenAuditDialog.tsx`）。地址 = `origin + /mcp`，**不新增接口** |
 | 版本历史（前端）【M4】 | `features/versions/`（`model.ts` 行文案/行级 diff/恢复确认文案、`ui/VersionHistoryPanel.tsx`、`ui/VersionDiff.tsx`、`useVersions.ts`） |
 | 回收站（前端）【M4】 | `features/trash/`（`model.ts`、`ui/TrashPage.tsx`、`ui/PurgeConfirmDialog.tsx`、`useTrash.ts`）+ `data/db/trash.ts` |
 | 表格（前端）【M4】 | `features/tables/`（`model.ts` 全在纯函数里、`ui/TableEditor.tsx`、`ui/TableGrid.tsx`、`ui/GalleryView.tsx`、`ui/TableToolbar.tsx`、`ui/TableFilterBar.tsx`、`ui/TableColumnManager.tsx`、`ui/TableSizeBar.tsx`、`ui/useVirtualWindow.ts`） |
@@ -739,17 +742,22 @@ sequenceDiagram
 
 ---
 
-## 十一、MCP【依需求 17，实现为架构定】
+## 十一、MCP【依需求 17，实现为架构定；【v1.18】M6 第三块已全部落地】
 
-- 端点：`POST /mcp`（令牌在 `Authorization` 请求头）与 `POST /mcp/k/<令牌>`（仅当该令牌允许 URL 方式）；`GET /mcp` 返回 405（无 SSE）。
-- 协议：无状态 JSON-RPC，支持 `initialize`、`notifications/initialized`（返回 202）、`ping`、`tools/list`、`tools/call`。工具的 JSON Schema 在构建时生成静态常量，运行时不做 schema 编译。
-- 每次调用的处理顺序：令牌哈希查询（SHA-256 由 WebCrypto 计算）、过期与撤销检查、限速、权限位检查、范围过滤、执行、审计与幂等记录（与写入在同一个 batch 中）。`last_used_at` 最多每 10 分钟写一次。
+- 端点：`POST /mcp`（令牌在 `Authorization` 请求头）与 `POST /mcp/k/<令牌>`（仅当该令牌允许 URL 方式）；`GET /mcp` 返回 405（无 SSE）。**【M6 落地补记】`/mcp` 必须列进 `wrangler.jsonc` 的 `assets.run_worker_first`**（与 `/api` 同理），否则 Static Assets 的 SPA 回退会把 POST 吃掉、客户端拿到一份 HTML——**失败方式是 HTTP 200 + HTML**，极难与鉴权 / 协议问题区分。子应用挂在 `/mcp` 下，其内部路径是**相对**的（`/` 与 `/k/:token`，写成 `/mcp` 就是 `/mcp/mcp`）。该端点**刻意不挂** `csrfGuard`（不用 Cookie 鉴权，无 CSRF 面）、`requireSession`（令牌鉴权）、`configGuard`（**不需要 `AUTH_PEPPER`**：令牌是高熵随机串，SHA-256 足够，需求 §17.3）——于是它是**唯一不受「缺机密就 503」约束**的服务端路径，是有意的不是遗漏。
+- 协议：无状态 JSON-RPC，支持 `initialize`、`notifications/initialized`（返回 202）、`ping`、`tools/list`、`tools/call`。工具的 JSON Schema 在构建时生成静态常量，运行时不做 schema 编译。**【M6 落地补记】错误分两类**：**协议层**走 JSON-RPC error（`-32601` / `-32602` / `-32603` / `-32001` / `-32029`），**业务失败一律 `result.isError = true`**——权限不够、参数不对、条目太大都由 agent 读完提示自行纠正，塞进协议错误里它多半只会当成"服务坏了"反复重试。限速另带 HTTP 429。
+- 每次调用的处理顺序：令牌哈希查询（SHA-256 由 WebCrypto 计算）、过期与撤销检查、限速、权限位检查、范围过滤、执行、审计与幂等记录（与写入在同一个 batch 中）。`last_used_at` 最多每 10 分钟写一次。【M6 落地补记 · 见下方「限速的落地方式」】
 - 范围过滤作为每条查询的固定 SQL 片段：`enc_self = 0 AND in_enc_space = 0`（加密内容不可见，需求 6.13）；文件夹范围用 `folder_id IN (SELECT id FROM folders WHERE user_id = ? AND (id IN (SELECT value FROM json_each(?)) OR parent_id IN (SELECT value FROM json_each(?))))`（文件夹最多两层，需求 4.5）；`include_memos = 0` 时排除 Memo。
 - **不变式 I1**：MCP 可见集合 ＝ 令牌范围 ∩ 非隐私内容 ∩（Memo 需令牌勾选「包含 Memo」）∩ 非回收站，且**与隐私锁是否解锁无关**。
 - **不变式 I2**：**界面矩阵与 MCP 矩阵互不联动**——改隐私范围配置不动令牌，改令牌不动范围。
 - MCP 返回的**条目数不含隐私内容**（需求 17.4 的 `list_folders` 等计数同此口径）；**空间节点不出现在 MCP 的文件夹树里**。
-- 大条目处理完全按需求 17.4：区间读取与搜索片段用 `substr()` / `instr()`；追加用 `body = body || ?`；小节解析、`replace_section` 等只对 512 KB 以内的条目开放。【待核实】512 KB 小节解析在 10 ms 内的实际耗时，开发早期实测，必要时下调门槛。
+- 大条目处理完全按需求 17.4：区间读取与搜索片段用 `substr()` / `instr()`；追加用 `body = body || ?`；小节解析、`replace_section` 等只对 512 KB 以内的条目开放。**【M6 落地实测 · 原【待核实】已销】**：390,040 字节（13 万汉字）中文正文的 `read_item(section)`，**解析 + 整个 HTTP 往返 20 ms** → **门槛维持 512 KB 不下调**。门槛的实际作用是**防止正文被取回内存**（2 MB 上限的条目取回来会吃掉可观的 CPU 与内存），不是 CPU 已经不够用。**已知未实现**：`edit_item` 的 `replace_text` 对 >512 KB 条目走 SQL（`instr()` + `replace()` 同一条件校验唯一出现）那条路径——当前统一按"超门槛就拒绝并提示改用区间 / 游标"处理。
 - 追加类写入的条件重试（需求 17.4）在同一个请求内最多一次，保证单请求的 D1 语句数可控。
+- **令牌哈希必须哈希「整个令牌串」（含 `mn_` 前缀），不能只哈希裸随机字节**。会话令牌存的就是 `SHA-256(base64UrlDecode(token))`，而 MCP 令牌恰好也是 32 字节随机数走 base64url——**两边都哈希裸字节的话，一个会话令牌字符串就能被当成合法 MCP 令牌鉴权通过**，令牌的权限位、范围、审计全挂在它名下。带上前缀做域分隔后两类令牌落在不同哈希域，且前缀不符时**连哈希都不算**。
+- **限速的落地方式偏离需求原文**【已定·用户确认 2026-10-03】：需求 §17.3 写「优先使用 Workers Rate Limiting 绑定（免费版可用性待核实）；不可用时用 D1 中按分钟窗口的计数」，本项目**直接用 D1 计数**——加绑定要改部署配置、本地测试还要造假绑定，而**令牌查询那次读本来就要做**，计数与 `last_used_at` 能合并成同一条 `UPDATE`，常态下一次调用只多 1 行写。计数值落在 `api_tokens` 的 `rate_window_start` / `rate_call_count` 两列（**不建 `rate_counters` 表**），用**条件自增**（`WHERE rate_window_start = ?`）而非"读出来算好再写回去"——后者在并发下会让两个请求都读到 count=59、都判定通过、同一分钟多放行 2 次。**定稿那条「`last_used_at` 最多每 10 分钟写一次」的节流刻意不做**：选了 D1 计数后每次调用本来就要写令牌行，那条节流已无可省之物，留在热路径上只会让人以为它不生效；结果是 `last_used_at` 比需求更准，不是更松。限速**排在过期 / 撤销检查之后**是有意的：被撤销的令牌不该消耗额度，且"非法令牌"这条路一个字都不写。
+- **审计与幂等要和写入在同一个 `db.batch`**。为实现这一点，四个既有写函数（`saveItemBody` / `createItem` / `patchItemMeta` / `softDeleteItem`）各加了一个**可选**的尾随语句参数（默认空数组 = 行为与加参数之前完全一致，同步路径与批量端点都不传）。**幂等的四步**：读 `mcp_operations` 判三态 → 预检冲突则**一行都不写**（包括不写幂等行，否则 agent 用同一个 `operation_id` 重试会永远拿回那次冲突）→ 一个 batch（主写入 + 审计 + 幂等）→ 极小竞态（预检通过后被抢先）时补一个小 batch **删掉幂等行 + 记一条 `conflict` 审计**。**参数摘要不能用 `JSON.stringify(args, keys)`**：把键数组当 replacer 会**同时过滤嵌套对象的键**（`properties.tags` 被悄悄丢掉，两个不同请求算出同一摘要、幂等误判成重放），改为自己写的 `canonicalJson`（每层排序、丢 `undefined`、数组保序）。
+- **MCP 不改变内容的加密归属**：不提供置 `enc_self`、不提供改 `type`，`organize_item` 的移动目标不能是加密空间行。理由是 MCP 看不见加密内容，就同样不该有能力改变加密归属——否则一个被诱导的 agent 可以把笔记塞进加密空间，让用户在界面上再也找不到它。
+- **写前封存**：改动正文前先封一条 `reason = 'pre_mcp'` 的版本，**`keep = 1`**（这是需求 §17.4「用户可在版本历史中撤回」的前提——`keep = 0` 会被稀疏化删掉，承诺就不成立），同一条目 10 分钟内最多一次。该 reason 枚举值自 M4 起即存在，**v0.6.25 才第一次有生产调用方**。
 
 ---
 

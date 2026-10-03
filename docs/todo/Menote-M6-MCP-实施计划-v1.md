@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1 |
-| 文档状态 | 待执行（设计稿《Menote-M6-MCP-设计-v1》确认后开工） |
+| 文档版本 | v1.1 |
+| 文档状态 | 执行中（**批 1 已落地**，v0.6.23） |
 | 目的和适用范围 | 拆步、涉及文件与验收点。设计口径以那份专项设计为准，本文件只管怎么落地 |
 | 权威级别 | 临时规则（M6 第三块的执行清单） |
 | 最后更新日期 | 2026-10-03 |
@@ -13,6 +13,7 @@
 | 文档版本 | 应用版本 | 日期 | 修改摘要 | 修改模型ID |
 |---|---|---|---|---|
 | v1 | v0.6.22 | 2026-10-03 | 初稿。依据《M6 MCP 设计》v1 拆步，切 4 批 | MiniMax-M3.1-Flash-Preview |
+| v1.1 | v0.6.23 | 2026-10-03 | 回填进度：**批 1（步 1.1–1.9）已落地**，用例 +15。记三处实施中才浮现的事实：①**又抓到一个同类死代码**——`maintenance.ts` 里 `audit_log` 那段清理也是从未执行过的（表没建），而它**把时间列 `at` 写成了 `created_at`**，建表之后第一次真跑就抛 `no such column`；原先只诊断出 `mcp_idempotency` 表名那处，**这一处更严重**（每日维护会天天崩），是被新写的用例当场抓住的（步 1.8 因此新增一条"两段清理都真会执行"的用例，造过期行并断言真的被删）。②令牌服务按设计 §2.1 的落点表**拆成 `tokens.ts`（管理侧）与 `auth.ts`（调用侧，批 2）**——原稿把"生成/鉴权/限速/建/列/撤销/审计分页"都塞进一个 180 行的文件，实际落地装不下，拆开也对得上 `services/shares.ts`（管理侧）与 `services/share-public.ts`（访客侧）那条既有分法。③测试用的第二个账号名不能用中文：用户名 schema 只允许 `[A-Za-z0-9_.-]`，写「家人」注册直接被拒（首轮用例 14 条里 2 条因此挂掉） | MiniMax-M3.1-Flash-Preview |
 
 ---
 
@@ -47,18 +48,20 @@
 | 1.4 | 4 个接口的 valibot schema（名称、权限位掩码含「bit 0 恒 1」归一化、`folder_scope` 逐个校验归属与非加密空间、`rate_per_min` 1~600、有效期四档） | `packages/shared/src/mcp.ts`（新建） |
 | 1.5 | 令牌服务：建（含**上限 20** 有效令牌）、列、撤销、审计分页；创建时返回完整令牌一次 | `apps/worker/src/services/mcp/tokens.ts` |
 | 1.6 | 4 个会话接口（`requireSession` + CSRF 自动生效，因为挂在 `/api` 下） | `apps/worker/src/routes/mcp-tokens.ts`（新建） |
-| 1.7 | 修 `mcp_idempotency` → `mcp_operations`（那段清理至今是空转） | `apps/worker/src/jobs/maintenance.ts` |
-| 1.8 | 用例：CRUD；上限 20（21st 返回 409）；撤销 / 过期立即生效；`folder_scope` 越权被拒；**哈希域隔离——拿会话令牌字符串打 MCP 必须 401**；创建响应含完整令牌、列表响应不含 | `apps/worker/test/mcp-tokens.test.ts`（新建） |
+| 1.7 | 修 `maintenance.ts` 两段死代码：`mcp_idempotency` → `mcp_operations`；`audit_log` 的 `created_at` → `at` | `apps/worker/src/jobs/maintenance.ts` |
+| 1.8 | 用例：CRUD；上限 20（21st 返回 409）；撤销 / 过期立即生效；`folder_scope` 越权与加密空间被拒；**哈希域隔离**；创建响应含完整令牌、列表响应不含；审计同毫秒分页不漏；**两段清理真会执行** | `apps/worker/test/mcp-tokens.test.ts`、`apps/worker/test/jobs.test.ts`（新建 / 改） |
 | 1.9 | 入口装配加两行 `app.route` | `apps/worker/src/index.ts` |
 
-**批 1 验收点**
+**批 1 验收点**（✅ 2026-10-03 全达成）
 
-- [ ] `POST /api/mcp/tokens` 建出令牌，响应里有 `mn_` 开头的完整串；`GET` 同一令牌只有 `token_prefix`
-- [ ] 第 21 个有效令牌被拒（409）
-- [ ] 撤销后立刻失效；`expires_at` 到点后鉴权第一步就拒
-- [ ] 拿一个真实会话令牌当 MCP 令牌用 → 401（这条是防越权的关键用例，不能省）
-- [ ] `folder_scope` 填别人家文件夹 / 加密空间行 → 422
-- [ ] `pnpm test` 全绿（worker 基线 246 条，本批只增不减）
+- [x] `POST /api/mcp/tokens` 建出令牌，响应里有 `mn_` 开头的完整串；`GET` 同一令牌只有 `token_prefix`
+- [x] 第 21 个有效令牌被拒（409）；撤销一个后可再建
+- [x] 撤销立即生效且幂等；过期令牌**不占额度**（否则攒一堆就再也建不了新的）
+- [x] 拿一个真实会话令牌当 MCP 令牌用 → 连哈希都不算（`hashMcpToken` 返回 null）
+- [x] `folder_scope` 填别人家文件夹 / 加密空间行 → 422
+- [x] 审计分页在同一毫秒落两行时不漏行
+- [x] 每日维护的两段清理**真会执行**（这一步抓出 `audit_log` 的列名 bug）
+- [x] `pnpm test` 全绿：worker 246 → **261**（+15），web 1219 / shared 101 / mdcore 65 无回归；typecheck 4 包 0 error；lint 0 error + 1 条既有 warning
 
 ---
 

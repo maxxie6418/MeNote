@@ -56,7 +56,8 @@
 |---|---|---|
 | `apps/worker/src/db/migrations/0006_mcp.ts` | 三张表 + 索引（语句必须单行、幂等） | 40 |
 | `apps/worker/src/db/mcp-tables.ts`（新） | MCP 专用 SQL 常量 | 90 |
-| `apps/worker/src/services/mcp/tokens.ts` | 令牌生成 / 鉴权解析 / 撤销 / 限速 / `last_used_at` | 180 |
+| `apps/worker/src/services/mcp/tokens.ts` | **管理侧**（批 1 已落地）：令牌生成与哈希、建（含上限 20）、列、撤销、审计分页 | 250 |
+| `apps/worker/src/services/mcp/auth.ts` | **调用侧**（批 2）：鉴权解析、限速窗口、`last_used_at`（与"管理令牌"是两条独立演进线，故拆开） | 180 |
 | `apps/worker/src/services/mcp/scope.ts` | 可见性不变式 I1、范围 SQL 片段、目标文件夹是否在范围内 | 120 |
 | `apps/worker/src/services/mcp/jsonrpc.ts` | JSON-RPC 分发、错误码、批量与通知 | 140 |
 | `apps/worker/src/services/mcp/registry.ts` | 11 个工具的注册表：名称 / 描述 / JSON Schema 静态常量 / 权限位 | 260 |

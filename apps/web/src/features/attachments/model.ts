@@ -69,6 +69,65 @@ export const UNAVAILABLE_NOTICE = "附件不可用";
 /** 缩略图不可用但原图在（界面稿 §7.3） */
 export const THUMB_UNAVAILABLE_TITLE = "缩略图不可用，点击查看原图";
 
+// ——————————————————————————— 移除引用（M6 批 2b · M10-新） ———————————————————————————
+
+/** alt 为空时的显示名 */
+export const UNNAMED_ATTACHMENT = "未命名附件";
+
+/**
+ * 弹窗里显示的名字：alt（`![文件名]`）优先。
+ *
+ * `extractAttachmentRefsWithNames` 在 alt 为空时给的是英文 `attachment`——那是**导出文件名**
+ * 的兜底（备份要跨设备可用，不能是中文），界面这一层才翻成中文，两边各按各的用途走。
+ */
+export function attachmentRefLabel(filename: string): string {
+  return filename === "attachment" ? UNNAMED_ATTACHMENT : filename;
+}
+
+export interface AttachmentRefRemoval {
+  /** 交给 `EditorHandle.replace(marker, "")` 的那一段原文（可能带上一个换行） */
+  marker: string;
+  /** 移除后的正文：弹窗据此就地少一行，不必等编辑器回灌 */
+  body: string;
+}
+
+/**
+ * 算「移除这一条引用」要动哪一段。
+ *
+ * **为什么按整行删**：本项目写进正文的引用（`imageSnippet` / `fileSnippet`）都是独占一行的，
+ * 只删 `![…](…)` 会原地留下一行空的。反过来手写的一行里往往还有别的字（`- 见图 ![…](…)`），
+ * 那种只删引用那一段——把整行删掉等于替用户删掉他写的话。
+ *
+ * 同一个 sha 在正文里出现多次时取**第一次**：列表本来就按 sha 去重，逐个问用户先删哪个
+ * 是另一件事（M6 批 2c 的附件管理页再谈）。
+ */
+export function planAttachmentRefRemoval(body: string, sha256: string): AttachmentRefRemoval | null {
+  const url = `/api/attachments/h/${sha256}`;
+  // sha 来自 `extractAttachmentRefs`（只可能是十六进制），拼进正则不必再转义
+  const token = new RegExp(`!?\\[[^\\]]*\\]\\(${url}\\)|${url}`, "i").exec(body);
+  if (!token) return null;
+  const at = token.index;
+  const lineStart = body.lastIndexOf("\n", at) + 1;
+  const breakAt = body.indexOf("\n", at);
+  const lineEnd = breakAt === -1 ? body.length : breakAt;
+  // 这一行除引用外还剩什么（列表符号不算内容）
+  const rest = (body.slice(lineStart, at) + body.slice(at + token[0].length, lineEnd))
+    .replace(/^(?:[-*+]|\d+[.)])\s*/, "")
+    .trim();
+
+  if (rest !== "") {
+    return {
+      marker: token[0],
+      body: body.slice(0, at) + body.slice(at + token[0].length),
+    };
+  }
+
+  // 独占一行：连同一个换行一起删（末行没有尾随换行时就带上它前面那个），不留空行
+  const from = breakAt === -1 && lineStart > 0 ? lineStart - 1 : lineStart;
+  const to = breakAt === -1 ? lineEnd : breakAt + 1;
+  return { marker: body.slice(from, to), body: body.slice(0, from) + body.slice(to) };
+}
+
 // ——————————————————————————— 上传状态与文案 ———————————————————————————
 
 export type UploadPhase = "hashing" | "thumbnail" | "uploading" | "finalizing" | "done" | "failed" | "queued";

@@ -9,12 +9,13 @@ import { type EditorMode, isProductEditorMode, normalizeEditorModes } from "@men
 import { EmptyDocPanel } from "../../../app/workarea/EmptyDocPanel";
 import { Button } from "../../../app/ui/Controls";
 import { Modal } from "../../../app/ui/Modal";
-import { DropdownMenu, type MenuItemSpec } from "../../../app/ui/Menu";
+import { DropdownMenu } from "../../../app/ui/Menu";
 import { LockedDocPanel } from "../../privacy/ui/LockedDocPanel";
 import type { LocalItem } from "../../../data/db";
 import { initialEditorMode, writeLastEditorMode } from "../editor-mode";
 import type { NoteEditorSnapshot } from "../model";
 import { DocStatusBar } from "./DocStatusBar";
+import { buildMoreMenuItems } from "./moreMenuItems";
 import { TitleInput } from "./TitleInput";
 import { TableDegradeNotice } from "../../tables/ui/TableDegradeNotice";
 import { useTableDoc } from "../../tables/useTableDoc";
@@ -127,6 +128,17 @@ export interface NoteWorkspaceProps {
    */
   onExportMarkdown?: (includeAttachments: boolean) => void;
   /**
+   * 移除正文里的附件引用（M10-新 · M6 批 2b）：**只删引用，不删文件**。
+   *
+   * 组件只报事件并把**当前正文**一起交上去（不是打开时的快照——用户可能刚传完图还没存），
+   * 弹窗与真正的改正文都在宿主那一侧（照 `onShare` / `onExportMarkdown` 的分工）。
+   *
+   * **辅助入口（选中附件后的常驻小工具条）没做**：`EditorHandle` 只有 `read` / `insert` /
+   * `replace` / `applyFormat`，**没有选区上报**，宿主无从知道"选中了哪张图"；为此给
+   * CodeMirror 加一套选区 → 图片的映射代价大、收益小，留待真有需求时再补。
+   */
+  onRemoveAttachmentRef?: (body: string) => void;
+  /**
    * 分享（M14）：组件只报事件，创建 / 管理在 `features/shares` 的弹窗里。
    * **隐私边界**（M14-01 定稿）：单篇加密与加密空间内的内容不可分享——入口置灰并说明原因。
    */
@@ -172,6 +184,7 @@ export function NoteWorkspace({
   onOpenVersions,
   onDegrade,
   onExportMarkdown,
+  onRemoveAttachmentRef,
   onShare,
   shared = false,
   versionsDisabledReason,
@@ -376,112 +389,21 @@ export function NoteWorkspace({
                 更多
               </span>
             }
-            items={[
-              {
-                id: "encrypt",
-                label: "加密此篇",
-                icon: "lock",
-                disabled: !encryption.enabled || encryption.encrypted,
-                title: !encryption.enabled
-                  ? "先在「设置 › 隐私锁」启用隐私锁"
-                  : encryption.encrypted
-                    ? "这一篇已经加密"
-                    : undefined,
-                onSelect: () => encryption.onToggle(true),
-              },
-              {
-                id: "decrypt",
-                label: "取消加密",
-                icon: "lock",
-                disabled: !encryption.encrypted || !encryption.unlocked,
-                title: !encryption.encrypted
-                  ? "这一篇没有加密"
-                  : !encryption.unlocked
-                    ? "先解锁这一篇，才能取消加密"
-                    : undefined,
-                onSelect: () => encryption.onToggle(false),
-              },
-              {
-                id: "lock-item",
-                label: "锁上此篇",
-                icon: "lock",
-                disabled: !encryption.encrypted || !encryption.unlocked,
-                title: encryption.unlocked ? undefined : "这一篇当前是锁着的",
-                onSelect: () => encryption.onLock(),
-              },
-              {
-                id: "lock-all",
-                label: "锁上全部单篇",
-                icon: "lock",
-                disabled: encryption.unlockedCount === 0,
-                title: encryption.unlockedCount === 0 ? "当前没有已解密的单篇" : undefined,
-                onSelect: () => encryption.onLockAll(),
-              },
-              // 单篇导出（M15）：锁定态不可用并说明原因（与切换条同一口径）
-              ...(onExportMarkdown
-                ? ([
-                    {
-                      id: "export-md",
-                      label: "导出 Markdown",
-                      icon: "note" as const,
-                      disabled: bodyLocked,
-                      title: bodyLocked ? "解锁后才能导出这一篇" : undefined,
-                      onSelect: () => onExportMarkdown(false),
-                    },
-                    {
-                      id: "export-md-zip",
-                      label: "导出 Markdown（含附件）",
-                      icon: "image" as const,
-                      disabled: bodyLocked,
-                      title: bodyLocked ? "解锁后才能导出这一篇" : undefined,
-                      onSelect: () => onExportMarkdown(true),
-                    },
-                  ] satisfies MenuItemSpec[])
-                : []),
-              // 分享（M14）：隐私条目不可分享（创建接口也有同语句硬校验，双保险）
-              ...(onShare
-                ? ([
-                    {
-                      id: "share",
-                      label: shared ? "分享（生效中）" : "分享",
-                      icon: "plus" as const,
-                      disabled: bodyLocked || item.enc_self === 1 || item.in_enc_space === 1,
-                      title: bodyLocked
-                        ? "解锁后才能分享"
-                        : item.enc_self === 1 || item.in_enc_space === 1
-                          ? "单篇加密与加密空间内的内容不能分享"
-                          : undefined,
-                      onSelect: () => onShare(),
-                    },
-                  ] satisfies MenuItemSpec[])
-                : []),
-              // 版本历史（M4-11）：锁定态整体不可用，并说明原因
-              ...(onOpenVersions
-                ? ([
-                    {
-                      id: "versions",
-                      label: "版本历史",
-                      icon: "clock" as const,
-                      disabled: versionsDisabledReason !== undefined,
-                      title: versionsDisabledReason,
-                      onSelect: onOpenVersions,
-                    },
-                  ] satisfies MenuItemSpec[])
-                : []),
-              // 删除（M4-12）：破坏性操作 → 危险色；二次确认由工作区外层做
-              // （同一套确认逻辑还要给列表行用，不在这里各写一份）
-              ...(onDelete
-                ? ([
-                    {
-                      id: "delete",
-                      label: "删除",
-                      icon: "logout" as const,
-                      danger: true,
-                      onSelect: onDelete,
-                    },
-                  ] satisfies MenuItemSpec[])
-                : []),
-            ]}
+            items={buildMoreMenuItems({
+              encryption,
+              body: previewSource,
+              bodyLocked,
+              isTable,
+              bodyEditable: shownMode === "edit" || shownMode === "live",
+              privacyBlocked: item.enc_self === 1 || item.in_enc_space === 1,
+              shared,
+              onExportMarkdown,
+              onRemoveAttachmentRef,
+              onShare,
+              onOpenVersions,
+              versionsDisabledReason,
+              onDelete,
+            })}
           />
         ) : null}
       </div>

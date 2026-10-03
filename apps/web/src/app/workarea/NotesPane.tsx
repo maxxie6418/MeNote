@@ -27,6 +27,7 @@ import { VersionHistoryPanel } from "../../features/versions/ui/VersionHistoryPa
 import { useVersions } from "../../features/versions/useVersions";
 import { useAttachments } from "../../features/attachments/useAttachments";
 import { LEFTOVER_HINT } from "../../features/attachments/model";
+import { RemoveAttachmentRefDialog } from "../../features/attachments/ui/RemoveAttachmentRefDialog";
 import type { EditorHandle } from "../editor/Editor";
 import { TwoPane } from "./TwoPane";
 
@@ -90,6 +91,12 @@ export function NotesPane({
   const versions = useVersions((notice) => onToast(notice.message, notice.tone));
   /** 编辑器句柄（M4-10：附件占位与最终片段都要改正文） */
   const [editorHandle, setEditorHandle] = useState<EditorHandle | null>(null);
+  /**
+   * 「移除附件引用」弹窗（M10-新 · M6 批 2b）：存的是**打开那一刻的正文**——
+   * 菜单项交上来的是编辑器的当前文本，比 `workspace.initialBody`（打开时 + 上次保存后）新。
+   * 真正的删改走 `editorHandle.replace`：视图、光标与保存链路都照常，弹窗只管列与收指令。
+   */
+  const [removeRefBody, setRemoveRefBody] = useState<string | null>(null);
   /** 分享弹窗（M14）：打开时针对当前选中条目 */
   const [shareOpen, setShareOpen] = useState(false);
   /** 有生效中分享的条目 id（公开标记的数据源；弹窗开关与撤销后刷新） */
@@ -421,6 +428,8 @@ export function NotesPane({
             if (workspace.selectedId) setShareOpen(true);
           }}
           shared={workspace.selectedId !== null && sharedItemIds.has(workspace.selectedId)}
+          // 移除附件引用（M10-新 · M6 批 2b）：只删正文那一条引用，**不删文件**（也不动本地元数据行）
+          onRemoveAttachmentRef={(body) => setRemoveRefBody(body)}
         />
         )
       }
@@ -496,6 +505,19 @@ export function NotesPane({
             setShareOpen(false);
             refreshSharedItems();
           }}
+        />
+      ) : null}
+
+      {/*
+        移除附件引用（M10-新 · M6 批 2b）：正文改在编辑器里做（`replace`），
+        弹窗只负责列出这一篇当前引用的附件与收下"删哪一段"的指令。
+        句柄不在（编辑器还没挂上）时不弹——那时无处落这一段，按钮点了等于没反应。
+      */}
+      {removeRefBody !== null && editorHandle ? (
+        <RemoveAttachmentRefDialog
+          body={removeRefBody}
+          onClose={() => setRemoveRefBody(null)}
+          onRemove={(marker) => editorHandle.replace(marker, "")}
         />
       ) : null}
     </>

@@ -14,6 +14,7 @@
  * 远在 D1 的 45 条以内；客户端按每批 10 条分请求。
  */
 import { ATTACHMENT_ORPHAN_RETENTION_DAYS, DAY_MS, PERMANENT_DELETE_BATCH } from "@menote/shared";
+import { SQL_REVOKE_ITEM_SHARES } from "../db/tables";
 import { DomainError } from "../errors";
 
 export interface TrashResult {
@@ -181,6 +182,11 @@ export async function restoreFolder(
  *
  * 已经在回收站里的条目**不再重复写**：否则每点一次删除都会推进 `sync_seq`，
  * 让别的设备白拉一轮。
+ *
+ * **连带撤销分享**（M6 第一批）：需求 §16.1 要求「从回收站恢复后分享不会自动恢复」。
+ * 访客侧只做实时检查、不记得曾经死过，所以恢复条目会让链接复活——这里在软删的同一次
+ * batch 里把分享行真撤销，正确性不再依赖客户端那一把（见 `SQL_REVOKE_ITEM_SHARES` 的注释）。
+ * 已在回收站时前两条语句都不生效，但撤销语句幂等（`revoked_at IS NULL`），重跑无副作用。
  */
 export async function softDeleteItem(
   db: D1Database,
@@ -202,6 +208,8 @@ export async function softDeleteItem(
          WHERE id = ? AND EXISTS (SELECT 1 FROM items WHERE id = ? AND user_id = ? AND deleted_at = ?)`,
       )
       .bind(userId, itemId, userId, now),
+    // 与前两条同一次 batch：软删与撤销要么都成、要么都不成，中间不留「已删但链接还活」的窗口
+    db.prepare(SQL_REVOKE_ITEM_SHARES).bind(now, itemId, userId),
   ]);
 
   const row = await db

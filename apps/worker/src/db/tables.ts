@@ -434,6 +434,22 @@ export const SQL_INSERT_SHARE = `INSERT INTO shares (id, user_id, kind, item_id,
 SELECT ?, ?, 'item', ?, NULL, ?, ?, ?, ?, ?, NULL
  FROM items WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND enc_self = 0 AND in_enc_space = 0`;
 
+/**
+ * 条目进入「不可分享」状态时，**连带撤销它的分享**（M6 第一批；用户 2026-10-03 拍板）。
+ *
+ * 为什么服务端要做：访客侧只做**实时检查**（撤销 / 过期 / 已删 / 已加密），不记得这条分享
+ * 曾经因为什么死过一次——所以条目一旦从回收站恢复、或取消单篇加密，链接就会**复活**，
+ * 与需求 §16.1「从回收站恢复后分享不会自动恢复，需要重新创建」冲突。真正的兜底曾落在
+ * 客户端 `revokeItemShares` 的行清理上，但那段每个 revoke 都被 try/catch 吞掉，且**在另一台
+ * 设备上恢复条目时根本不会跑**。这里把它变成服务端的一次写入，正确性不再依赖客户端。
+ *
+ * `revoked_at IS NULL` 保证幂等：已撤销的不重复写、不推进任何时间戳。
+ * **不推 `sync_seq`**：撤销是服务端行的状态、所有设备共享同一份 `shares`，下次打开
+ * 「我的分享」自然看到最新值——不像条目正文那样需要跨设备同步。
+ */
+export const SQL_REVOKE_ITEM_SHARES =
+  "UPDATE shares SET revoked_at = ? WHERE item_id = ? AND user_id = ? AND revoked_at IS NULL";
+
 /** 实时有效性检查的数据源：分享行 + 条目侧的删除与隐私标记（LEFT JOIN，缺行也要能判失效） */
 export const SQL_SELECT_SHARE_FULL = `SELECT s.id, s.user_id, s.kind, s.item_id, s.title, s.pw_salt, s.pw_kdf, s.pw_verifier, s.expires_at, s.created_at, s.revoked_at, i.id AS item_row_id, i.title AS item_title, i.type AS item_type, i.deleted_at AS item_deleted_at, i.enc_self AS item_enc_self, i.in_enc_space AS item_in_enc_space
  FROM shares s LEFT JOIN items i ON i.id = s.item_id WHERE s.id = ?`;

@@ -12,7 +12,7 @@
 import { base64UrlEncode, newUlid, sha256Hex, type ShareRecord } from "@menote/shared";
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { SQL_UPSERT_ITEM_BODY } from "../src/db/tables";
+import { SQL_UPSERT_ITEM_BODY, SQL_UPSERT_USER_CRYPTO } from "../src/db/tables";
 import { resetShareUnlockLimitForTests } from "../src/services/share-public";
 import { freshDatabase } from "./helpers";
 
@@ -449,5 +449,157 @@ describe("分享子域（实例设置，仅 owner）", () => {
       body: JSON.stringify({ origin: "not a url" }),
     });
     expect(res.status).toBe(422);
+  });
+});
+
+/**
+ * 连带撤销分享（M6 第一批；用户 2026-10-03 拍板）。
+ *
+ * **为什么要有这组用例**：原先那条「条目态变化让链接失效」是**直接改库**模拟删除/加密的
+ * （`UPDATE items SET deleted_at = 9`），**根本没走 `softDeleteItem` / `patchItemMeta`**，
+ * 于是「软删时并没有真的撤销分享」这件事被完全绕过去了——访客侧只做实时检查、不记得曾经
+ * 死过，所以条目一恢复链接就复活，与需求 §16.1 冲突。
+ *
+ * 这组一律**走真实端点**（`DELETE /api/items/:id` / `POST /api/items/:id/restore` /
+ * `PATCH /api/items/:id/meta`），才测得到真正的那条路径。
+ */
+describe("连带撤销分享：进回收站 / 加隐私之后，恢复不复活链接", () => {
+  /** 软删（走路由 → `softDeleteItem`） */
+  function softDelete(cookie: string, itemId: string): Promise<Response> {
+    return SELF.fetch(`${ORIGIN}/api/items/${itemId}`, {
+      method: "DELETE",
+      headers: headers(cookie),
+    });
+  }
+
+  /** 从回收站恢复（走路由 → `restoreItem`） */
+  function restore(cookie: string, itemId: string): Promise<Response> {
+    return SELF.fetch(`${ORIGIN}/api/items/${itemId}/restore`, {
+      method: "POST",
+      headers: headers(cookie),
+      body: "{}",
+    });
+  }
+
+  function metaPatch(
+    cookie: string,
+    itemId: string,
+    baseMetaRev: number,
+    patch: Record<string, unknown>,
+  ): Promise<Response> {
+    return SELF.fetch(`${ORIGIN}/api/items/${itemId}/meta`, {
+      method: "PATCH",
+      headers: headers(cookie),
+      body: JSON.stringify({ base_meta_rev: baseMetaRev, ...patch }),
+    });
+  }
+
+  async function visitorStatus(sid: string): Promise<string> {
+    const body = (await (await SELF.fetch(`${ORIGIN}/api/public/shares/${sid}`)).json()) as {
+      status: string;
+    };
+    return body.status;
+  }
+
+  async function revokedAt(sid: string): Promise<number | null> {
+    const row = await env.DB.prepare("SELECT revoked_at FROM shares WHERE id = ?")
+      .bind(sid)
+      .first<{ revoked_at: number | null }>();
+    return row?.revoked_at ?? null;
+  }
+
+  /** 给账号补一条 `user_crypto`，让「加单篇加密」这条路走得通（服务端只查存在性） */
+  async function enablePrivacyLock(userId: string): Promise<void> {
+    await env.DB.prepare(SQL_UPSERT_USER_CRYPTO)
+      .bind(
+        userId,
+        "PBKDF2-SHA-256",
+        100_000,
+        new Uint8Array(16),
+        "v",
+        new Uint8Array(8),
+        new Uint8Array(8),
+        1,
+        1,
+      )
+      .run();
+  }
+
+  it("软删 → 恢复：链接仍是失效页（本批的核心断言）", async () => {
+    const a = await createShareForItem("revoke-trash", 21, newUlid());
+    expect(await visitorStatus(a.record.id)).toBe("ok");
+
+    expect((await softDelete(a.cookie, a.itemId)).status).toBe(200);
+    expect(await visitorStatus(a.record.id)).toBe("invalid");
+
+    // 关键一步：恢复之后**不能再活过来**
+    expect((await restore(a.cookie, a.itemId)).status).toBe(200);
+    expect(await visitorStatus(a.record.id)).toBe("invalid");
+  });
+
+  it("撤销是真的写进行（不是只靠实时检查糊过去）", async () => {
+    const a = await createShareForItem("revoke-row", 22, newUlid());
+    expect(await revokedAt(a.record.id)).toBeNull();
+
+    await softDelete(a.cookie, a.itemId);
+    const at = await revokedAt(a.record.id);
+    expect(at).not.toBeNull();
+
+    // 幂等：重复软删不报错，也不二次推进撤销时间
+    const first = at as number;
+    expect((await softDelete(a.cookie, a.itemId)).status).toBe(200);
+    expect(await revokedAt(a.record.id)).toBe(first);
+  });
+
+  it("「我的分享」里不再出现它（列表只给未撤销的）", async () => {
+    const a = await createShareForItem("revoke-list", 23, newUlid());
+    await softDelete(a.cookie, a.itemId);
+    const listed = (await (await SELF.fetch(`${ORIGIN}/api/shares`, { headers: headers(a.cookie) })).json()) as {
+      shares: ShareRecord[];
+    };
+    expect(listed.shares.some((s) => s.id === a.record.id)).toBe(false);
+  });
+
+  it("加单篇加密 → 取消加密：链接同样不复活（与回收站同一口径）", async () => {
+    const a = await createShareForItem("revoke-enc", 24, newUlid());
+    const me = (await (await SELF.fetch(`${ORIGIN}/api/auth/me`, { headers: { Cookie: a.cookie } })).json()) as {
+      id: string;
+    };
+    await enablePrivacyLock(me.id);
+
+    expect((await metaPatch(a.cookie, a.itemId, 1, { enc_self: 1 })).status).toBe(200);
+    expect(await visitorStatus(a.record.id)).toBe("invalid");
+    expect(await revokedAt(a.record.id)).not.toBeNull();
+
+    // 解除加密：条目恢复可分享，但分享行已被真撤销，链接不回来
+    expect((await metaPatch(a.cookie, a.itemId, 2, { enc_self: 0 })).status).toBe(200);
+    expect(await visitorStatus(a.record.id)).toBe("invalid");
+  });
+
+  it("A 的软删不会撤销 B 的分享（跨租户不误伤）", async () => {
+    const a = await createShareForItem("tenant-a", 25, newUlid());
+    await openRegistration(a.cookie);
+    const b = await createShareForItem("tenant-b", 26, newUlid());
+
+    await softDelete(a.cookie, a.itemId);
+    expect(await visitorStatus(a.record.id)).toBe("invalid");
+    // B 的条目没被动过，分享照常有效
+    expect(await visitorStatus(b.record.id)).toBe("ok");
+    expect(await revokedAt(b.record.id)).toBeNull();
+  });
+
+  it("撤销分享不碰条目、附件与版本历史（只动 shares 一张表）", async () => {
+    const a = await createShareForItem("revoke-scope", 27, newUlid());
+    await softDelete(a.cookie, a.itemId);
+
+    const item = await env.DB.prepare("SELECT deleted_at FROM items WHERE id = ?")
+      .bind(a.itemId)
+      .first<{ deleted_at: number | null }>();
+    expect(item?.deleted_at).not.toBeNull(); // 条目本身照旧进回收站，没有被连带处理
+
+    const body = await env.DB.prepare("SELECT body FROM item_bodies WHERE item_id = ?")
+      .bind(a.itemId)
+      .first<{ body: string }>();
+    expect(body?.body).toContain("正文"); // 正文原样保留
   });
 });

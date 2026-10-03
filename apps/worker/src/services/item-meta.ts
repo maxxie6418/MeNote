@@ -12,6 +12,7 @@
 import type { ItemMetaPatch } from "@menote/shared";
 import {
   SQL_BUMP_SYNC_SEQ_ON_ITEM_META,
+  SQL_REVOKE_ITEM_SHARES,
   SQL_SELECT_FOLDER_BY_ID,
   SQL_SELECT_ITEM_META_BASE,
   SQL_SELECT_USER_CRYPTO,
@@ -159,12 +160,27 @@ export async function patchItemMeta(
     return { id, meta_rev: patch.base_meta_rev };
   }
 
-  const results = await db.batch([
+  /**
+   * 隐私标记**置位**时连带撤销分享（M6 第一批；用户 2026-10-03 拍板，与回收站同一口径）。
+   *
+   * 为什么加密也要做：访客侧只做实时检查（`isShareLive` 认 `enc_self` / `in_enc_space`），
+   * 不记得这条分享曾经因为加密死过一次——**取消加密后链接会同样复活**。需求 §16.1 只对回收站
+   * 写了「不会自动恢复」，加密这条没写；按同一口径堵上，两处行为一致。
+   * 只在**置位**（=1）时撤：解除加密不该撤任何东西。
+   */
+  const turningPrivate = patch.enc_self === 1 || patch.in_enc_space === 1;
+
+  const statements = [
     db
       .prepare(buildUpdateItemMeta(fields))
       .bind(...values, now, userId, id, userId, patch.base_meta_rev),
     db.prepare(SQL_BUMP_SYNC_SEQ_ON_ITEM_META).bind(userId, id, patch.base_meta_rev + 1, now),
-  ]);
+  ];
+  if (turningPrivate) {
+    // 与元数据更新同一次 batch：不会出现「已加密但分享还活着」的窗口
+    statements.push(db.prepare(SQL_REVOKE_ITEM_SHARES).bind(now, id, userId));
+  }
+  const results = await db.batch(statements);
 
   if ((results[0]?.meta.changes ?? 0) !== 1) {
     const after = await db

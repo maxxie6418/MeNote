@@ -15,17 +15,21 @@ import { JOB_IDLE_SEAL_BATCH, JOB_R2_GC_BATCH, JOB_SWEEP_BATCH } from "@menote/s
 import { SQL_UPSERT_APP_META } from "../db/tables";
 import { getRegistrationState, setRegistrationState } from "../services/settings";
 import { runMaintenanceStep, type MaintenanceResult } from "../jobs/maintenance";
+import { materializeSnapshot, type SnapshotOutcome } from "../jobs/snapshot";
 import { sealIdleVersions } from "./versions";
 
 export const KEY_GC_CURSOR = "job:gc:cursor";
+
+/** ③ 槽每轮最多给几个用户物化（家里 3–5 人时够用；防的是"多账号把一轮撑爆"） */
+const SNAPSHOT_USER_LIMIT = 5;
 
 export interface ScheduledSummary {
   /** ① 注册开关：本来开着但已过期 → 写回关闭 */
   registrationClosed: boolean;
   /** ② R2 GC：本轮删掉的对象数与队列剩余 */
   gcDeleted: number;
-  /** ③ 快照队列【接口位】*/
-  snapshot: { skipped: string } | { queued: number };
+  /** ③ 快照物化（M7 第 4 项 批 2 落地，不再是接口位） */
+  snapshot: SnapshotOutcome | { skipped: string };
   /** ④ idle 封存兜底【接口位】*/
   idleSeal: { skipped: string } | { sealed: number };
   /** ⑤ 外部备份【接口位】*/
@@ -50,7 +54,7 @@ export async function runScheduled(env: ScheduledEnv, now: number = Date.now()):
   const summary: ScheduledSummary = {
     registrationClosed: false,
     gcDeleted: 0,
-    snapshot: { skipped: "快照队列属 M5/M6（接口位已留）" },
+    snapshot: { skipped: "尚未接线" },
     idleSeal: { skipped: "idle 封存依赖版本服务与 R2（M4-5）" },
     backup: { skipped: "外部备份属 M5（接口位已留）" },
     maintenance: { step: null, detail: {}, skipped: true },
@@ -79,8 +83,13 @@ export async function runScheduled(env: ScheduledEnv, now: number = Date.now()):
     console.error("cron: r2 gc failed", error);
   }
 
-  // ③ 快照队列【接口位】：快照文件属 M5/M6，M4 只留位置
-  summary.snapshot = { skipped: "快照队列属 M5/M6（接口位已留）" };
+  // ③ 快照物化（M7 第 4 项 批 2）：D1 → R2 `snap/{uid}/`，增量按游标推进
+  try {
+    summary.snapshot = await runSnapshotSlot(env, now);
+  } catch (error) {
+    console.error("cron: snapshot failed", error);
+    summary.snapshot = { skipped: "本轮快照物化失败，下轮重试" };
+  }
 
   // ④ idle 封存兜底：客户端"关了标签页就走了"的那一批，由服务端补封（每轮 3 条）
   try {
@@ -105,6 +114,36 @@ export async function runScheduled(env: ScheduledEnv, now: number = Date.now()):
   }
 
   return summary;
+}
+
+/**
+ * ③ 槽的实现：**只给"至少有一个启用中的目标"的用户物化快照**。
+ *
+ * 没有目标却照样物化 = 白写 R2（一天 96 轮 × 每轮全量，那是纯浪费）。
+ * `limit` 是**每轮最多几个用户**——免费版一次 invocation 的子请求有限，
+ * 家里 3–5 个人时它从来不生效，但它是防止"哪天多了一批账号把一轮撑爆"的那道闸。
+ */
+async function runSnapshotSlot(env: ScheduledEnv, now: number): Promise<SnapshotOutcome | { skipped: string }> {
+  if (!env.ATTACHMENTS) return { skipped: "未绑定对象存储（ATTACHMENTS），快照无处可放" };
+
+  const targets = await env.DB.prepare(
+    "SELECT DISTINCT user_id FROM user_backup_targets WHERE enabled = 1 ORDER BY user_id LIMIT ?",
+  )
+    .bind(SNAPSHOT_USER_LIMIT)
+    .all<{ user_id: string }>();
+  const userIds = (targets.results ?? []).map((row) => row.user_id);
+  if (userIds.length === 0) return { skipped: "没有启用中的备份目标，本轮无需物化" };
+
+  const merged: SnapshotOutcome = { files: 0, items: 0, encrypted: 0, deferred: 0, cursorSeq: 0 };
+  for (const userId of userIds) {
+    const result = await materializeSnapshot(env, userId, now);
+    if (result.skipped !== undefined) continue;
+    merged.files += result.files;
+    merged.items += result.items;
+    merged.encrypted += result.encrypted;
+    merged.deferred += result.deferred;
+  }
+  return merged;
 }
 
 /**

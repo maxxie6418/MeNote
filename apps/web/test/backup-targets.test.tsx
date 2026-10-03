@@ -20,7 +20,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   BackupTarget,
   BackupTestResult,
-  CreateBackupTargetInput,
   UpdateBackupTargetInput,
 } from "@menote/shared";
 import { BackupTargetsCard } from "../src/features/backup/ui/BackupTargetsCard";

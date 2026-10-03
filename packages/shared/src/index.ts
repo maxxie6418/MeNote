@@ -65,6 +65,7 @@ export * from "./backup-targets";
 export * from "./base64url";
 export * from "./content";
 export * from "./crypto";
+export * from "./envelope";
 export * from "./folders";
 export * from "./hash";
 export * from "./items";

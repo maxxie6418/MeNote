@@ -51,6 +51,16 @@ export const JOB_R2_GC_BATCH = 20;
 export const JOB_SWEEP_BATCH = 10;
 export const JOB_IDLE_SEAL_BATCH = 3;
 
+/**
+ * Cron ③「快照物化」的单轮文件配额（M7 第 4 项 批 2）。
+ *
+ * 沿用架构 §12.1 给"快照队列"定的 10 个/轮——`JOB_SWEEP_BATCH` 就是那 10 的旧名，
+ * 这里给一个能读懂的名字，两处指向同一个值（`JOB_SNAPSHOT_BATCH = JOB_SWEEP_BATCH`）。
+ * 物化是**增量**的（只做 `sync_seq` 落在游标之后的），所以 10/轮 × 96 轮/天
+ * ≈ 960 文件/天，追上一个几百条的库只要一两轮。
+ */
+export const JOB_SNAPSHOT_BATCH = JOB_SWEEP_BATCH;
+
 /** 天 → 毫秒（各处保留期都用它换算，避免各写一遍 `* 24 * 60 * 60 * 1000`） */
 export const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -33,6 +33,7 @@ import {
   M7_BACKUP_TABLE_NAMES,
   migration0007,
 } from "./migrations/0007_backup_targets";
+import { M7_SNAPSHOT_TABLE_NAMES, migration0008 } from "./migrations/0008_snapshot_state";
 
 /** 全部迁移脚本，按 version 升序 */
 export const MIGRATIONS: readonly MigrationScript[] = [
@@ -43,6 +44,7 @@ export const MIGRATIONS: readonly MigrationScript[] = [
   migration0005,
   migration0006,
   migration0007,
+  migration0008,
 ];
 
 /** 代码期望的表结构版本 */
@@ -74,6 +76,8 @@ const REQUIRED_TABLES = [
   ...M6_MCP_TABLE_NAMES,
   // 0007：外部备份目标 + 变更队列（M7）
   ...M7_BACKUP_TABLE_NAMES,
+  // 0008：快照物化游标（M7）
+  ...M7_SNAPSHOT_TABLE_NAMES,
 ] as const;
 
 const REQUIRED_INDEXES = [

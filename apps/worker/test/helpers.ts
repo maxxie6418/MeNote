@@ -13,13 +13,19 @@ import {
   M6_MCP_INDEX_NAMES,
   M6_MCP_TABLE_NAMES,
 } from "../src/db/migrations/0006_mcp";
+import {
+  M7_BACKUP_INDEX_NAMES,
+  M7_BACKUP_TABLE_NAMES,
+} from "../src/db/migrations/0007_backup_targets";
+import { M7_SNAPSHOT_TABLE_NAMES } from "../src/db/migrations/0008_snapshot_state";
 import { EXPECTED_SCHEMA_VERSION, ensureSchema, resetSchemaCacheForTests } from "../src/db/selfheal";
 
 /**
  * 迁移应当建立的全部对象（0001 的 8 张 + 0003 的 `user_crypto` + 0004 的六张 + 0005 的两张
- * + 0006 的三张；见《数据模型与迁移设计》§3.2、《隐私锁设计》§4.1、《M4 设计》§六、
- * 设计文档 §DDL、《M6 MCP 设计》§二）。
- * 0004 / 0005 / 0006 直接引迁移文件导出的清单，免得两处各写一份而漂移。
+ * + 0006 的三张 + 0007 的两张 + 0008 的一张；见《数据模型与迁移设计》§3.2、
+ * 《隐私锁设计》§4.1、《M4 设计》§六、设计文档 §DDL、《M6 MCP 设计》§二、
+ * 《定时自动备份设计》§三）。
+ * 0004 / 0005 / 0006 / 0007 / 0008 直接引迁移文件导出的清单，免得两处各写一份而漂移。
  */
 export const TABLES = [
   "app_meta",
@@ -38,6 +44,10 @@ export const TABLES = [
   ...M5_SHARE_TABLE_NAMES,
   // 0006（M6）：MCP 三表
   ...M6_MCP_TABLE_NAMES,
+  // 0007（M7）：外部备份目标 + 变更队列
+  ...M7_BACKUP_TABLE_NAMES,
+  // 0008（M7）：快照物化游标
+  ...M7_SNAPSHOT_TABLE_NAMES,
 ] as const;
 
 export const INDEXES = [
@@ -54,6 +64,7 @@ export const INDEXES = [
   ...M4_INDEX_NAMES,
   ...M5_SHARE_INDEX_NAMES,
   ...M6_MCP_INDEX_NAMES,
+  ...M7_BACKUP_INDEX_NAMES,
 ] as const;
 
 /** 恢复到空库（含清掉 isolate 级的"已达标"标记） */

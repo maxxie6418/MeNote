@@ -1,7 +1,7 @@
 /**
- * 附件路由（M4-4；《M4 设计》§3.2 / §3.4 / §3.5）。只做参数校验与转服务层。
+ * 附件路由（M4-4；《M4 设计》§3.2 / §3.4 / §3.5；列表接口见 M6 批 2c）。只做参数校验与转服务层。
  *
- * 四个端点都**会话鉴权**：附件按哈希寻址、不可枚举，但"知道哈希就能取"仍然要挡在登录之后。
+ * 全部端点都**会话鉴权**：附件按哈希寻址、不可枚举，但"知道哈希就能取"仍然要挡在登录之后。
  */
 import { AttachmentCheckSchema, AttachmentFinalizeSchema, MAX_ATTACHMENT_BYTES } from "@menote/shared";
 import { Hono } from "hono";
@@ -14,6 +14,7 @@ import {
   finalizeAttachment,
   gcAttachments,
   listAttachmentRefs,
+  listAttachments,
   putAttachmentBlob,
   serveAttachment,
   type AttachmentKind,
@@ -98,6 +99,43 @@ app.get("/attachments/h/:sha256", requireSession, async (c) => {
   }
 
   return new Response(result.body, { status: result.range ? 206 : 200, headers });
+});
+
+/**
+ * `GET /api/attachments?kind=&state=&limit=`：**本用户**的附件列表（M6 批 2c；附件管理页）。
+ *
+ * M4 只给了 check / blob / finalize / h / refs / gc——「列出全部附件」这一条是本批新加的
+ * （《M4 设计》§3.6 明确把管理页留到 M6）。过滤参数非法时**按"不过滤"处理**而不是报错：
+ * 这是个只读的管理视图，让它因为一个拼错的查询参数整个打不开不划算。
+ */
+app.get("/attachments", requireSession, async (c) => {
+  const kind = c.req.query("kind");
+  const state = c.req.query("state");
+  const limit = Number.parseInt(c.req.query("limit") ?? "", 10);
+
+  const { rows, hasMore } = await listAttachments(c.env.DB, c.get("user").id, {
+    kind: kind === "thumb" || kind === "original" ? kind : null,
+    state: state === "active" || state === "orphaned" ? state : null,
+    limit: Number.isFinite(limit) ? limit : null,
+  });
+
+  return c.json({
+    attachments: rows.map((row) => ({
+      id: row.id,
+      sha256: row.sha256,
+      kind: row.kind,
+      filename: row.filename,
+      mime: row.mime,
+      size_bytes: row.sizeBytes,
+      width: row.width,
+      height: row.height,
+      created_at: row.createdAt,
+      updated_at: row.updatedAt,
+      orphaned_at: row.orphanedAt,
+      ref_count: row.refCount,
+    })),
+    has_more: hasMore,
+  });
 });
 
 /** `GET /api/attachments/refs/:itemId`：某条目引用了哪些附件（图片列 / `## 附件` 要用） */

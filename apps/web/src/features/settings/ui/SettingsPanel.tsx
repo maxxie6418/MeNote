@@ -17,13 +17,14 @@ import { CardQuickMenu } from "./CardQuickMenu";
 // import { EditorLabPage } from "../../editor-lab/ui/EditorLabPage";
 import { BackupPage } from "../../backup/ui/BackupPage";
 import { MySharesPage } from "../../shares/ui/MySharesPage";
+import { AttachmentManagerPage } from "../../attachments/ui/AttachmentManagerPage";
 import { InstancePage } from "./InstancePage";
 
 /**
  * 分类的标题与一行简述。
  *
  * **只有已实现的分类在这里**（`SETTINGS_PAGES` 是唯一真源）：定稿的 11 类里
- * 备份 / 分享 / MCP / 数据管理四类还没做，**不进导航**（不是灰掉——灰掉会让人以为点了会有什么）。
+ * 「MCP」还没做，**不进导航**（不是灰掉——灰掉会让人以为点了会有什么）。
  * 简述不进页面正文，只进页头那个 ⓘ（DESIGN.md §5.4-1：说明性文字不平铺）。
  */
 const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
@@ -39,16 +40,16 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   // },
   privacy: { title: "隐私锁", summary: "加密空间、门禁与隐私密码" },
   versions: { title: "版本与回收站", summary: "版本封存与保留策略、回收站保留天数" },
+  data: { title: "数据管理", summary: "附件占用、孤儿附件与手动清理" },
   instance: { title: "实例管理", summary: "本实例的注册开关与用量（仅管理员）" },
   about: { title: "关于", summary: "版本号与项目地址" },
 };
 
 /**
- * 导航顺序即需求 §7.5 的最终形态顺序，但**只列出本里程碑已实现的分类**（避免点进去空页面）：
- * 备份 / 分享 / MCP / 数据管理 四类各自里程碑再进导航（定稿共 11 类，当前进导航 7 类）。
- * 「关于」是用户 2026-09-27 追加的分类，放最后。
+ * 导航顺序即功能拆解 M18-01 的 11 类定稿（顺序也照它），**只列出已实现的分类**（避免点进去空页面）：
+ * 「MCP」类还没做，不进导航。**「关于」是用户 2026-09-27 追加的分类，放最后。**
  *
- * **清单直接引用路由那一份**（2026-09-27 修复）：两处各写一份会漂移——M3 加「隐私锁」时只加了
+ * **清单直接引用路由那一份**：两处各写一份会漂移——M3 加「隐私锁」时只加了
  * 这里、没加路由白名单，点「隐私锁」会落到「通用」。
  */
 const NAV_ORDER: readonly SettingsPageId[] = SETTINGS_PAGES;
@@ -451,6 +452,8 @@ export function SettingsPanel({
         {page === "backup" ? <BackupPage /> : null}
 
         {page === "shares" ? <MySharesPage /> : null}
+
+        {page === "data" ? <AttachmentManagerPage /> : null}
 
         {page === "privacy" ? (
           privacyPage ?? (

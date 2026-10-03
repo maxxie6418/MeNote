@@ -15,19 +15,25 @@ import { useEffect, useState } from "react";
  *
  * 现在类型由清单推导（`as const` + `typeof [number]`），所以**新增分类只可能在一个地方发生**，
  * 漏改的另一半会直接编译不过（设置页的 `PAGE_META: Record<SettingsPageId, …>` 就是那另一半的守卫）。
+ *
+ * **顺序照功能拆解 M18-01 的 11 类定稿**（components.md §7.5 同一份）：
+ * 通用 / 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 备份 / 分享 / MCP / 数据管理 / 实例管理 / 关于。
+ * 「MCP」那一类还没做，**不进导航**（不占位：点进去是空页面比没有更糟）；
+ * 「数据管理」M6 批 2c 起有内容（附件管理页），无条件显示——分类是固定的一级入口，空态由内容页自己处理。
  */
 export const SETTINGS_PAGES = [
   "general",
   "account",
   "editor",
-  "backup",
   // 「编辑试验」2026-10-01 暂时收起（用户 2026-10-01）：试验区按桌面稿排布，
   // 在窄面板里会挤成一条，且本轮改为直接在正式编辑器上迭代。**试验代码全部保留**，
   // 恢复只需把这一行放回来 + 恢复 `SettingsPanel` 里的两处（PAGE_META 与渲染分支）。
   // "editor-lab",
-  "shares",
   "privacy",
   "versions",
+  "backup",
+  "shares",
+  "data",
   "instance",
   "about",
 ] as const;

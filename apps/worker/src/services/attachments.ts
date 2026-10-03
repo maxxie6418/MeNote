@@ -12,7 +12,14 @@
  * 与隐私锁的关系：附件**仍按明文存储**（《隐私锁设计》§6.11），锁定时界面占位、不渲染；
  * 服务端不做额外过滤——附件按哈希寻址、不可枚举，猜不到就等于拿不到。
  */
-import { DAY_MS, MAX_ATTACHMENT_BYTES, PENDING_UPLOAD_TTL_HOURS, newUlid } from "@menote/shared";
+import {
+  ATTACHMENT_LIST_DEFAULT_LIMIT,
+  ATTACHMENT_LIST_MAX_LIMIT,
+  DAY_MS,
+  MAX_ATTACHMENT_BYTES,
+  PENDING_UPLOAD_TTL_HOURS,
+  newUlid,
+} from "@menote/shared";
 import {
   attachmentKey,
   getBlob,
@@ -30,6 +37,7 @@ import {
   SQL_MARK_ORPHANS_OF_USER,
   SQL_SELECT_ATTACHMENT_BY_SHA,
   SQL_SELECT_ATTACHMENT_REFS,
+  SQL_SELECT_ATTACHMENTS_OF_USER,
   SQL_SELECT_ORPHANED_DUE,
   SQL_SELECT_ORPHANED_DUE_ALL,
   SQL_SELECT_PENDING_UPLOAD,
@@ -252,6 +260,93 @@ export async function listAttachmentRefs(
     .bind(itemId)
     .all<{ attachment_id: string; version_id: string | null }>();
   return rows.results.map((row) => ({ attachmentId: row.attachment_id, versionId: row.version_id }));
+}
+
+/** 列表的过滤条件（都可省，省 = 不限） */
+export interface ListAttachmentsOptions {
+  kind?: AttachmentKind | null;
+  state?: "active" | "orphaned" | null;
+  limit?: number | null;
+}
+
+export interface AttachmentListRow {
+  id: string;
+  sha256: string;
+  kind: AttachmentKind;
+  filename: string | null;
+  mime: string | null;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  createdAt: number;
+  updatedAt: number;
+  orphanedAt: number | null;
+  refCount: number;
+}
+
+/** 数据库行（snake_case）→ 线上形状（camelCase）：转换只在这一处，别把列名漏到响应里 */
+interface AttachmentListDbRow {
+  id: string;
+  sha256: string;
+  kind: AttachmentKind;
+  filename: string | null;
+  mime: string | null;
+  size_bytes: number;
+  width: number | null;
+  height: number | null;
+  created_at: number;
+  updated_at: number;
+  orphaned_at: number | null;
+  ref_count: number;
+}
+
+/**
+ * `GET /api/attachments`：列出**本用户**的附件（M6 批 2c 的附件管理页）。
+ *
+ * **只列本用户**是硬约束：附件按哈希寻址、不可枚举，但这份列表是直接可枚举的元数据，
+ * 漏掉 `user_id` 就是跨租户泄漏。
+ *
+ * `has_more` 按 `limit + 1` 判定：多取的那一行在这里裁掉，**不进响应**。
+ * 分页（游标）本轮不做，但 `limit` 位留着——以后加游标不必改契约（设计 §4.3）。
+ */
+export async function listAttachments(
+  db: D1Database,
+  userId: string,
+  options: ListAttachmentsOptions = {},
+): Promise<{ rows: AttachmentListRow[]; hasMore: boolean }> {
+  const limit = clampListLimit(options.limit);
+  const kind = options.kind === "thumb" ? "thumb" : options.kind === "original" ? "original" : "";
+  const state = options.state === "orphaned" ? "orphaned" : options.state === "active" ? "active" : "";
+
+  const result = await db
+    .prepare(SQL_SELECT_ATTACHMENTS_OF_USER)
+    .bind(userId, kind, kind, state, state, limit + 1)
+    .all<AttachmentListDbRow>();
+
+  const hasMore = result.results.length > limit;
+  return {
+    rows: result.results.slice(0, limit).map((row) => ({
+      id: row.id,
+      sha256: row.sha256,
+      kind: row.kind,
+      filename: row.filename,
+      mime: row.mime,
+      sizeBytes: row.size_bytes,
+      width: row.width,
+      height: row.height,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      orphanedAt: row.orphaned_at,
+      refCount: row.ref_count,
+    })),
+    hasMore,
+  };
+}
+
+/** `limit` 收口：缺省走契约默认值，超出上限按上限截（一条请求拉太多会顶到 D1 的返回体上限） */
+function clampListLimit(limit: number | null | undefined): number {
+  if (limit == null || !Number.isFinite(limit)) return ATTACHMENT_LIST_DEFAULT_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), ATTACHMENT_LIST_MAX_LIMIT);
 }
 
 /**

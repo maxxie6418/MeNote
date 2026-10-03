@@ -248,6 +248,30 @@ export const SQL_SELECT_ATTACHMENT_REFS = `SELECT attachment_id, version_id
 
 export const SQL_DELETE_ATTACHMENT = "DELETE FROM attachments WHERE id = ? AND user_id = ?";
 
+/**
+ * 附件管理页的列表（M6 批 2c）：本用户的全部附件，`kind` / `state` 可选，按 `updated_at` 倒序。
+ *
+ * 三处刻意的写法：
+ * 1. **`user_id` 必带**：附件表没有别的隔离手段，漏一个 `WHERE` 就是跨租户泄漏。
+ * 2. **两个过滤参数各绑两次**（`? = '' OR 列 = ?`）：这样"不筛选"与"筛选"是**同一条语句**，
+ *    不必在服务层拼不同的 SQL 文本——拼文本就意味着过滤值有机会变成语句的一部分。
+ * 3. **引用条目数用相关子查询**而不是 `LEFT JOIN … GROUP BY`：`attachment_refs` 的唯一索引是
+ *    `(item_id, IFNULL(version_id,''), attachment_id)`，去重要按 `item_id` 而不是按引用行，
+ *    子查询里一句 `COUNT(DISTINCT r.item_id)` 就够了，也不用把 `attachments` 按引用分组。
+ *
+ * `LIMIT ?` 绑的是 **`limit + 1`**：`has_more` 由此判定（多一行就说明还有下一页），
+ * 多取的那行在服务层裁掉，不进响应。
+ */
+export const SQL_SELECT_ATTACHMENTS_OF_USER = `SELECT a.id, a.sha256, a.kind, a.filename, a.mime, a.size_bytes,
+       a.width, a.height, a.created_at, a.updated_at, a.orphaned_at,
+       (SELECT COUNT(DISTINCT r.item_id) FROM attachment_refs r WHERE r.attachment_id = a.id) AS ref_count
+  FROM attachments a
+ WHERE a.user_id = ?
+   AND (? = '' OR a.kind = ?)
+   AND (? = '' OR (CASE WHEN a.orphaned_at IS NULL THEN 'active' ELSE 'orphaned' END) = ?)
+ ORDER BY a.updated_at DESC, a.id DESC
+ LIMIT ?`;
+
 /** 上传登记：上传前先写（24 小时有效），落元数据时删 */
 export const SQL_INSERT_PENDING_UPLOAD = `INSERT INTO pending_uploads (r2_key, user_id, created_at, due_at)
   VALUES (?, ?, ?, ?)

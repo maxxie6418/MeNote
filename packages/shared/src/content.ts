@@ -87,6 +87,50 @@ export const AttachmentFinalizeSchema = v.object({
 });
 export type AttachmentFinalize = v.InferOutput<typeof AttachmentFinalizeSchema>;
 
+/**
+ * `GET /api/attachments` 的一行（M6 批 2c 的附件管理页；M4 只给了 check/blob/finalize/h/refs/gc，
+ * 「列出本用户全部附件」是这一批新加的端点）。
+ *
+ * **为什么带 `kind`**：`kind` 本身就是一个查询参数，返回体不说清是哪一行，筛选就等于没筛。
+ */
+export const AttachmentListRowSchema = v.object({
+  id: v.string(),
+  sha256: v.string(),
+  kind: v.picklist(["original", "thumb"]),
+  filename: v.nullable(v.string()),
+  mime: v.nullable(v.string()),
+  size_bytes: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  width: v.nullable(v.number()),
+  height: v.nullable(v.number()),
+  created_at: v.number(),
+  updated_at: v.number(),
+  /** 非空 = 已被标为孤儿（没有任何引用） */
+  orphaned_at: v.nullable(v.number()),
+  /**
+   * 引用它的**条目数**（`COUNT(DISTINCT attachment_refs.item_id)`）。
+   *
+   * 按 `item_id` 去重而不是数引用行：同一个条目可以同时有「当前稿引用」和某个封存版本的引用，
+   * 那在界面上仍然是「被 1 条笔记引用」，数成 2 会让人以为附件被复用了。
+   */
+  ref_count: v.pipe(v.number(), v.integer(), v.minValue(0)),
+});
+export type AttachmentListRow = v.InferOutput<typeof AttachmentListRowSchema>;
+
+/**
+ * 列表响应带 `has_more` 而**暂不带游标**（M6 设计 §4.3：分页先不做，但别把契约写死成一次性）。
+ *
+ * 服务端按 `limit + 1` 多取一行来判定它，所以以后加游标时不必改这一层的形状。
+ */
+export const AttachmentListResponseSchema = v.object({
+  attachments: v.array(AttachmentListRowSchema),
+  has_more: v.boolean(),
+});
+export type AttachmentListResponse = v.InferOutput<typeof AttachmentListResponseSchema>;
+
+/** 列表默认条数与上限（上限即「最多列出多少个」——个人自用规模，分页留到真需要时再加） */
+export const ATTACHMENT_LIST_DEFAULT_LIMIT = 50;
+export const ATTACHMENT_LIST_MAX_LIMIT = 200;
+
 /** 版本封存原因（设计 §4.1）；界面显示的中文映射见 `VERSION_REASON_LABELS` */
 export const VersionReasonSchema = v.picklist([
   "autosave_idle",

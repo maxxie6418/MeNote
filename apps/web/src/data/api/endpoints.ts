@@ -4,6 +4,7 @@
  * 传输细节（超时、CSRF、错误映射）在 `client.ts`；这里只描述"有哪些接口、带什么参数"。
  */
 import {
+  AttachmentListResponseSchema,
   BatchResponseSchema,
   CryptoResetResponseSchema,
   CryptoStateSchema,
@@ -256,6 +257,31 @@ export const attachmentsApi = {
     apiRequest<{ refs: Array<{ attachmentId: string; versionId: string | null }> }>(
       `/api/attachments/refs/${encodeURIComponent(itemId)}`,
     ),
+
+  /**
+   * 列出**本用户**的附件（M6 批 2c 的附件管理页；M4 没给这个端点）。
+   *
+   * 响应过一遍共享 schema——不无条件信任服务端返回的形状（与 `sharesApi` 同一做法）。
+   * 过滤参数可省，省 = 不限；`kind` / `state` 传错值时服务端按"不过滤"处理。
+   */
+  list: async (
+    options: { kind?: "original" | "thumb"; state?: "active" | "orphaned"; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (options.kind) params.set("kind", options.kind);
+    if (options.state) params.set("state", options.state);
+    if (options.limit != null) params.set("limit", String(options.limit));
+    const query = params.toString();
+    const raw = await apiRequest<unknown>(`/api/attachments${query ? `?${query}` : ""}`);
+    return v.parse(AttachmentListResponseSchema, raw);
+  },
+
+  /** 手动清理本用户的孤儿附件（管理页的主操作；标孤儿 + 删已到期的那些） */
+  gc: () =>
+    apiRequest<{ marked: number; removed: number }>("/api/attachments/gc", {
+      method: "POST",
+      body: {},
+    }),
 };
 
 /**

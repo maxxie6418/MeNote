@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1 |
-| 文档状态 | 待执行（设计稿 `docs/modules/Menote-定时自动备份-设计-v1.md` v1.1 **已生效**；用户 2026-10-03 拍板 §六 五点 + 本计划的第一处范围收窄） |
+| 文档版本 | v1.1 |
+| 文档状态 | 执行中（设计稿 `docs/modules/Menote-定时自动备份-设计-v1.md` v1.1 **已生效**；用户 2026-10-03 拍板 §六 五点 + 本计划的第一处范围收窄） |
 | 目的和适用范围 | 拆步、涉及文件与验收点。设计口径以那份专项设计为准，本文件只管怎么落地 |
 | 权威级别 | 临时规则（M7 第 4 项的执行清单） |
 | 最后更新日期 | 2026-10-03 |
@@ -13,6 +13,7 @@
 | 文档版本 | 应用版本 | 日期 | 修改摘要 | 修改模型ID |
 |---|---|---|---|---|
 | v1 | v0.7.1 | 2026-10-03 | 初稿。依据《定时自动备份设计》v1.1 拆成 4 批；先核了 M5 已交付的部分能复用多少 | MiniMax-M3.1-Flash-Preview |
+| v1.1 | v0.7.2 | 2026-10-03 | **批 1 完成**（`d02d4bd`）：验收点逐条勾上、附落点与实测数；订正**步 1.5 的范围校验前提是错的**（备份目标没有文件夹范围）；登记批 1 途中新发现的一个真 bug（WebDAV Basic 认证）与一处跨 feature 复用抽取 | MiniMax-M3.1-Flash-Preview |
 
 ---
 
@@ -47,12 +48,12 @@
 
 ## 二、4 批的切法
 
-| 批 | 内容 | 版本 | 可验证的落点 |
-|---|---|---|---|
-| **批 1** | 数据层 + 目标管理（迁移、契约、服务、5 个 API、设置页目标卡片） | v0.7.2 | 能在设置里建一个 WebDAV 目标、测试连接、删掉；服务端不泄露凭据 |
-| **批 2** | 快照物化（D1 → R2 `snap/{uid}/`）+ 出站加密 | v0.7.3 | Cron 跑一轮，R2 里出现 `snapshot/manifest.json` + `COMPLETE` + 一篇笔记 |
-| **批 3** | 适配器（WebDAV / S3）+ 差异计算 + 按配额续推 + 接线 Cron 的 ③⑤ 两个接口位 | v0.7.4 | 启用一个目标后，Cron 几轮内把文件推到远端，界面显示最近一次结果 |
-| **批 4** | 设置页的运行态（最近结果 / 失败原因 / 「推一次」按钮）与留空兜底 | v0.7.5 | 失败原因在界面上**平铺**（DESIGN.md §5.4-2） |
+| 批 | 内容 | 版本 | 可验证的落点 | 状态 |
+|---|---|---|---|---|
+| **批 1** | 数据层 + 目标管理（迁移、契约、服务、5 个 API、设置页目标卡片） | v0.7.2 | 能在设置里建一个 WebDAV 目标、测试连接、删掉；服务端不泄露凭据 | ✅ `d02d4bd` |
+| **批 2** | 快照物化（D1 → R2 `snap/{uid}/`）+ 出站加密 | v0.7.3 | Cron 跑一轮，R2 里出现 `snapshot/manifest.json` + `COMPLETE` + 一篇笔记 | 待做 |
+| **批 3** | 差异计算 + 按配额续推 + 接线 Cron 的 ⑤ 接口位（**适配器已在批 1 写好**，本批只做差异与状态机） | v0.7.4 | 启用一个目标后，Cron 几轮内把文件推到远端，界面显示最近一次结果 | 待做 |
+| **批 4** | 设置页的运行态（最近结果 / 失败原因 / 「推一次」按钮）与留空兜底 | v0.7.5 | 失败原因在界面上**平铺**（DESIGN.md §5.4-2） | 待做 |
 
 每批结束都是一次可提交、可推送的落点。**M7 收口时 +0.1 到 v0.8.0。**
 
@@ -60,25 +61,35 @@
 
 ## 三、批 1 拆步（数据层 + 目标管理）
 
-| 步 | 做什么 | 涉及文件 |
-|---|---|---|
-| 1.1 | 迁移 `0007_backup_targets`：`user_backup_targets`（照设计 §三，**逐列照抄**）+ `export_queue`（设计 §二 用的变更队列）。两个 CHECK：`kind ∈ {webdav,s3}`、`delete_policy ∈ {sync,append_only}`、`schedule ∈ {daily,weekly}` | `apps/worker/src/db/migrations/0007_backup_targets.ts`（新建） |
-| 1.2 | 目标表的 SQL 常量（放 `db/backup-tables.ts`——`tables.ts` 已近预算，同 MCP 的处理） | 新建 |
-| 1.3 | 共享契约：目标记录、创建 / 改 / 列表响应。**凭据永不回显**，响应只有 `has_secret: boolean` | `packages/shared/src/backup-targets.ts`（新建）+ `index.ts` 导出 |
-| 1.4 | 凭据包裹：导出 `services/crypto.ts` 的备份包裹键派生（或加一个"用包裹键加解密任意 secret"的小工具），**不新增密钥材料** | `apps/worker/src/services/crypto.ts` |
-| 1.5 | `services/backup-targets.ts`：建 / 列 / 改 / 删。**范围校验**——文件夹 id 必须属于该用户且不是加密空间行（同 MCP 的 `assertWritableFolder`） | 新建 |
-| 1.6 | `routes/backup-targets.ts`：5 个接口（列表 / 建 / 改 / 删 / 测试连接） | 新建 |
-| 1.7 | 适配器骨架：`adapters/webdav.ts`（`PUT` / `DELETE` / `PROPFIND` 探测）、`adapters/s3.ts`（`PUT` / `DELETE` + 签名 v4）。**只做批 3 要用的三个动作**，不做完整 SDK | 新建两个 |
-| 1.8 | 设置页：设置 › 备份 那一页**加一张「外部备份目标」卡片**（列表 / 新建弹窗 / 测试连接 / 删） | `features/backup/ui/BackupPage.tsx` + 新建 `BackupTargetsCard.tsx` |
-| 1.9 | 用例：建 / 列 / 改 / 删；**凭据任何响应都不回显**；跨租户隔离；范围校验；`kind` / `delete_policy` 非法值 422；**测试连接用请求体里的一次性明文、不落库** | worker + web |
+| 步 | 做什么 | 涉及文件 | 状态 |
+|---|---|---|---|
+| 1.1 | 迁移 `0007_backup_targets`：`user_backup_targets`（照设计 §三，**逐列照抄**）+ `export_queue`（设计 §二 用的变更队列）。两个 CHECK：`kind ∈ {webdav,s3}`、`delete_policy ∈ {sync,append_only}`、`schedule ∈ {daily,weekly}` | `apps/worker/src/db/migrations/0007_backup_targets.ts`（新建） | ✅ |
+| 1.2 | 目标表的 SQL 常量（放 `db/backup-tables.ts`——`tables.ts` 已近预算，同 MCP 的处理） | 新建 | ✅ |
+| 1.3 | 共享契约：目标记录、创建 / 改 / 列表响应。**凭据永不回显**，响应只有 `has_secret: boolean` | `packages/shared/src/backup-targets.ts`（新建）+ `index.ts` 导出 | ✅ |
+| 1.4 | 凭据包裹：导出 `services/crypto.ts` 的备份包裹键派生（或加一个"用包裹键加解密任意 secret"的小工具），**不新增密钥材料** | `apps/worker/src/services/crypto.ts` | ✅ |
+| 1.5 | `services/backup-targets.ts`：建 / 列 / 改 / 删。~~范围校验——文件夹 id 必须属于该用户且不是加密空间行~~ **（见下方订正：这条前提是错的，整条不适用）** | 新建 | ✅（去掉范围校验） |
+| 1.6 | `routes/backup-targets.ts`：5 个接口（列表 / 建 / 改 / 删 / 测试连接） | 新建 | ✅ |
+| 1.7 | 适配器骨架：`adapters/webdav.ts`（`PUT` / `DELETE` / `PROPFIND` 探测）、`adapters/s3.ts`（`PUT` / `DELETE` + 签名 v4）。**只做批 3 要用的三个动作**，不做完整 SDK | 新建两个 | ✅ |
+| 1.8 | 设置页：设置 › 备份 那一页**加一张「外部备份目标」卡片**（列表 / 新建弹窗 / 测试连接 / 删） | `features/backup/ui/BackupPage.tsx` + 新建 `BackupTargetsCard.tsx` | ✅ |
+| 1.9 | 用例：建 / 列 / 改 / 删；**凭据任何响应都不回显**；跨租户隔离；范围校验；`kind` / `delete_policy` 非法值 422；**测试连接用请求体里的一次性明文、不落库** | worker + web | ✅（除"范围校验"，不适用） |
 
-**批 1 验收点**
+**批 1 验收点**（`d02d4bd`）
 
-- [ ] 能在设置里建一个 WebDAV 目标并测试连接
-- [ ] **任何接口的响应里都搜不到凭据明文**（用例逐个响应断言）
-- [ ] 别人的文件夹 id 填进范围 → 422；加密空间行 → 422
-- [ ] 删目标**不动远端文件**（只清账本）
-- [ ] `pnpm test` / `lint` / `typecheck` / `check:size` 全绿
+- [x] 能在设置里建一个 WebDAV 目标并测试连接 —— 卡片 + 弹窗 + `POST /api/backup/targets/:id/test` 三处齐全
+- [x] **任何接口的响应里都搜不到凭据明文** —— 13 条 worker 用例逐个响应断言，另有一条专门验「失败原因不含凭据」
+- [x] ~~别人的文件夹 id 填进范围 → 422；加密空间行 → 422~~ —— **不适用，见订正**；本批实际覆盖的是**跨租户隔离**（别人的目标 id → 404，且**与"不存在"的响应逐字相同**，不泄露 id 是否存在）
+- [x] 删目标**不动远端文件**（只清账本）—— `deleteBackupTarget` 只删 `user_backup_targets` 行，**不持凭据、不碰适配器**
+- [x] `pnpm test` / `lint` / `typecheck` / `check:size` 全绿 —— worker 314→327、web 1240→1256、shared 101、mdcore 79；typecheck 4 包 0 error；lint 0 error + 1 条既有 warning；`check:size` 首屏 **68.3 KB** ≤ 200 KB（与批 1 前持平，备份页是设置页内的一块、且已分包，不进首屏）
+
+### 3.1 批 1 落地时的订正与发现
+
+**① 步 1.5 的「范围校验」前提是错的。** 写计划时照着 MCP 的 `folder_scope` 想到了范围校验，但**备份目标根本没有文件夹范围**——设计 §三 的目标记录里没有这个字段，备份永远是整实例一份（这与「M5 导出」的口径一致：导出也不选文件夹）。**照计划实现会写出一段校验一个不存在的字段的代码。** 目标记录里唯一的"范围"是 `user_id`，跨租户隔离由它保证（用例已覆盖）。**不是设计变了，是计划抄错了模型。**
+
+**② 抓到并修掉一个真 bug：WebDAV Basic 认证遇非 Latin1 口令必崩。** 原实现用 `btoa(\`${username}:${secret}\`)`——口令含中文时 `btoa` 直接抛 `InvalidCharacterError`。**更要命的是它抛在"创建适配器"那一步**，在路由的 `try/catch` 之外，于是本该是 401 的失败变成了 500/503。已改为**每次请求现算 + 先 UTF-8 编码再 base64**（`TextEncoder` → `Uint8Array` → 二进制串 → `btoa`）。**这类"在错误边界之外抛"的错误最坏**：它把一个明确的凭据问题伪装成服务端故障。
+
+**③ 一处跨 feature 的复用抽取。** `formatRelative`（"3 小时前"）原住在 `features/mcp/model.ts`，备份卡片也要用。**从 backup 去 import mcp 是反向依赖**——两条业务线互不认识，一条删了另一条就断。已提升为 `app/format.ts`，两边各自 import，**输出口径一个字没改**，MCP 的既有断言未动。
+
+**④ `kind` 的 CHECK 与枚举都只放 `webdav` / `s3`，不放 `git`。** 放进去等于对外宣告"支持 Git 备份"，而 Git 的 tree/commit 编排本轮明确不做。**枚举里出现一个不实现的选项，比不写更糟。**
 
 ---
 

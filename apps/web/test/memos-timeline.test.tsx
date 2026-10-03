@@ -10,15 +10,17 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dayPartsInZone } from "../src/features/memos/model";
 import { MemoTimeline } from "../src/features/memos/ui/MemoTimeline";
-import type { LocalItem } from "../src/data/db";
+import type { LocalItem, MemoContent } from "../src/data/db";
 
 afterEach(cleanup);
 
 /** 同一天的 13:05 与 21:40（本地时区构造，避免时区相关的期望值漂移） */
 const DAY = new Date(2026, 8, 27, 13, 5).getTime();
 const LATER = new Date(2026, 8, 27, 21, 40).getTime();
+/** 8 月 3 日 09:00：用来验证「置顶的老 Memo 不会把整天顶到最前」 */
+const OLD = new Date(2026, 7, 3, 9, 0).getTime();
 
-function memo(id: string, at: number): LocalItem {
+function memo(id: string, at: number, pinned: 0 | 1 = 0): LocalItem {
   return {
     id,
     type: "memo",
@@ -34,7 +36,7 @@ function memo(id: string, at: number): LocalItem {
     task_status: null,
     task_due: null,
     task_priority: null,
-    pinned: 0,
+    pinned,
     starred: 0,
     rev: 1,
     meta_rev: 1,
@@ -103,5 +105,62 @@ describe("时间轴两列结构", () => {
     expect(container.querySelectorAll(".timeline__dot")).toHaveLength(2);
     // 内容在右列（`.timeline__content`），每条 Memo 一个
     expect(container.querySelectorAll(".timeline__content .memo")).toHaveLength(2);
+  });
+});
+
+/** 渲染任意一组 Memo（含置顶），返回容器 */
+function renderWith(items: LocalItem[]): HTMLElement {
+  const contents: Record<string, MemoContent> = {};
+  for (const item of items) contents[item.id] = { content: `正文 ${item.id}`, convertedTo: null };
+  const { container } = render(
+    <MemoTimeline
+      memos={items}
+      contents={contents}
+      onSave={vi.fn()}
+      onTogglePinned={vi.fn()}
+      onConvert={vi.fn()}
+      onDelete={vi.fn()}
+      onOpenConverted={vi.fn()}
+      onSelectTag={vi.fn()}
+    />,
+  );
+  return container;
+}
+
+function daySections(container: HTMLElement): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>(".timeline__day")];
+}
+
+describe("置顶块（Q9：置顶独立成块，日期块保持单调倒序）", () => {
+  it("置顶的 Memo 抽出来放最上方一块：标题写「置顶」、每条左栏自带日期", () => {
+    const container = renderWith([memo("m1", DAY), memo("p1", OLD, 1)]);
+
+    const sections = daySections(container);
+    expect(sections[0]?.getAttribute("aria-label")).toBe("置顶的 Memo");
+    expect(sections[0]?.querySelector(".timeline__date")?.textContent).toBe("置顶");
+
+    // 置顶块里只有那一条；它没有日期标题行，所以左栏要补一行日期
+    const pinnedRows = sections[0]?.querySelectorAll(".timeline__item") ?? [];
+    expect(pinnedRows).toHaveLength(1);
+    expect(pinnedRows[0]?.querySelector(".timeline__wd")?.textContent).toContain("8月3日");
+  });
+
+  it("置顶的老 Memo 不再把整天顶到最前：8 月那天不再是日期块", () => {
+    const container = renderWith([memo("m1", DAY), memo("p1", OLD, 1)]);
+    const sections = daySections(container);
+
+    expect(sections).toHaveLength(2);
+    expect(sections[1]?.getAttribute("aria-label")).toContain("9月27日");
+    // 8 月那天的**日期标题行**（日期 + 星期）整个没有了——旧实现里它被顶到了最上面
+    expect(container.textContent).not.toContain("8月3日周");
+  });
+
+  it("没有置顶时不渲染这一块（不留下一个空的「置顶」标题行）", () => {
+    const container = renderWith([memo("m1", DAY)]);
+    const sections = daySections(container);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.getAttribute("aria-label")).not.toBe("置顶的 Memo");
+    expect(container.textContent).not.toContain("置顶");
   });
 });

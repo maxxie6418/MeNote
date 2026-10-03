@@ -53,17 +53,17 @@ describe("时区下的日期与时间", () => {
 });
 
 describe("排序与分组", () => {
-  it("置顶在前，其余按 memo_at 倒序（Q9）", () => {
+  it("`sortMemos` 是纯时间倒序：置顶**不参与**行内排序", () => {
     const sorted = sortMemos([
       memo("a", 100),
       memo("b", 300),
       memo("c", 200, { pinned: 1 }),
     ]);
-    expect(sorted.map((item) => item.id)).toEqual(["c", "b", "a"]);
+    expect(sorted.map((item) => item.id)).toEqual(["b", "c", "a"]);
   });
 
   it("按天分组，天与天内都倒序", () => {
-    const days = groupMemosByDay([
+    const { days } = groupMemosByDay([
       memo("old", Date.UTC(2026, 8, 24, 2, 0)),
       memo("new", Date.UTC(2026, 8, 26, 6, 5)),
       memo("mid", Date.UTC(2026, 8, 26, 1, 0)),
@@ -73,16 +73,56 @@ describe("排序与分组", () => {
     expect(days[0]?.memos.map((item) => item.id)).toEqual(["new", "mid"]);
   });
 
-  it("memo_at 为空的条目不进时间轴", () => {
-    expect(groupMemosByDay([memo("x", null), memo("y", T)])).toHaveLength(1);
+  it("memo_at 为空的条目既不进置顶块也不进日期块", () => {
+    const groups = groupMemosByDay([memo("x", null), memo("y", T)]);
+    expect(groups.pinned).toHaveLength(0);
+    expect(groups.days).toHaveLength(1);
   });
 
-  it("置顶的 Memo 出现在时间轴最上方（Q9）", () => {
-    const days = groupMemosByDay([
+  it("置顶的 Memo 进独立置顶块，且**不再**出现在自己的日期分组里（Q9）", () => {
+    const { pinned, days } = groupMemosByDay([
       memo("plain", Date.UTC(2026, 8, 26, 6, 5)),
       memo("pinned", Date.UTC(2026, 8, 20, 6, 0), { pinned: 1 }),
     ]);
-    expect(days[0]?.dayKey).toBe("2026-09-20");
+    expect(pinned.map((item) => item.id)).toEqual(["pinned"]);
+    // 关键：置顶那天不再单独成为一个日期块（否则同一天会裂成两块、日期标题还会重复）
+    expect(days.map((day) => day.dayKey)).toEqual(["2026-09-26"]);
+  });
+
+  /*
+    回归钉子（v0.6.17 修的就是这条）：旧实现让 `pinned` 在**按天分组之前**全局插队，
+    而天序来自数组插入序 —— 一条 8 月的置顶会把 8 月那组连同日期标题顶到今天上面，
+    实测 5 条 Memo 排成 `09-03 → 10-26 → 10-25 → 08-15`；两条置顶更乱（`10-01 → 08-01 → 10-27`）。
+  */
+  it("置顶的老 Memo 不会把整天顶到最前：天序严格单调", () => {
+    const { pinned, days } = groupMemosByDay([
+      memo("today", T), // 9-26
+      memo("yesterday", Date.UTC(2026, 8, 25, 6, 0)), // 9-25
+      memo("aug-pinned", Date.UTC(2026, 7, 3, 6, 0), { pinned: 1 }), // 8-03 置顶
+      memo("july", Date.UTC(2026, 6, 15, 6, 0)), // 7-15
+    ]);
+    expect(pinned.map((item) => item.id)).toEqual(["aug-pinned"]);
+    expect(days.map((day) => day.dayKey)).toEqual(["2026-09-26", "2026-09-25", "2026-07-15"]);
+  });
+
+  it("多条置顶只占一块，块内按 memo_at 倒序", () => {
+    const { pinned, days } = groupMemosByDay([
+      memo("today", T),
+      memo("p-old", Date.UTC(2026, 6, 1, 6, 0), { pinned: 1 }), // 7-01 置顶
+      memo("p-new", Date.UTC(2026, 8, 1, 6, 0), { pinned: 1 }), // 9-01 置顶
+    ]);
+    expect(pinned.map((item) => item.id)).toEqual(["p-new", "p-old"]);
+    expect(days.map((day) => day.dayKey)).toEqual(["2026-09-26"]);
+  });
+
+  it("同一天既有置顶又有普通条目：日期块不裂成两块", () => {
+    const { pinned, days } = groupMemosByDay([
+      memo("today-pinned", Date.UTC(2026, 8, 26, 1, 0), { pinned: 1 }),
+      memo("today-plain", Date.UTC(2026, 8, 26, 6, 5)),
+    ]);
+    expect(pinned.map((item) => item.id)).toEqual(["today-pinned"]);
+    expect(days).toHaveLength(1);
+    expect(days[0]?.memos.map((item) => item.id)).toEqual(["today-plain"]);
   });
 });
 

@@ -4,7 +4,8 @@
  * 三条要点：
  * 1. **按天分组**，天边界要按**设置时区**算（默认 `Asia/Shanghai`）——不能用本机时区，
  *    否则同一批 Memo 在不同设备上会分到不同的日子（用户会看到"每天都不一样"）。
- * 2. 置顶的 Memo 显示在时间轴最上方（Q9）；其余按 `memo_at` 倒序。
+ * 2. 置顶的 Memo 抽出来**独立成块**放在时间轴最上方（Q9），**不参与日期排序**——日期块
+ *    严格按 `memo_at` 倒序，置顶不把它所在的整组拽到最前（见 `sortMemos` 的注释）。
  * 3. 顶部支持标签筛选与日期范围筛选（需求 §8.4），两者是纯函数、便于单测。
  *
  * 这里只用 `Intl.DateTimeFormat`，不引时区库：只需要"某个时刻落在哪个日历日"。
@@ -73,12 +74,17 @@ export function timeLabelInZone(epochMs: number, timeZone: string = DEFAULT_TIME
   }).format(new Date(epochMs));
 }
 
-/** 置顶在前，其余按 `memo_at` 倒序（Q9） */
+/**
+ * 按 `memo_at` 倒序——**纯时间序，不掺置顶**。
+ *
+ * 置顶曾经在这里以「全局插队」实现（`pinned` 大的排前面）。因为 `groupMemosByDay` 的**天序
+ * 来自数组的插入序**，插队的那条会把**它所在的那一整组连同日期标题**顶到时间轴最前面，
+ * 于是日期不再单调（实测 5 条 Memo 排出 `09-03 → 10-26 → 10-25 → 08-15`），
+ * 而且**置顶越多越乱**（两条置顶排成 `10-01 → 08-01 → 10-27`）。
+ * 现在置顶是**分块维度**，由 `groupMemosByDay` 单独抽成一块，不再参与行内排序。
+ */
 export function sortMemos<T extends MemoLike>(memos: readonly T[]): T[] {
-  return [...memos].sort((a, b) => {
-    if (a.pinned !== b.pinned) return b.pinned - a.pinned;
-    return (b.memo_at ?? 0) - (a.memo_at ?? 0);
-  });
+  return [...memos].sort((a, b) => (b.memo_at ?? 0) - (a.memo_at ?? 0));
 }
 
 export interface MemoDay<T extends MemoLike> {
@@ -87,12 +93,38 @@ export interface MemoDay<T extends MemoLike> {
   memos: T[];
 }
 
-/** 按天分组（天边界按 `timeZone`），天与天内都保持倒序 */
+export interface MemoTimelineGroups<T extends MemoLike> {
+  /** 置顶的 Memo（按 `memo_at` 倒序）。空数组 = 没有置顶，时间轴不渲染这一块。 */
+  pinned: T[];
+  /** 其余 Memo 的日期分组；天序严格倒序且单调 */
+  days: Array<MemoDay<T>>;
+}
+
+/**
+ * 时间轴分组：置顶块 + 按天严格倒序的日期块（Q9）。
+ *
+ * 三条纪律：
+ * 1. **置顶独立成块，且不再出现在自己的日期分组里**——否则同一天会裂成两块、日期标题也会重复；
+ * 2. 日期块的顺序**只由 `memo_at` 决定**。天序来自「已按时间倒序的数组的插入序」，
+ *    所以入参一旦是倒序的，天序必然单调，不会被置顶之类的因素搅乱（这正是旧实现的病根）；
+ * 3. `memo_at` 为空的条目两处都不进（时间轴按时刻组织，没时刻就没有位置）。
+ */
 export function groupMemosByDay<T extends MemoLike>(
   memos: readonly T[],
   timeZone: string = DEFAULT_TIME_ZONE,
-): Array<MemoDay<T>> {
-  const sorted = sortMemos(memos).filter((memo) => memo.memo_at !== null);
+): MemoTimelineGroups<T> {
+  const dated = sortMemos(memos).filter((memo) => memo.memo_at !== null);
+  return {
+    pinned: dated.filter((memo) => memo.pinned === 1),
+    days: bucketByDay(
+      dated.filter((memo) => memo.pinned !== 1),
+      timeZone,
+    ),
+  };
+}
+
+/** **已按时间倒序**的数组 → 天序单调倒序的分组（`Map` 保持插入序，别再往里塞别的排序依据） */
+function bucketByDay<T extends MemoLike>(sorted: readonly T[], timeZone: string): Array<MemoDay<T>> {
   const days = new Map<string, MemoDay<T>>();
 
   for (const memo of sorted) {

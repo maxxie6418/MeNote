@@ -211,6 +211,38 @@ export const SQL_INSERT_ATTACHMENT = `INSERT OR IGNORE INTO attachments
 export const SQL_INSERT_ATTACHMENT_REF = `INSERT OR IGNORE INTO attachment_refs
   (item_id, version_id, attachment_id, created_at) VALUES (?, ?, ?, ?)`;
 
+/**
+ * 清掉某条目的「当前稿引用」（M6 第一批 · 批 2a）。
+ *
+ * `version_id IS NULL` 才是当前稿——**历史版本的引用不能动**：它们代表「某个已封存版本
+ * 引用过这些附件」，删了会让那些版本回滚时缺图。
+ *
+ * 经 `items` 子查询限定归属：`attachment_refs` 没有 `user_id` 列（与 `permanentDeleteItems`
+ * 里那两条同理由），直接按 `item_id` 删在 id 撞车时会跨租户。
+ */
+export const SQL_DELETE_ITEM_DRAFT_REFS = `DELETE FROM attachment_refs
+ WHERE version_id IS NULL AND item_id IN (
+  SELECT id FROM items WHERE user_id = ? AND id = ?
+)`;
+
+/**
+ * 按 sha256 列表写入「当前稿引用」（M6 第一批 · 批 2a）。
+ *
+ * 三处讲究：
+ * 1. **`kind = 'original'`**：原图与缩略图**两行共用同一个 sha256**（finalize 会各插一行，
+ *    缩略图用 `parent_id` 指回原图）。不过滤就会把引用也挂到缩略图上，孤儿判定随之失真。
+ * 2. **`json_each(?)`**：整个数组压成**一个**绑定参数。逐行绑定的话，一篇带几十张图的
+ *    笔记会把 D1 单条语句的绑定参数顶爆（D1 的上限比 SQLite 严）。同时也就让
+ *    `POST /api/batch` 里同一个 op 携带引用时不吃参数预算。
+ * 3. **查不到的 sha 天然跳过**（`IN` 不匹配）：宁可少一条引用（后续 30 天清理），
+ *    也不要因为一条坏引用把整个保存打回——正文里那个图仍能按 sha 下载。
+ */
+export const SQL_INSERT_ITEM_DRAFT_REFS = `INSERT OR IGNORE INTO attachment_refs
+  (item_id, version_id, attachment_id, created_at)
+  SELECT ?, NULL, a.id, ? FROM attachments a
+   WHERE a.user_id = ? AND a.kind = 'original'
+     AND a.sha256 IN (SELECT value FROM json_each(?))`;
+
 export const SQL_SELECT_ATTACHMENT_REFS = `SELECT attachment_id, version_id
   FROM attachment_refs WHERE item_id = ?`;
 

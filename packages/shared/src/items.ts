@@ -113,6 +113,46 @@ export const ITEM_META_HEADER = "X-Menote-Meta";
 export const ITEM_BASE_REV_HEADER = "If-Match";
 /** `PUT /api/items/:id/body` 的内容哈希头（架构 §6.1） */
 export const ITEM_HASH_HEADER = "X-Menote-Hash";
+/**
+ * `PUT /api/items/:id/body` 的**附件引用集合**头（M6 第一批；架构 §6.1 的补充）。
+ *
+ * **值是 sha256 列表，不是 attachment_id**：sha256 正是正文里出现的那个标识
+ * （`![名](/api/attachments/h/<sha256>)`），客户端本地就算得出；`attachment_id` 是服务端
+ * 主键，客户端未必有（备份恢复出来的附件本地行可能不全）。服务端按 sha + `user_id`
+ * 反查 `attachments.id`，**顺带把租户限定做掉**。
+ *
+ * **可选**：不带这个头 = **完全不动 `attachment_refs`**。老客户端、批量路径的旧 op、
+ * 第三方调用因此都安全（向后兼容）。
+ *
+ * 编码与 `X-Menote-Meta` 同款（base64url 的 JSON 数组），理由相同：请求头不能放裸 JSON
+ * 里的分隔符与引号。
+ */
+export const ITEM_REFS_HEADER = "X-Menote-Refs";
+
+/** sha256 列表 → `X-Menote-Refs` 请求头的值（base64url JSON） */
+export function encodeAttachmentRefs(sha256s: readonly string[]): string {
+  return base64UrlEncodeUtf8(JSON.stringify(sha256s));
+}
+
+/**
+ * `X-Menote-Refs` 请求头 → sha256 列表；内容非法时抛错（由路由转成 422 `invalid`）。
+ *
+ * 校验三条：必须是数组、每项必须是字符串、每项必须是 64 位小写十六进制。
+ * **刻意不接受空数组以外的"空"形态**（`null` / 缺字段 / 非法 JSON 一律抛）——
+ * 「不带这个头」与「带一个空数组」是两件不同的事：前者不动引用表，后者要清空当前稿的引用。
+ */
+export function decodeAttachmentRefs(header: string): string[] {
+  const parsed: unknown = JSON.parse(base64UrlDecodeUtf8(header));
+  return v.parse(AttachmentRefsSchema, parsed);
+}
+
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+
+/** 一条 sha256 引用 */
+const AttachmentRefSchema = v.pipe(v.string(), v.regex(SHA256_PATTERN, "附件哈希格式不合法"));
+
+/** `X-Menote-Refs` 的载荷：sha256 列表（可为空数组 = 清空当前稿引用） */
+export const AttachmentRefsSchema = v.array(AttachmentRefSchema);
 
 /**
  * 设备标识请求头（需求 §12.2-3 的"跨会话 / 跨设备"判断要用）。
@@ -237,6 +277,16 @@ export const BatchOpSchema = v.variant("kind", [
     base_rev: v.pipe(IntSchema, v.minValue(0)),
     content_hash: v.string(),
     body: v.string(),
+    /**
+     * 当前稿引用的 sha256 列表（M6 第一批 · 批 2a）。
+     *
+     * **这一条是离线主路径**：本应用离线优先，正文大多经 `POST /api/batch` 落库。
+     * 只在单条端点 `PUT /api/items/:id/body` 上支持引用对齐、而漏了这里，等于
+     * 「正常使用时不对齐、重试时反而对齐」，行为还不一致。
+     *
+     * 缺省 = 不动引用表（与单条端点不带 `X-Menote-Refs` 同一语义）。
+     */
+    refs: v.optional(AttachmentRefsSchema),
   }),
   v.object({
     kind: v.literal("patch_meta"),

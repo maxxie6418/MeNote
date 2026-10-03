@@ -8,7 +8,9 @@ import {
   ITEM_DEVICE_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
+  ITEM_REFS_HEADER,
   ItemMetaPatchSchema,
+  decodeAttachmentRefs,
   decodeItemWriteMeta,
   isUlid,
   type BatchResponse,
@@ -114,6 +116,22 @@ app.put("/items/:id/body", requireSession, async (c) => {
     throw new DomainError("invalid", "基版本不合法");
   }
 
+  /*
+   * 附件引用集合（M6 第一批 · 批 2a）：**可选头**。
+   * - 不带这个头 → `undefined` → 服务端**完全不动** `attachment_refs`（老客户端安全）
+   * - 带了空数组 → 清空这条目「当前稿」的引用
+   * 解析失败当 422 `invalid` 报，不静默忽略——静默忽略等于用户以为对齐了、其实没对齐。
+   */
+  const rawRefs = c.req.header(ITEM_REFS_HEADER);
+  let attachmentRefs: string[] | undefined;
+  if (rawRefs !== undefined) {
+    try {
+      attachmentRefs = decodeAttachmentRefs(rawRefs);
+    } catch {
+      throw new DomainError("invalid", `${ITEM_REFS_HEADER} 解析失败`);
+    }
+  }
+
   const result = await saveItemBody(
     c.env,
     c.get("user").id,
@@ -123,6 +141,7 @@ app.put("/items/:id/body", requireSession, async (c) => {
     await c.req.text(),
     deviceOf(c),
     Date.now(),
+    attachmentRefs,
   );
 
   const response: ItemBodyWriteResponse = result;

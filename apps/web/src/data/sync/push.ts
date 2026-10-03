@@ -11,6 +11,7 @@
  */
 import {
   BATCH_MAX_OPS,
+  extractAttachmentRefs,
   newUlid,
   sha256Hex,
   type ApiErrorCode,
@@ -58,11 +59,21 @@ const MAX_OPS_PER_RUN = 20;
 
 export interface PushApi {
   createItem(id: string, meta: ItemWriteMeta, body: string): Promise<ItemBodyWriteResponse>;
+  /**
+   * 参数顺序**与 `itemsApi.saveBody` 保持一致**（deviceId 在前、引用集合在后）。
+   *
+   * 之前两者的顺序不同，于是要靠一层包装来「把 deviceId 插到中间」——那层包装迟早会因为
+   * 某个新调用点漏传参数而把引用数组当成 deviceId 发出去。顺序对齐后 `httpPushApi` 直接
+   * 引用 `itemsApi.saveBody` 即可，**少一处转接、少一个坑**。
+   */
   saveBody(
     id: string,
     baseRev: number,
     contentHash: string,
     body: string,
+    deviceId?: string,
+    /** 当前稿引用的 sha256 列表（M6 批 2a）；`undefined` = 不带这个头 = 不动引用表 */
+    attachmentRefs?: readonly string[],
   ): Promise<ItemBodyWriteResponse>;
   patchMeta(id: string, patch: ItemMetaPatch): Promise<ItemMetaWriteResponse>;
   /** 服务端软删（移入回收站）。目前只由备份恢复的 `trash_item` 出队触发（M5 设计 §4.2） */
@@ -193,7 +204,15 @@ async function pushBodySave(row: OutboxRow, ctx: ResolvedContext, seq: number): 
 
   const { body } = await getEditableBody(item.id);
   const contentHash = await sha256Hex(body);
-  const result = await ctx.api.saveBody(item.id, row.base_rev, contentHash, body);
+  const result = await ctx.api.saveBody(
+    item.id,
+    row.base_rev,
+    contentHash,
+    body,
+    ctx.deviceId ?? undefined,
+    // 与批量路径同一套抽取（见下方 buildOp 的注释）：不另写一份解析
+    [...extractAttachmentRefs(body)],
+  );
   await afterBodySynced(item.id, body, contentHash, result, ctx, seq);
   return "done";
 }
@@ -492,6 +511,16 @@ async function prepareBatchOp(row: OutboxRow): Promise<PreparedBatchOp | null> {
     };
   }
 
+  /*
+   * 引用集合跟着 `save_body` 一起推（M6 批 2a）。
+   *
+   * **这一条是离线主路径**：本应用离线优先，正文大多经批量落库。只在单条端点上对齐引用、
+   * 而这里漏掉，等于「正常直连时对齐、断网重连后不对齐」——而后者恰好是引用最容易漂的场合
+   * （用户在没网的时候改了好几篇的图）。
+   *
+   * 用 `extractAttachmentRefs(body)` 抽，**不另写一套解析**：分享查看器取附件用的就是它
+   * （`features/share-viewer/model.ts` 的 `loadAttachmentBlobs`）。
+   */
   return {
     op: {
       kind: "save_body",
@@ -499,6 +528,7 @@ async function prepareBatchOp(row: OutboxRow): Promise<PreparedBatchOp | null> {
       base_rev: row.base_rev,
       content_hash: contentHash,
       body,
+      refs: [...extractAttachmentRefs(body)],
     },
     body,
     contentHash,
@@ -547,19 +577,10 @@ async function applyBatchResult(
 export async function pushQueue(context: PushContext = {}): Promise<PushBatchResult> {
   const ctx: ResolvedContext = {
     /*
-      默认 API 在这里**按上下文包一层**：`PushApi.saveBody` 的签名是"服务端接口的形状"，
-      不含设备标识，而正文保存要带上它（`X-Menote-Device` → `items.last_device`）。
-      用包装而不是模块级可变：没有隐藏的全局状态，注入替身的测试也照旧。
+      默认 API 直接用 `httpPushApi`：`PushApi.saveBody` 的设备标识由调用处从 `ctx` 传进来，
+      不再需要「按上下文包一层」。原来那层包装存在只是因为两处参数顺序不同（见接口注释）。
     */
-    api:
-      context.api ??
-      (context.deviceId
-        ? {
-            ...httpPushApi,
-            saveBody: (id, baseRev, contentHash, body) =>
-              itemsApi.saveBody(id, baseRev, contentHash, body, context.deviceId ?? undefined),
-          }
-        : httpPushApi),
+    api: context.api ?? httpPushApi,
     now: context.now ?? Date.now,
     random: context.random ?? Math.random,
     deviceLabel: context.deviceLabel ?? null,

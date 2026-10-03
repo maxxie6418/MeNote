@@ -11,6 +11,7 @@ import {
   ITEM_DEVICE_HEADER,
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
+  ITEM_REFS_HEADER,
   SearchResponseSchema,
   ShareListResponseSchema,
   ShareRecordSchema,
@@ -18,6 +19,7 @@ import {
   TrashFolderResponseSchema,
   TrashItemResponseSchema,
   UserSettingsPayloadSchema,
+  encodeAttachmentRefs,
   encodeItemWriteMeta,
   type AuthKdfParams,
   type AuthSessionResponse,
@@ -108,7 +110,15 @@ export const itemsApi = {
     };
   },
 
-  saveBody: (id: string, baseRev: number, contentHash: string, body: string, deviceId?: string) =>
+  saveBody: (
+    id: string,
+    baseRev: number,
+    contentHash: string,
+    body: string,
+    deviceId?: string,
+    /** 当前稿引用的 sha256 列表（M6 批 2a）；`undefined` = 不带这个头 = 服务端不动引用表 */
+    attachmentRefs?: readonly string[],
+  ) =>
     apiRequest<ItemBodyWriteResponse>(`/api/items/${encodeURIComponent(id)}/body`, {
       method: "PUT",
       body,
@@ -120,6 +130,8 @@ export const itemsApi = {
           于是那一列永远是 null、"另一台设备改过"无从判断（需求 §12.2-3）。
         */
         ...(deviceId ? { [ITEM_DEVICE_HEADER]: deviceId } : {}),
+        // 附件引用集合：服务端据此在**同一次写**里对齐 `attachment_refs`（与正文原子）
+        ...(attachmentRefs ? { [ITEM_REFS_HEADER]: encodeAttachmentRefs(attachmentRefs) } : {}),
       },
     }),
 

@@ -19,7 +19,9 @@ import {
 import {
   SQL_BUMP_SYNC_SEQ_ON_ITEM_BODY,
   SQL_BUMP_SYNC_SEQ_ON_ITEM_CREATE,
+  SQL_DELETE_ITEM_DRAFT_REFS,
   SQL_INSERT_ITEM,
+  SQL_INSERT_ITEM_DRAFT_REFS,
   SQL_SELECT_ITEM_BODY,
   SQL_SELECT_ITEM_REV,
   SQL_UPDATE_ITEM_BODY,
@@ -184,6 +186,8 @@ export async function saveItemBody(
   body: string,
   deviceLabel: string | null,
   now: number,
+  /** 当前稿引用的 sha256 列表（M6 第一批 · 批 2a）；`undefined` = **不动引用表** */
+  attachmentRefs?: readonly string[],
 ): Promise<ItemBodyWriteResult> {
   const db = env.DB;
   const { bytes, chars } = await measure(body);
@@ -207,7 +211,7 @@ export async function saveItemBody(
   // 会话封存：读的是**保存前**的 `last_edit_at` / `last_device`（写入时会刷新这两列）
   await sealSessionVersionIfNeeded(env, userId, id, deviceLabel, now);
 
-  const results = await db.batch([
+  const statements = [
     db
       .prepare(SQL_UPDATE_ITEM_BODY)
       .bind(bytes, contentHash, now, now, deviceLabel, userId, id, userId, baseRev),
@@ -215,7 +219,31 @@ export async function saveItemBody(
     db
       .prepare(SQL_BUMP_SYNC_SEQ_ON_ITEM_BODY)
       .bind(userId, id, baseRev + 1, contentHash),
-  ]);
+  ];
+
+  /*
+   * 引用集合与正文**同一次 batch**（M6 第一批 · 批 2a）——这一步的原子性不是洁癖：
+   * 孤儿判定只看 `attachment_refs`。若正文已存、引用表还没跟上，那张仍在正文里显示的图
+   * 会被 `SQL_MARK_ORPHANS_OF_USER` 标成孤儿，**30 天后由每日维护真删掉 R2 对象**，
+   * 于是笔记里的图凭空消失。分成两次请求就留下这个窗口。
+   *
+   * `undefined`（客户端没带 `X-Menote-Refs`）= 引用表**一个字都不动**；带空数组 = 清空
+   * 当前稿的引用。两条路径的差别是刻意的，见 shared 的 `decodeAttachmentRefs`。
+   *
+   * 已知的极小竞态：下面 `results[0].meta.changes === 0` 那条「预检通过后被并发抢先」的
+   * 路径上，引用已经被换掉了而正文不是我们的。它会自愈——抢先那次保存同样会带自己的引用，
+   * 且那个窗口比上面避免的「正文与引用不一致满 30 天」小几个数量级，不值得为它拆开 batch。
+   */
+  if (attachmentRefs !== undefined) {
+    statements.push(
+      db.prepare(SQL_DELETE_ITEM_DRAFT_REFS).bind(userId, id),
+      db
+        .prepare(SQL_INSERT_ITEM_DRAFT_REFS)
+        .bind(id, now, userId, JSON.stringify(attachmentRefs)),
+    );
+  }
+
+  const results = await db.batch(statements);
 
   if ((results[0]?.meta.changes ?? 0) === 1) {
     return { id, rev: baseRev + 1, bytes, chars };

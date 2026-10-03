@@ -89,6 +89,8 @@ export async function applyBatch(
           op.body,
           deviceLabel,
           now,
+          // 引用集合：缺省即 `undefined` → 不动引用表（M6 第一批 · 批 2a）
+          op.refs,
         );
         results.push({
           ok: true,

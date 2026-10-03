@@ -215,7 +215,14 @@ describe("推送：正文保存路径", () => {
 
     // 第一轮 create、第二轮 save_body：新内容确实被上传，而不是停在草稿里
     expect(result).toMatchObject({ processed: 2, succeeded: 2, failed: 0 });
-    expect(api.saveBody).toHaveBeenCalledWith(id, 1, await sha256Hex("旧内容 + 新字"), "旧内容 + 新字");
+    expect(api.saveBody).toHaveBeenCalledWith(
+      id,
+      1,
+      await sha256Hex("旧内容 + 新字"),
+      "旧内容 + 新字",
+      undefined,
+      [],
+    );
     expect(await getDraft(id)).toBeUndefined();
     expect(await listOutbox()).toEqual([]);
   });
@@ -230,7 +237,14 @@ describe("推送：正文保存路径", () => {
     const result = await pushQueue({ api, now: () => 3000 });
 
     expect(result.succeeded).toBe(1);
-    expect(api.saveBody).toHaveBeenCalledWith(id, 3, await sha256Hex("改过的正文"), "改过的正文");
+    expect(api.saveBody).toHaveBeenCalledWith(
+      id,
+      3,
+      await sha256Hex("改过的正文"),
+      "改过的正文",
+      undefined,
+      [],
+    );
     const item = await getLocalItem(id);
     expect(item?.rev).toBe(4);
     expect(item?.pending).toBeNull();

@@ -1,0 +1,155 @@
+# Menote M6 MCP 实施计划（功能拆解 M17）
+
+| 项 | 值 |
+|---|---|
+| 文档版本 | v1 |
+| 文档状态 | 待执行（设计稿《Menote-M6-MCP-设计-v1》确认后开工） |
+| 目的和适用范围 | 拆步、涉及文件与验收点。设计口径以那份专项设计为准，本文件只管怎么落地 |
+| 权威级别 | 临时规则（M6 第三块的执行清单） |
+| 最后更新日期 | 2026-10-03 |
+
+## 修改记录
+
+| 文档版本 | 应用版本 | 日期 | 修改摘要 | 修改模型ID |
+|---|---|---|---|---|
+| v1 | v0.6.22 | 2026-10-03 | 初稿。依据《M6 MCP 设计》v1 拆步，切 4 批 | MiniMax-M3.1-Flash-Preview |
+
+---
+
+## 目标
+
+把 Menote 开放给外部 agent：**用户自建令牌 → 交给任意第三方客户端 → 客户端能读能写**。
+
+做完之后的可验证结果：一个真实令牌通过 `POST /mcp` 完成 `tools/list`（出 11 个工具）、5 个只读工具可用、6 个写类工具在乐观锁与幂等下正确写入并在版本历史留下「AI 修改前」、设置 › MCP 能建令牌与查审计。
+
+## 切批总览
+
+| 批 | 内容 | 版本 | 可验证的落点 |
+|---|---|---|---|
+| 1 | 迁移 + 令牌服务 + 4 个令牌接口 | v0.6.23 | 界面没做也能用接口建令牌、看列表、撤销 |
+| 2 | MCP 端点 + 协议层 + 只读 5 工具 | v0.6.24 | 真实令牌能连、能读；写类工具被权限位挡住 |
+| 3 | 写类 6 工具 + 封存 + 审计 + 幂等 | v0.6.25 | agent 能写、能撤回、能查审计 |
+| 4 | 设置 › MCP 界面（先出稿 → 确认 → 码） | v0.6.26 | 用户不用碰命令行就能建令牌 |
+
+**M6 收口时才 +0.1 到 v0.7.0**，开发期只 +0.0.1。
+
+每步结束都是一次可提交、可推送的落点（AGENTS.md「每完成一个关键阶段就即时提交并推送」）。提交前跑 `pnpm lint` / `pnpm typecheck` / `pnpm test`。
+
+---
+
+## 批 1 · 数据层与令牌
+
+| 步 | 做什么 | 涉及文件 |
+|---|---|---|
+| 1.1 | 迁移 `0006_mcp`：照抄《设计文档》§DDL MCP 段三张表 + 5 个索引（语句单行、`IF NOT EXISTS`），**外加** `api_tokens` 的 `rate_window_start` / `rate_call_count` 两列 | `apps/worker/src/db/migrations/0006_mcp.ts`、`db/selfheal.ts`（完整性校验加三张表） |
+| 1.2 | MCP 专用 SQL 常量（令牌 CRUD、审计读写、幂等读写删、范围查询、计数查询） | `apps/worker/src/db/mcp-tables.ts`（新建） |
+| 1.3 | 令牌原语：生成 `mn_` + 32 字节、`SHA-256(整串)` 存哈希、`token_prefix`；**前缀不符直接拒**（不进哈希） | `apps/worker/src/services/mcp/tokens.ts` |
+| 1.4 | 4 个接口的 valibot schema（名称、权限位掩码含「bit 0 恒 1」归一化、`folder_scope` 逐个校验归属与非加密空间、`rate_per_min` 1~600、有效期四档） | `packages/shared/src/mcp.ts`（新建） |
+| 1.5 | 令牌服务：建（含**上限 20** 有效令牌）、列、撤销、审计分页；创建时返回完整令牌一次 | `apps/worker/src/services/mcp/tokens.ts` |
+| 1.6 | 4 个会话接口（`requireSession` + CSRF 自动生效，因为挂在 `/api` 下） | `apps/worker/src/routes/mcp-tokens.ts`（新建） |
+| 1.7 | 修 `mcp_idempotency` → `mcp_operations`（那段清理至今是空转） | `apps/worker/src/jobs/maintenance.ts` |
+| 1.8 | 用例：CRUD；上限 20（21st 返回 409）；撤销 / 过期立即生效；`folder_scope` 越权被拒；**哈希域隔离——拿会话令牌字符串打 MCP 必须 401**；创建响应含完整令牌、列表响应不含 | `apps/worker/test/mcp-tokens.test.ts`（新建） |
+| 1.9 | 入口装配加两行 `app.route` | `apps/worker/src/index.ts` |
+
+**批 1 验收点**
+
+- [ ] `POST /api/mcp/tokens` 建出令牌，响应里有 `mn_` 开头的完整串；`GET` 同一令牌只有 `token_prefix`
+- [ ] 第 21 个有效令牌被拒（409）
+- [ ] 撤销后立刻失效；`expires_at` 到点后鉴权第一步就拒
+- [ ] 拿一个真实会话令牌当 MCP 令牌用 → 401（这条是防越权的关键用例，不能省）
+- [ ] `folder_scope` 填别人家文件夹 / 加密空间行 → 422
+- [ ] `pnpm test` 全绿（worker 基线 246 条，本批只增不减）
+
+---
+
+## 批 2 · 端点、协议层与只读工具
+
+| 步 | 做什么 | 涉及文件 |
+|---|---|---|
+| 2.1 | 鉴权与处理顺序：取令牌 → 撤销 → 过期 → 限速 → 权限位 → 范围 → 执行 → 审计位。限速按设计 §3.5 的条件自增 + 最多 1 次重试 | `apps/worker/src/services/mcp/tokens.ts` |
+| 2.2 | 范围过滤：I1 四个条件的 SQL 片段、`PRIVACY_EXCLUDE_SQL` 引用（**不重写**）、文件夹两层的 `json_each` 子查询、`include_memos = 0` 排除 Memo | `apps/worker/src/services/mcp/scope.ts`（新建） |
+| 2.3 | JSON-RPC 分发：`initialize` / `notifications/initialized`（**202 空体**）/ `ping` / `tools/list` / `tools/call`；业务失败走 `isError: true`，协议错误走 `-32601 / -32602 / -32603 / -32001 / -32029`；限速另带 HTTP 429 | `apps/worker/src/services/mcp/jsonrpc.ts`（新建） |
+| 2.4 | 工具注册表：11 个 name / description / inputSchema（**静态常量**）/ 权限位；只列本批已实现的 5 个只读工具，写类的先不在 `tools/list` 里出现 | `apps/worker/src/services/mcp/registry.ts`（新建） |
+| 2.5 | Markdown 小节切分（纯函数，含同名歧义标记、front matter 偏移换算、CRLF） | `packages/mdcore/src/section.ts` + `test/section.test.ts`（新建） |
+| 2.6 | `search`：`buildSearchSql` 加两个可选参数（片段长度与前导量），MCP 传 200 / 80，界面兜底路径维持 120 / 40；加 `(updated_at, id)` 游标 | `apps/worker/src/services/search.ts`（+3 行）、`services/mcp/tools-read.ts`（新建） |
+| 2.7 | `list_folders` / `list_items` / `read_item` / `list_versions`：含**排除加密空间节点**、计数不含隐私内容、游标为字符偏移 | `apps/worker/src/services/mcp/tools-read.ts` |
+| 2.8 | 端点：`POST /mcp`、`POST /mcp/k/:token`（受 `allow_url` 约束）、`GET /mcp` = 405；挂 `securityHeaders` + `schemaGuard`，**不挂** `csrfGuard` / `requireSession` / `configGuard` | `apps/worker/src/routes/mcp.ts`（新建）、`index.ts` |
+| 2.9 | 用例（走真实端点 + 真实令牌）：`initialize` / `tools/list` 出 5 个 / 只读 5 个各自跑通 / 写类工具被权限位拒 / 范围外读全 404（与不存在同形）/ 加密与空间不可见 / 回收站不可见 / `include_memos` 两种取值 / `allow_url` 关时 URL 方式 401 / `GET /mcp` 405 / 限速窗口重置 / 512 KB 以上禁小节读但区间读可用 | `apps/worker/test/mcp-read.test.ts`（新建） |
+
+**批 2 验收点**
+
+- [ ] 真实令牌 `POST /mcp` 能完成 `initialize` → `tools/list` → `tools/call` 三步
+- [ ] 写类工具此时**被权限位拒绝**（不是 404 也不是 500）
+- [ ] 令牌范围外的条目 `read_item` 返回 404，且**与真的不存在返回完全相同的响应体**（不泄露存在性）
+- [ ] 单篇加密 / 加密空间内 / 回收站里的条目，一律读不到
+- [ ] `list_folders` 不含加密空间节点；计数与 `list_items` 实数一致
+- [ ] `mcp-read.test.ts` 里有一条**往返用例**：同一个令牌在请求头方式与 URL 方式下鉴权结果一致
+
+---
+
+## 批 3 · 写类工具、封存、审计
+
+| 步 | 做什么 | 涉及文件 |
+|---|---|---|
+| 3.1 | 四个既有写函数加**可选**尾随语句参数（默认空 = 行为与今天完全一致）：`saveItemBody` / `createItem` / `patchItemMeta` / `softDeleteItem` | `services/{items,item-meta,trash}.ts` |
+| 3.2 | 写前封存：独立文件判「同一条目 10 分钟内最多一次」，`reason = 'pre_mcp'`、`keep = 1`，去重交给 `sealVersion` | `apps/worker/src/services/mcp/seal.ts`（新建） |
+| 3.3 | 审计与幂等：写工具的结果四态（`ok` / `conflict` / `denied` / `error`）随写入同批落库；幂等记录 7 天 | `apps/worker/src/services/mcp/audit.ts`（新建） |
+| 3.4 | 幂等的**冲突路径**（设计 §6.4 的四步）：预检冲突直接返回且不写幂等行；极小竞态补一个小 batch 删幂等行 + 记 conflict 审计 | `apps/worker/src/services/mcp/audit.ts` |
+| 3.5 | `create_item`：服务端算 `content_hash`（MCP 侧的刻意偏离）、`folder_id` 必须在范围内、不自动建文件夹 | `services/mcp/tools-write.ts`（新建） |
+| 3.6 | `append_to_item`：笔记走 `body = body \|\| ?`；带 `section` 先切小节（≤512 KB）；表格按列名给值并用 mdcore `makeRowId` 分配行 ID（表格 ≤256 KB）；条件写入失败重试 1 次 | 同上 |
+| 3.7 | `edit_item`：5 个 `mode`；`expected_rev` 必带；`replace_text` 要求唯一命中（≠1 次即报错）；`replace_all` / `merge_properties` / `replace_section` / `restore_version` 受门槛约束；`on_conflict: "copy"` 生成冲突副本 | 同上 |
+| 3.8 | `edit_table_rows`：按行 ID 更新 / 删除，走 mdcore `parseTableDocument` + `renderTableDocument` | 同上 |
+| 3.9 | `organize_item`：`expected_meta_rev`；**目标文件夹必须在范围内且不是加密空间行**；不提供置 `enc_self` 与改 `type` | 同上 |
+| 3.10 | `trash_item`：`expected_rev` + `operation_id`；复用 `softDeleteItem`（顺带撤销分享） | 同上 |
+| 3.11 | 注册表把 6 个写类工具加进 `tools/list`（共 11 个） | `services/mcp/registry.ts` |
+| 3.12 | 用例：乐观锁冲突与 `on_conflict: copy`；幂等重放返回同一结果；同 ID 异参报错；冲突后幂等行已被删（重读一次能成功）；写前封存生成「AI 修改前」且 10 分钟内不重复；审计四态都写；表格行增删改；MCP 不能移入加密空间 / 不能置 `enc_self`；`tools/list` 恰好 11 个 | `apps/worker/test/mcp-write.test.ts`（新建） |
+| 3.13 | **实测 512 KB 小节解析耗时**并登记（架构 §十一 挂着一条【待核实】）：真跑一条 512 KB 正文调 `read_item(section)`，把耗时写进设计稿；超预算就下调 `MCP_SECTION_MAX_BYTES` | `apps/worker/test/mcp-read.test.ts` 加一条 + 设计稿 §6.1 登记 |
+
+**批 3 验收点**
+
+- [ ] agent 改一篇笔记 → 版本历史里出现原因为「AI 修改前」的版本 → 能在界面里撤回
+- [ ] 带旧 `rev` 的修改被拒且返回当前 `rev`；`on_conflict: "copy"` 生成副本
+- [ ] 同一个 `operation_id` 调两次结果一致；改参数再调报错
+- [ ] 冲突之后**同一个 `operation_id` 重新读再重试能成功**（这条专门盯幂等行被删干净）
+- [ ] 审计四条结果都在库里，保留 90 天
+- [ ] `tools/list` 恰好 11 个，每个工具名都在定稿清单内（结构上挡掉附件 / 分享 / 备份 / 设置类工具）
+- [ ] 512 KB 实测耗时已记录，门槛按结果定死
+- [ ] `pnpm test` 全绿；`lint` 的 `max-lines` 无新增违规
+
+---
+
+## 批 4 · 设置 › MCP
+
+| 步 | 做什么 |
+|---|---|
+| 4.1 | **先出稿**（`docs/modules/Menote-M6-MCP-设置页-设计-v1.md`）：这一屏有哪些块、主操作、空状态、令牌一次性展示的形态、审计详情的层级。**用户确认前不写界面代码、不改全局样式、不改 `DESIGN.md`** |
+| 4.2 | `SETTINGS_PAGES` 加 `"mcp"`（10 → 11 类），同步 `PAGE_META` 与两处断言分类数的测试 |
+| 4.3 | `features/mcp/model.ts` + `ui/`：`McpSettingsPage`、创建弹窗、审计详情 |
+| 4.4 | 创建弹窗：名称、权限（只读恒含、另三位独立）、范围（文件夹多选含子文件夹 + 「包含 Memo」）、有效期、允许 URL（勾选时显风险说明） |
+| 4.5 | 一次性令牌展示：完整串 + 复制；关闭后只剩 `token_prefix`。**接入说明与 MCP 地址也在这一屏**（功能拆解 M17-01【补全】条） |
+| 4.6 | 达 20 个时「创建」置灰并提示；撤销二次确认 |
+| 4.7 | 用例：创建校验、一次性展示、列表 / 撤销、审计分页、上限置灰、空态 |
+
+**批 4 验收点**
+
+- [ ] 导航 11 类，「MCP」在「分享」与「数据管理」之间
+- [ ] 全程不碰命令行就能建令牌、拿到地址与接入说明
+- [ ] 完整令牌只出现一次；刷新后只有前缀
+- [ ] 撤销即时生效（下一屏刷新即失效）
+- [ ] 空态、达上限、审计为空三种状态都有明确文案
+- [ ] 对照 `DESIGN.md` §3 逐项核对过
+
+---
+
+## 不做（本轮之外）
+
+定时自动备份（M16）、首页重做与「那年今日」、移动端适配、PWA 离线、上线前检查（部署指南 / 家人使用说明 / Runbook）。令牌编辑（`PATCH`）按设计 §十一 后置。
+
+## 跨批的收尾
+
+全部四批完成后（收口时 +0.1 → **v0.7.0**）：
+
+1. 回写四份定稿（设计稿 §十二  列了清单）。
+2. `AGENTS.md` 项目简介跟上 M6 第三块进度。
+3. `docs/todo/Menote-开发计划-v1.md` 的 M6 段更新进度表。
+4. 线上点验清单交给用户（设置 › MCP 逐屏 + 一次真实客户端连接）。

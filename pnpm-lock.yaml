@@ -111,6 +111,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@menote/mdcore':
+        specifier: workspace:*
+        version: link:../../packages/mdcore
       '@menote/shared':
         specifier: workspace:*
         version: link:../../packages/shared

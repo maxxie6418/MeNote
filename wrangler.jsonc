@@ -7,10 +7,14 @@
   // 唯一 Worker 入口（架构 §2.3.1）：只做装配，业务在 routes/ 与 services/
   "main": "apps/worker/src/index.ts",
   "assets": {
-    // SPA：未命中静态资源时回 index.html；/api 与 /api/* 一律由 Worker 处理
-    // （只写 "/api/*" 时，无尾斜杠的 /api 会落 SPA 回退返回 HTML）
+    // SPA：未命中静态资源时回 index.html；/api、/mcp 与它们的子路径一律由 Worker 处理
+    // （只写 "/api/*" 时，无尾斜杠的 /api 会落 SPA 回退返回 HTML；/mcp 同理）
+    //
+    // **MCP 必须在这里列出来**：它是 POST 端点，若被 SPA 回退接走，客户端拿到的是
+    // 一份 HTML 而不是 JSON-RPC 响应——而且失败方式很隐蔽（HTTP 200 + HTML），
+    // 排查时容易误以为是鉴权或协议问题。
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api", "/api/*"],
+    "run_worker_first": ["/api", "/api/*", "/mcp", "/mcp/*"],
     "binding": "ASSETS"
   },
   // 不写 database_id：部署时自动供给并回写（架构 §15.5，wrangler ≥ 4.45）

@@ -48,6 +48,13 @@ export {
 export { firstHeading, splitFirstLineAsTitle } from "./markdown";
 
 export {
+  findSectionRange,
+  readSection,
+  replaceSection,
+  type SectionRange,
+} from "./section";
+
+export {
   CELL_NOTICE_CHARS,
   COLUMN_NOTICE_COUNT,
   ROW_ID_COLUMN,

@@ -15,6 +15,7 @@ import { runScheduled } from "./services/jobs";
 import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
+import mcp from "./routes/mcp";
 import mcpTokens from "./routes/mcp-tokens";
 import publicShares from "./routes/public";
 import search from "./routes/search";
@@ -59,6 +60,13 @@ app.route("/api", crypto);
 app.route("/api", shares);
 app.route("/api", publicShares);
 app.route("/api", mcpTokens);
+
+/**
+ * MCP 端点挂在 `/mcp` 而不是 `/api` 下（架构 §十一），因此它**不受**上面那组
+ * `app.use("/api/*")` 中间件约束——安全头与 schema 自愈由 `routes/mcp.ts` 自己挂，
+ * 而 CSRF / 会话 / 机密守卫**刻意都不挂**（理由见那个文件的抬头）。
+ */
+app.route("/mcp", mcp);
 
 app.notFound((c) => {
   applySecurityHeaders(c);

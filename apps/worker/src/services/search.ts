@@ -37,19 +37,51 @@ export interface SearchResultRow {
   is_task: number;
   task_status: string | null;
   updated_at: number;
+  /** 条目正文版本号。MCP 的 `search` 要它（agent 改之前得先知道当前 rev），界面兜底不用 */
+  rev: number;
   snippet: string;
 }
 
 /** 结果行上限（本轮不做分页：个人量级够用，也让"回退"这条路径保持简单） */
 export const SEARCH_RESULT_LIMIT = 50;
 
+/** 片段的默认形状：界面的兜底搜索沿用这一组（M2-6 定下的 120 / 40） */
+export const SEARCH_SNIPPET_DEFAULT = { chars: 120, lead: 40 } as const;
+
 interface SearchSql {
   sql: string;
   params: Array<string | number>;
 }
 
-/** 组装 SQL（导出便于单测直接校验条件拼装，不必起 Worker） */
-export function buildSearchSql(userId: string, query: SearchQuery): SearchSql {
+export interface SearchSqlOptions {
+  /** 片段形状：界面兜底用默认的 120/40，MCP 用 200/80（设计 §17.4） */
+  snippet?: { chars: number; lead: number };
+  /**
+   * **追加在用户筛选条件之后**的额外 SQL 条件（不自带 `AND`），与 `extraParams` 一一对应。
+   *
+   * 给 MCP 用的：它要叠上可见性条件（`scope.ts` 的片段）与游标条件。
+   * 之所以走这个口子而不是让 MCP 自己重写一遍 SQL——**重写就会出现两份实现漂移**，
+   * 漏掉一个隐私条件就是一次泄漏。
+   */
+  extraConditions?: readonly string[];
+  extraParams?: ReadonlyArray<string | number>;
+  /** 排序。默认按 `updated_at` 倒序；MCP 要用 `(updated_at, id)` 兜底同毫秒（游标分页） */
+  orderBy?: string;
+}
+
+/**
+ * 组装 SQL（导出便于单测直接校验条件拼装，不必起 Worker）。
+ *
+ * 片段长度是**被夹成整数再插值**的，不是拼字符串——不给"片段长度"留一个能被喂任意文本的口子。
+ */
+export function buildSearchSql(
+  userId: string,
+  query: SearchQuery,
+  options: SearchSqlOptions = {},
+): SearchSql {
+  const snippet = options.snippet ?? SEARCH_SNIPPET_DEFAULT;
+  const chars = Math.max(1, Math.trunc(snippet.chars));
+  const lead = Math.max(0, Math.trunc(snippet.lead));
   const needle = query.text.toLowerCase();
   const conditions = [
     "i.user_id = ?",
@@ -85,16 +117,22 @@ export function buildSearchSql(userId: string, query: SearchQuery): SearchSql {
     params.push(query.to);
   }
 
+  // 额外条件紧跟在用户条件之后（于是它们的参数也紧跟），LIMIT 参数永远在最后
+  if (options.extraConditions) {
+    conditions.push(...options.extraConditions);
+    params.push(...(options.extraParams ?? []));
+  }
+
   params.push(query.limit);
 
   return {
     sql: [
-      "SELECT i.id, i.type, i.folder_id, i.title, i.tags, i.memo_at, i.is_task, i.task_status, i.updated_at,",
+      "SELECT i.id, i.type, i.folder_id, i.title, i.tags, i.memo_at, i.is_task, i.task_status, i.updated_at, i.rev,",
       // 片段：以正文里第一处命中为中心截一段（找不到命中就取开头），交给客户端再精修高亮
-      "substr(b.body, max(1, instr(lower(b.body), ?) - 40), 120) AS snippet",
+      `substr(b.body, max(1, instr(lower(b.body), ?) - ${lead}), ${chars}) AS snippet`,
       "FROM items i JOIN item_bodies b ON b.item_id = i.id",
       `WHERE ${conditions.join(" AND ")}`,
-      "ORDER BY i.updated_at DESC",
+      `ORDER BY ${options.orderBy ?? "i.updated_at DESC"}`,
       "LIMIT ?",
     ].join(" "),
     // snippet 的参数排在 SELECT 里最前，所以插到 params 的最前面

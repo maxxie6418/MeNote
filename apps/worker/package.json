@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@menote/mdcore": "workspace:*",
     "@menote/shared": "workspace:*",
     "hono": "^4.13.9"
   },

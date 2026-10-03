@@ -162,3 +162,32 @@ export const MCP_TOOL_NAMES = [
   "trash_item",
 ] as const;
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
+
+/**
+ * 有界读取的三个数（设计 §17.4）。
+ *
+ * 存在的理由是同一条：**别让 agent 一次把整库灌进上下文**。单条正文最大约 2 MB，
+ * 而 Worker 每请求只有 10 ms CPU，整篇取回来再截既慢又占内存。
+ */
+export const MCP_READ_CHARS_DEFAULT = 8_000;
+export const MCP_READ_CHARS_MAX = 20_000;
+
+/** 列表与搜索每页最多多少条（设计 §17.4） */
+export const MCP_PAGE_LIMIT_MAX = 50;
+
+/** 搜索片段的形状：以命中处前 80 字符起、截 200 字符（设计 §17.4） */
+export const MCP_SNIPPET = { chars: 200, lead: 80 } as const;
+
+/**
+ * 需要把正文取回 Worker 才能处理的门槛（设计 §17.4）。
+ *
+ * 超门槛的条目**不报错**，而是只给区间 / 游标读取——agent 仍能读大文件，
+ * 只是不能按小节或按行操作。512 KB 对应架构 §十一 那条【待核实】（批 3 实测后定死）。
+ */
+export const MCP_SECTION_MAX_BYTES = 512 * 1024;
+
+/** 单次写入内容上限（设计 §17.4） */
+export const MCP_WRITE_MAX_BYTES = 256 * 1024;
+
+/** 表格按行工具的门槛——比普通小节更严，因为解析整张表的代价是数量级的（设计 §17.4） */
+export const MCP_TABLE_MAX_BYTES = 256 * 1024;

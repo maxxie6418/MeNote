@@ -18,6 +18,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  BackupRunResult,
   BackupTarget,
   BackupTestResult,
   UpdateBackupTargetInput,
@@ -29,6 +30,7 @@ import {
   formFromTarget,
   lastRunText,
   policyRisk,
+  runResultText,
   targetWhere,
 } from "../src/features/backup/model";
 
@@ -60,6 +62,8 @@ interface ServerState {
   targets: BackupTarget[];
   listError: string | null;
   testResult: BackupTestResult | null;
+  runResult: BackupRunResult | null;
+  runError: string | null;
   removed: string[];
   updates: Array<{ id: string; input: UpdateBackupTargetInput }>;
 }
@@ -68,6 +72,8 @@ let state: ServerState = {
   targets: [],
   listError: null,
   testResult: null,
+  runResult: null,
+  runError: null,
   removed: [],
   updates: [],
 };
@@ -93,11 +99,24 @@ vi.mock("../src/data/api/backup-targets", () => ({
       if (state.testResult === null) throw new Error("没有配置测连接结果");
       return state.testResult;
     },
+    run: async (): Promise<BackupRunResult> => {
+      if (state.runError !== null) throw new Error(state.runError);
+      if (state.runResult === null) throw new Error("没有配置推一次结果");
+      return state.runResult;
+    },
   },
 }));
 
 beforeEach(() => {
-  state = { targets: [], listError: null, testResult: null, removed: [], updates: [] };
+  state = {
+    targets: [],
+    listError: null,
+    testResult: null,
+    runResult: null,
+    runError: null,
+    removed: [],
+    updates: [],
+  };
 });
 
 afterEach(() => {
@@ -244,5 +263,48 @@ describe("外部备份目标 · 界面", () => {
 
     await user.click(screen.getByRole("switch", { name: /启用「家里的 NAS」/ }));
     await waitFor(() => expect(state.updates).toEqual([{ id: "t1", input: { enabled: false } }]));
+  });
+});
+
+describe("外部备份目标 · 推一次", () => {
+  it("「推一次」的结果平铺在那一行上，且说清「还有 N 个没推完」不是出错", async () => {
+    const user = userEvent.setup();
+    state.targets = [makeTarget()];
+    state.runResult = { pushed: 40, deleted: 0, remaining: 12, quota_stopped: true, error: null };
+    render(<BackupTargetsCard />);
+    await waitFor(() => expect(screen.getByText("家里的 NAS")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: "推一次" }));
+    await waitFor(() => expect(screen.getByText(/推了 40 个文件，还有 12 个没推完/)).toBeTruthy());
+  });
+
+  it("没东西可推时说的是「没有需要推送的内容」，不报成失败", async () => {
+    const user = userEvent.setup();
+    state.targets = [makeTarget()];
+    state.runResult = { pushed: 0, deleted: 0, remaining: 0, quota_stopped: false, error: null };
+    render(<BackupTargetsCard />);
+    await waitFor(() => expect(screen.getByText("家里的 NAS")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: "推一次" }));
+    await waitFor(() => expect(screen.getByText("这次没有需要推送的内容。")).toBeTruthy());
+  });
+
+  it("推失败时原因平铺、不藏进 ⓘ", async () => {
+    const user = userEvent.setup();
+    state.targets = [makeTarget()];
+    state.runResult = { pushed: 0, deleted: 0, remaining: 0, quota_stopped: false, error: "远端返回 401" };
+    render(<BackupTargetsCard />);
+    await waitFor(() => expect(screen.getByText("家里的 NAS")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: "推一次" }));
+    await waitFor(() => expect(screen.getByText("没推成：远端返回 401")).toBeTruthy());
+  });
+
+  it("runResultText 把三种含义分开说", () => {
+    expect(runResultText({ pushed: 0, deleted: 0, remaining: 0, quota_stopped: false, error: null })).toContain("没有需要推送");
+    expect(runResultText({ pushed: 3, deleted: 1, remaining: 0, quota_stopped: false, error: null })).toBe(
+      "推了 3 个文件，删了远端 1 个。",
+    );
+    expect(runResultText({ pushed: 0, deleted: 0, remaining: 0, quota_stopped: false, error: "连不上" })).toBe("没推成：连不上");
   });
 });

@@ -19,6 +19,7 @@ import {
   BackupSchedules,
   BackupTargetKinds,
   type BackupDeletePolicy,
+  type BackupRunResult,
   type BackupSchedule,
   type BackupTarget,
   type BackupTargetKind,
@@ -191,6 +192,23 @@ export function secretFieldLabel(hasExisting: boolean, kind: BackupTargetKind): 
 /** 调一次只推 {limit} 个文件这件事，要在界面上说清，否则用户以为坏了 */
 export function quotaNotice(limit: number = BACKUP_BATCH_PUT_LIMIT): string {
   return `每轮最多推 ${limit} 个文件，推不完下一轮接着推——不是出错。`;
+}
+
+/**
+ * 「推一次」的结果文案。
+ *
+ * **三条都要分开说**，因为它们对用户的含义完全不同：
+ * - `error` 非空 = 这次没推成（原因就在后面，不藏）；
+ * - `pushed === 0` 且没有 error = 确实没东西可推（不是"失败"）；
+ * - `remaining > 0` = 推了一批还有剩——**这是常态，不是出错**（一轮一批的硬限额）。
+ */
+export function runResultText(result: BackupRunResult): string {
+  if (result.error !== null) return `没推成：${result.error}`;
+  if (result.pushed === 0 && result.deleted === 0) return "这次没有需要推送的内容。";
+  const parts = [`推了 ${result.pushed} 个文件`];
+  if (result.deleted > 0) parts.push(`删了远端 ${result.deleted} 个`);
+  if (result.remaining > 0) parts.push(`还有 ${result.remaining} 个没推完`);
+  return `${parts.join("，")}。`;
 }
 
 export { BackupTargetKinds, BackupSchedules };

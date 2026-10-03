@@ -20,6 +20,7 @@ import {
   encodeItemWriteMeta,
   newUlid,
   notePath,
+  type BackupRunResult,
   type ItemWriteMeta,
 } from "@menote/shared";
 import { SELF, env } from "cloudflare:test";
@@ -386,6 +387,27 @@ describe("推送状态机 · 远端删除", () => {
   });
 });
 
+describe("推送状态机 · 增量与续推", () => {
+  it("删过之后正文变了，游标只推变化的那一条", async () => {
+    const { cookie, id } = await registerUser("owner");
+    const a = newUlid();
+    const b = newUlid();
+    await createItem(cookie, a, "第一篇");
+    await createItem(cookie, b, "第二篇");
+    await materializeSnapshot(env, id, NOW);
+    const target = await makeTarget(id);
+
+    expect((await pushOneRound(env, target, NOW)).pushed).toBe(2);
+
+    await updateBody(cookie, b, "第二篇改过了", 1);
+    await materializeSnapshot(env, id, NOW + 1000);
+    // 同样要重读：游标是上一轮落进 D1 的
+    const result = await pushOneRound(env, await readTarget(target.id), NOW + 1000);
+    expect(result.pushed).toBe(1);
+    expect(remote.puts).toHaveLength(3);
+  });
+});
+
 describe("推送状态机 · 调度档位", () => {
   it("weekly 档：距上次不足 7 天就跳过", async () => {
     const { cookie, id } = await registerUser("owner");
@@ -409,22 +431,70 @@ describe("推送状态机 · 调度档位", () => {
     expect(result.pushed).toBe(1);
   });
 
-  it("删过之后正文变了，游标只推变化的那一条", async () => {
+  it("手动「推一次」**忽略档位**（用户点了就是要现在推）", async () => {
     const { cookie, id } = await registerUser("owner");
-    const a = newUlid();
-    const b = newUlid();
-    await createItem(cookie, a, "第一篇");
-    await createItem(cookie, b, "第二篇");
+    await createItem(cookie, newUlid(), "内容");
+    await materializeSnapshot(env, id, NOW);
+    const target = await makeTarget(id, { schedule: "weekly", last_run_at: NOW - 60_000 });
+
+    // 同一行、同一档位：自动跳过，手动照推
+    const auto = await pushOneRound(env, target, NOW);
+    expect(auto.skipped).toContain("推送日");
+    const manual = await pushOneRound(env, target, NOW, undefined, { ignoreSchedule: true });
+    expect(manual.skipped).toBeUndefined();
+    expect(manual.pushed).toBe(1);
+  });
+
+  it("手动「推一次」**仍然要过「快照有没有新东西」那一关**（不变量与谁触发无关）", async () => {
+    const { cookie, id } = await registerUser("owner");
+    await createItem(cookie, newUlid(), "内容");
+    const target = await makeTarget(id);
+    const manual = await pushOneRound(env, target, NOW, undefined, { ignoreSchedule: true });
+    expect(manual.skipped).toContain("快照还没有新东西");
+    expect(remote.puts).toHaveLength(0);
+  });
+});
+
+describe("推送状态机 · HTTP 接口", () => {
+  it("POST /api/backup/targets/:id/run 返回一轮结果（推了几个、还剩几个）", async () => {
+    const { cookie, id } = await registerUser("owner");
+    await createItem(cookie, newUlid(), "内容");
     await materializeSnapshot(env, id, NOW);
     const target = await makeTarget(id);
 
-    expect((await pushOneRound(env, target, NOW)).pushed).toBe(2);
+    const res = await SELF.fetch(`${ORIGIN}/api/backup/targets/${target.id}/run`, {
+      method: "POST",
+      headers: headers(cookie),
+    });
+    expect(res.status).toBeLessThan(300);
+    const body = (await res.json()) as BackupRunResult;
+    expect(body.pushed).toBe(1);
+    expect(body.remaining).toBe(0);
+    expect(body.error).toBeNull();
+  });
 
-    await updateBody(cookie, b, "第二篇改过了", 1);
-    await materializeSnapshot(env, id, NOW + 1000);
-    // 同样要重读：游标是上一轮落进 D1 的
-    const result = await pushOneRound(env, await readTarget(target.id), NOW + 1000);
-    expect(result.pushed).toBe(1);
-    expect(remote.puts).toHaveLength(3);
+  it("别人的目标 id → 404，且与「不存在」的响应逐字相同（不泄露 id 是否存在）", async () => {
+    const { cookie } = await registerUser("owner");
+    const missing = await SELF.fetch(`${ORIGIN}/api/backup/targets/${newUlid()}/run`, {
+      method: "POST",
+      headers: headers(cookie),
+    });
+    const mine = await SELF.fetch(`${ORIGIN}/api/backup/targets/${newUlid()}/run`, {
+      method: "POST",
+      headers: headers(cookie),
+    });
+    expect(missing.status).toBe(404);
+    expect(mine.status).toBe(404);
+    expect(await mine.text()).toBe(await missing.text());
+    expect(remote.puts).toHaveLength(0);
+  });
+
+  it("没会话 → 401，一个请求都不该发出去", async () => {
+    const res = await SELF.fetch(`${ORIGIN}/api/backup/targets/${newUlid()}/run`, {
+      method: "POST",
+      headers: { "X-Menote": "1", Origin: ORIGIN },
+    });
+    expect(res.status).toBe(401);
+    expect(remote.puts).toHaveLength(0);
   });
 });

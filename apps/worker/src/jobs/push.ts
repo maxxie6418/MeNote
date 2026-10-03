@@ -53,6 +53,16 @@ export interface PushOutcome {
   error: string | null;
 }
 
+export interface PushOptions {
+  /**
+   * 忽略调度档位（`POST /targets/:id/run` 的「推一次」用）。
+   *
+   * 用户明确点了"推一次"，那他就是要现在推——`weekly` 档昨天刚推过不该拦住他。
+   * **仍然要过"快照有没有新东西"那一关**（不变量 1 与档位无关）。
+   */
+  ignoreSchedule?: boolean;
+}
+
 interface ChangedRow {
   id: string;
   sync_seq: number;
@@ -68,6 +78,7 @@ export async function pushOneRound(
   target: BackupTargetRow,
   now: number,
   quota: number = BACKUP_BATCH_PUT_LIMIT,
+  options: PushOptions = {},
 ): Promise<PushOutcome> {
   const base: PushOutcome = {
     targetId: target.id,
@@ -79,7 +90,7 @@ export async function pushOneRound(
   };
 
   if (!env.ATTACHMENTS) return { ...base, skipped: "未绑定对象存储（ATTACHMENTS），无快照可推" };
-  if (!isDue(target, now)) return { ...base, skipped: "今天不到这一档的推送日" };
+  if (!options.ignoreSchedule && !isDue(target, now)) return { ...base, skipped: "今天不到这一档的推送日" };
 
   // 快照推到哪了 —— 推送**不许超过**它（不变量 1）
   const snapRow = await env.DB.prepare("SELECT cursor_seq FROM user_snapshot_state WHERE user_id = ?")

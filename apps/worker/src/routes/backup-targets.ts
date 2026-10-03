@@ -5,9 +5,11 @@
  * 挂 `/api/backup/targets`——`POST .../test` 走请求体里的**一次性明文**，不落库（设计 §四）。
  */
 import {
+  BACKUP_BATCH_PUT_LIMIT,
   CreateBackupTargetSchema,
   TestBackupTargetSchema,
   UpdateBackupTargetSchema,
+  type BackupRunResult,
   type BackupTestResult,
 } from "@menote/shared";
 import { Hono } from "hono";
@@ -16,6 +18,7 @@ import { createS3Adapter } from "../adapters/s3";
 import { BackupAdapterError, type BackupAdapterTarget } from "../adapters/backup-adapter";
 import { createWebdavAdapter } from "../adapters/webdav";
 import { DomainError } from "../errors";
+import { pushOneRound } from "../jobs/push";
 import { requireSession } from "../middleware/session";
 import { readJsonBody } from "../validation";
 import {
@@ -97,6 +100,47 @@ app.post("/backup/targets/:id/test", requireSession, async (c) => {
         ? { ok: false, message: error.message }
         : { ok: false, message: "连接失败，请稍后重试" },
     );
+  return c.json(result);
+});
+
+/**
+ * `POST /api/backup/targets/:id/run`：**推一次**（手动触发）。
+ *
+ * **复用 Cron 的同一个状态机**（`jobs/push.ts` 的 `pushOneRound`）——手动与自动是同一套
+ * 游标、同一套限额、同一套失败处理。**另起一套实现就等于有两份"什么算推成功"的定义**，
+ * 那是最容易漂移的地方。
+ *
+ * 两处刻意的差别：
+ * - **忽略调度档位**（用户点了就是要现在推，`weekly` 昨天推过不该拦住他）；
+ * - **仍然要过"快照有没有新东西"那一关**——那条是数据安全不变量，与谁触发的无关。
+ *
+ * ⚠️ **本轮推一批就返回**（架构 §14.3：一次 invocation 最多 50 个外部子请求）。
+ * 界面上的**进度条 / 中断续传不在本轮**（设计 §四 的 `run` 那条 API 的完整形态），
+ * 想全量推完就多点几次，或等 Cron。
+ */
+app.post("/backup/targets/:id/run", requireSession, async (c) => {
+  const userId = c.get("user").id;
+  const id = requireId(c.req.param("id"));
+  const row = await loadBackupTargetRow(c.env.DB, userId, id);
+  const outcome = await pushOneRound(c.env, row, Date.now(), BACKUP_BATCH_PUT_LIMIT, { ignoreSchedule: true });
+
+  // 跳过也是一种回答：界面要能说清"这次什么也没推"而不是显示成失败
+  if (outcome.skipped !== undefined) {
+    return c.json({
+      pushed: 0,
+      deleted: 0,
+      remaining: 0,
+      quota_stopped: false,
+      error: outcome.skipped,
+    } satisfies BackupRunResult);
+  }
+  const result: BackupRunResult = {
+    pushed: outcome.pushed,
+    deleted: outcome.deleted,
+    remaining: outcome.remaining,
+    quota_stopped: outcome.quotaStopped,
+    error: outcome.error,
+  };
   return c.json(result);
 });
 

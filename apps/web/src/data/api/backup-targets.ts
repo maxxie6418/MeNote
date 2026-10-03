@@ -8,10 +8,12 @@
  * 读接口回来的 `has_secret` 只是一个布尔。不在这里做任何本地持久化。
  */
 import {
+  BackupRunResultSchema,
   BackupTargetListResponseSchema,
   BackupTargetSchema,
   BackupTestResultSchema,
   BackupTargetWriteResponseSchema,
+  type BackupRunResult,
   type BackupTarget,
   type BackupTestResult,
   type CreateBackupTargetInput,
@@ -59,6 +61,17 @@ export const backupTargetsApi = {
       body: input,
     });
     return v.parse(BackupTestResultSchema, raw);
+  },
+
+  /**
+   * 推一次（手动触发）。
+   *
+   * **一轮就是一批**（架构 §14.3 的外部子请求限额），所以 `remaining` 通常不为 0 ——
+   * 那是正常的，界面要把它当"还有 N 个没推"显示，而不是当失败。
+   */
+  run: async (id: string): Promise<BackupRunResult> => {
+    const raw = await apiRequest<unknown>(`${BASE}/${encodeURIComponent(id)}/run`, { method: "POST" });
+    return v.parse(BackupRunResultSchema, raw);
   },
 };
 

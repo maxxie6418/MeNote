@@ -348,14 +348,16 @@ describe("Cron 一轮", () => {
     expect(summary.snapshot).toEqual({ skipped: "未绑定对象存储（ATTACHMENTS），快照无处可放" });
     // idle 封存（M4-5）已经落地：没有候选时如实报 0，而不是报"跳过"
     expect(summary.idleSeal).toEqual({ sealed: 0 });
-    expect(summary.backup).toEqual({ skipped: "外部备份属 M5（接口位已留）" });
+    // ⑤ 外部备份推送（M7 批 3）已落地：没绑桶时如实说"无快照可推"
+    expect(summary.backup).toEqual({ skipped: "未绑定对象存储（ATTACHMENTS），无快照可推" });
     expect(QUOTAS.sweep).toBeGreaterThan(0);
   });
 
-  it("③ 槽：没有启用中的目标时说「无需物化」，不白写 R2", async () => {
+  it("③ 与 ⑤ 槽：没有启用中的目标时说「无需处理」，不白跑", async () => {
     await seedUser();
     const summary = await runScheduled({ DB: env.DB, ATTACHMENTS: env.ATTACHMENTS as R2Bucket }, NOW);
     expect(summary.snapshot).toEqual({ skipped: "没有启用中的备份目标，本轮无需物化" });
+    expect(summary.backup).toEqual({ skipped: "没有启用中的备份目标" });
   });
 
   it("scheduled 只转调：入口用 waitUntil 把这一轮交给运行时（架构 §2.3.1）", async () => {

@@ -71,6 +71,15 @@ export const SQL_UPDATE_BACKUP_TARGET_RUN =
 // —— export_queue（变更队列）——
 
 /**
+ * 变更队列里"**这个路径已经没了**"的 key 前缀（M7 第 4 项 批 3）。
+ *
+ * **必须带前缀**，否则队列里分不清"要重新推一遍"和"要去远端删掉"。
+ * 定在这里而不是 `jobs/push.ts`：写入方是 `services/trash.ts`（永久删除），
+ * 放 `jobs/` 会让服务层反过来依赖任务层。
+ */
+export const DELETE_KEY_PREFIX = "del:";
+
+/**
  * 入队。`rev` 每次递增：同一条目被反复改动时只有**最新那一次**留在队里
  * （`ON CONFLICT … DO UPDATE SET rev = excluded.rev`），避免快照阶段把同一篇重做 N 遍。
  */

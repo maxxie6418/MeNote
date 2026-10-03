@@ -24,12 +24,12 @@ import { requireSession } from "../middleware/session";
 import { readJsonBody } from "../validation";
 import {
   emptyTrash,
-  permanentDeleteItems,
   restoreFolder,
   restoreItem,
   softDeleteFolder,
   softDeleteItem,
 } from "../services/trash";
+import { permanentDeleteItems } from "../services/trash-purge";
 
 const app = new Hono<AppEnv>();
 

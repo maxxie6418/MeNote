@@ -19,6 +19,7 @@
 import {
   BACKUP_BATCH_PUT_LIMIT,
   newUlid,
+  notePath,
   type BackupDeletePolicy,
   type BackupSchedule,
   type BackupTarget,
@@ -27,6 +28,7 @@ import {
   type UpdateBackupTargetInput,
 } from "@menote/shared";
 import {
+  DELETE_KEY_PREFIX,
   SQL_DELETE_BACKUP_TARGET,
   SQL_INSERT_BACKUP_TARGET,
   SQL_SELECT_BACKUP_TARGET,
@@ -193,6 +195,55 @@ export async function readTargetSecret(
 ): Promise<string> {
   const bytes = await openWithBackupKey(env, Buffer.from(row.secret_wrapped).toString("base64url"));
   return new TextDecoder().decode(bytes);
+}
+
+/**
+ * 查一批 id 里**真实存在**的那些，算出它们在快照里对应的路径（带 `del:` 前缀）。
+ *
+ * **软删不算**：软删是内容变了，快照重推一次就同步过去了。**永久删除**才是路径彻底消失——
+ * 快照里不会有任何痕迹说它曾经存在过，所以远端删除的唯一信息源就是这里算出的这几个 key。
+ *
+ * 只算存在的那几条（`ids` 是客户端报上来的，里面可能有根本不存在的或别人的 id），
+ * 且**路径由 shared 的 `notePath` 产出**——不在 SQL 里手拼 `'snapshot/notes/' || id`
+ * （手拼过一次就出过清单与实际条目对不上的错）。
+ *
+ * 分两步（先查后写）是因为写入要排在删除**之后**、留在同一个 D1 batch 里。
+ */
+export async function lookupRemoteDeletionKeys(
+  db: D1Database,
+  userId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const slots = ids.map(() => "?").join(", ");
+  const existing = await db
+    .prepare(
+      `SELECT id FROM items WHERE user_id = ? AND id IN (${slots})
+       UNION ALL
+       SELECT id FROM folders WHERE user_id = ? AND id IN (${slots})`,
+    )
+    .bind(userId, ...ids, userId, ...ids)
+    .all<{ id: string }>();
+  return (existing.results ?? []).map((row) => `${DELETE_KEY_PREFIX}${notePath(row.id)}`);
+}
+
+/** 把上一步算出的 key 写成一条 batch 语句；**没有要记的就返回 null**（调用方不必判空） */
+export function prepareRemoteDeletionEnqueue(
+  db: D1Database,
+  userId: string,
+  keys: readonly string[],
+  now: number,
+): D1PreparedStatement | null {
+  if (keys.length === 0) return null;
+  // 每行三个占位符（`user_id` / `key` / `created_at`）；`rev` 是字面量 1，不占位
+  return db
+    .prepare(
+      `INSERT INTO export_queue (user_id, key, rev, created_at) VALUES ${keys
+        .map(() => "(?, ?, 1, ?)")
+        .join(", ")}
+       ON CONFLICT(user_id, key) DO UPDATE SET rev = excluded.rev, created_at = excluded.created_at`,
+    )
+    .bind(...keys.flatMap((key) => [userId, key, now]));
 }
 
 export { toTarget as toBackupTargetResponse, loadRow as loadBackupTargetRow };

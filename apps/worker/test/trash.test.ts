@@ -17,7 +17,7 @@ import {
   type ItemWriteMeta,
 } from "@menote/shared";
 import { freshDatabase } from "./helpers";
-import { permanentDeleteItems } from "../src/services/trash";
+import { permanentDeleteItems } from "../src/services/trash-purge";
 
 const ORIGIN = "https://menote.test";
 
@@ -400,6 +400,8 @@ describe("永久删除", () => {
       prepare: () => ({
         bind: (...args: unknown[]) => ({
           first: async () => ({ next: 1 }),
+          // 批 3 加了「远端删除记账」：删之前要先查哪些 id 真的存在
+          all: async () => ({ results: args.slice(2, 12).map((id) => ({ id: String(id) })) }),
           __args: args,
         }),
       }),
@@ -420,7 +422,8 @@ describe("永久删除", () => {
     // 失败时把实际条数打出来，便于判断是哪一步变胖了
     expect(statementCount, `永久删除 10 条用了 ${statementCount} 条语句`).toBeLessThanOrEqual(45);
     // 2 墓碑（条目 + 文件夹）+ 1 计数器 + 1 GC 登记 + 5 删除（引用/版本/正文/条目/文件夹）
-    expect(statementCount).toBe(9);
+    // + 1 外部备份的删除记账（批 3 加的）
+    expect(statementCount).toBe(10);
   });
 });
 

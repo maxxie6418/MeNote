@@ -13,8 +13,10 @@
  */
 import { JOB_IDLE_SEAL_BATCH, JOB_R2_GC_BATCH, JOB_SWEEP_BATCH } from "@menote/shared";
 import { SQL_UPSERT_APP_META } from "../db/tables";
+import { SQL_SELECT_ENABLED_BACKUP_TARGETS, type BackupTargetRow } from "../db/backup-tables";
 import { getRegistrationState, setRegistrationState } from "../services/settings";
 import { runMaintenanceStep, type MaintenanceResult } from "../jobs/maintenance";
+import { pushOneRound } from "../jobs/push";
 import { materializeSnapshot, type SnapshotOutcome } from "../jobs/snapshot";
 import { sealIdleVersions } from "./versions";
 
@@ -22,6 +24,9 @@ export const KEY_GC_CURSOR = "job:gc:cursor";
 
 /** ③ 槽每轮最多给几个用户物化（家里 3–5 人时够用；防的是"多账号把一轮撑爆"） */
 const SNAPSHOT_USER_LIMIT = 5;
+
+/** ⑤ 槽每轮最多推几个目标（同上：子请求是每次 invocation 的限额） */
+const PUSH_TARGET_LIMIT = 5;
 
 export interface ScheduledSummary {
   /** ① 注册开关：本来开着但已过期 → 写回关闭 */
@@ -32,8 +37,8 @@ export interface ScheduledSummary {
   snapshot: SnapshotOutcome | { skipped: string };
   /** ④ idle 封存兜底【接口位】*/
   idleSeal: { skipped: string } | { sealed: number };
-  /** ⑤ 外部备份【接口位】*/
-  backup: { skipped: string };
+  /** ⑤ 外部备份推送（M7 第 4 项 批 3） */
+  backup: { skipped: string } | { targets: number; pushed: number; failed: number };
   /** ⑥ 每日维护 */
   maintenance: MaintenanceResult;
 }
@@ -56,7 +61,7 @@ export async function runScheduled(env: ScheduledEnv, now: number = Date.now()):
     gcDeleted: 0,
     snapshot: { skipped: "尚未接线" },
     idleSeal: { skipped: "idle 封存依赖版本服务与 R2（M4-5）" },
-    backup: { skipped: "外部备份属 M5（接口位已留）" },
+    backup: { skipped: "尚未接线" },
     maintenance: { step: null, detail: {}, skipped: true },
   };
 
@@ -103,8 +108,13 @@ export async function runScheduled(env: ScheduledEnv, now: number = Date.now()):
     summary.idleSeal = { skipped: "本轮 idle 封存失败，下轮重试" };
   }
 
-  // ⑤ 外部备份【接口位】：备份状态机属 M5
-  summary.backup = { skipped: "外部备份属 M5（接口位已留）" };
+  // ⑤ 外部备份推送（M7 第 4 项 批 3 落地，不再是接口位）
+  try {
+    summary.backup = await runPushSlot(env, now);
+  } catch (error) {
+    console.error("cron: backup push failed", error);
+    summary.backup = { skipped: "本轮推送失败，下轮重试" };
+  }
 
   // ⑥ 每日维护（放最后：前面几个都是"每轮都跑"的，这个是"一天一圈"的）
   try {
@@ -144,6 +154,38 @@ async function runSnapshotSlot(env: ScheduledEnv, now: number): Promise<Snapshot
     merged.deferred += result.deferred;
   }
   return merged;
+}
+
+/**
+ * ⑤ 槽：给每个启用中的目标推**一批**。
+ *
+ * 每个目标各推一批（不是"总共一批分给所有人"）——限额是**每次 invocation** 的外部
+ * 子请求数，多目标共享一个池子的话先跑完的目标会把后面的饿着，而"每个目标都按自己的
+ * 游标推进"本来就是这个设计的口径。
+ *
+ * `limit` 是**每轮最多推几个目标**：家里 3–5 个人时它从来不生效。
+ */
+async function runPushSlot(
+  env: ScheduledEnv,
+  now: number,
+): Promise<{ skipped: string } | { targets: number; pushed: number; failed: number }> {
+  if (!env.ATTACHMENTS) return { skipped: "未绑定对象存储（ATTACHMENTS），无快照可推" };
+
+  const rows = await env.DB.prepare(SQL_SELECT_ENABLED_BACKUP_TARGETS).all<BackupTargetRow>();
+  const targets = (rows.results ?? []).slice(0, PUSH_TARGET_LIMIT);
+  if (targets.length === 0) return { skipped: "没有启用中的备份目标" };
+
+  let pushed = 0;
+  let failed = 0;
+  for (const target of targets) {
+    const result = await pushOneRound(env, target, now);
+    if (result.error !== null) {
+      failed += 1;
+      console.error("cron: backup push failed for target", target.id, result.error);
+    }
+    pushed += result.pushed;
+  }
+  return { targets: targets.length, pushed, failed };
 }
 
 /**

@@ -17,7 +17,7 @@ import {
   type VersionTrashSettings,
 } from "@menote/shared";
 import { SQL_DELETE_OLD_TOMBSTONES, SQL_SELECT_MIN_TOMBSTONE_SEQ, SQL_UPSERT_APP_META } from "../db/tables";
-import { permanentDeleteItems } from "../services/trash";
+import { permanentDeleteItems } from "../services/trash-purge";
 import { sweepOrphanedAttachments } from "../services/attachments";
 import { sweepVersions } from "../services/version-retention";
 import type { StorageEnv } from "../types";

@@ -5,6 +5,7 @@
  * 网络与冲突 → `data/sync`；界面骨架 → `app/`。业务判断不写在 JSX 里。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVaultEntry } from "./useVaultEntry";
 import { outboxCount } from "../data/db";
 import { trashApi } from "../data/api/endpoints";
 import { moveToTrash, useTrashCount } from "../features/trash/useTrash";
@@ -41,7 +42,6 @@ import { TaskView } from "./workarea/TaskView";
 import { SearchView } from "./workarea/SearchView";
 import { convertMemoToNote } from "../features/memos/actions";
 import { clearTaskMarker, setTaskStatus } from "../features/tasks/actions";
-import { taskTitle } from "../features/tasks/model";
 import { dayKeyInZone } from "../features/memos/model";
 import { useSearch } from "../features/search/useSearch";
 import { usePrivacyLock } from "../features/privacy/usePrivacyLock";
@@ -215,6 +215,26 @@ export default function App() {
       workspace.setView({ kind: "notebook", folderId: folderId ?? workspace.vault.id });
     },
   });
+
+  /**
+   * 「打开加密空间」（M7 首页重做）：首页动作带与快速导航里那颗入口的**真动作**与三态。
+   * 判定在 `useVaultEntry` 里（`App` 有 500 行硬上限，且这段是首页独有的关注点）。
+   */
+  const { openVault, entry: vaultEntry } = useVaultEntry({
+    privacy: { enabled: privacy.enabled, lockState: privacy.runtime.lockState },
+    workspace,
+    leaveBrowse: () => setBrowse(null),
+    requestUnlock,
+  });
+
+  /**
+   * 首页的「新建笔记」要**直接进编辑界面**（2026-09-28 用户反馈）：
+   * 此前只建 + 选中，分栏浏览仍停在首页，看起来像"点了没反应"。
+   */
+  const newNoteFromHome = useCallback(() => {
+    setBrowse(null);
+    void workspace.createNote();
+  }, [workspace]);
 
   useEffect(() => {
     if (isScopeGateOpen(privacy.gate)) return;
@@ -505,21 +525,9 @@ export default function App() {
             items={workspace.allItems}
             memos={workspace.memos}
             folders={workspace.folders.map((folder) => ({ id: folder.id, name: folder.name }))}
-            titles={Object.fromEntries(
-              Object.entries(workspace.memoContents).map(([id, entry]) => [
-                id,
-                taskTitle(entry.content),
-              ]),
-            )}
+            memoContents={workspace.memoContents}
             gate={privacy.gate}
-            onNewNote={() => {
-              /*
-                首页的「新建笔记」也要**直接进编辑界面**（2026-09-28 用户反馈）：
-                此前只建+选中，分栏浏览仍停在首页，看起来像"点了没反应"。
-              */
-              setBrowse(null);
-              void workspace.createNote();
-            }}
+            onNewNote={newNoteFromHome}
             onFocusComposer={focusComposer}
             onFocusSearch={() => {
               document.getElementById("search-input")?.focus();
@@ -550,6 +558,8 @@ export default function App() {
               setBrowse(null);
               workspace.setView({ kind: "tag", tag });
             }}
+            onOpenVault={openVault}
+            vaultEntry={vaultEntry}
           />
         ) : browse === "task" ? (
           /* 待办视图：单栏占满（列表 / 看板由面板内部切换） */

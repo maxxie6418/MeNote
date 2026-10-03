@@ -4946,10 +4946,128 @@ button.chip--tag:hover {
   gap: var(--sp-4);
 }
 
-.home__grid {
+/*
+  甲板：概括预览的「一主两副」（M7 首页重做；原型第 03 屏）
+  ────────────────────────────────────────────────────────────
+  原先是 `.home__grid` 三块等分；现在左侧今日待办占更大一块（`flex: 1.15`），
+  右栏放条目统计数字带 + 最近动态（`flex: 1`）。**全弹性、不写固定宽**——
+  窄窗口下两列自然收缩而不是重叠（移动端布局未定稿，但不留"仅桌面成立"的写法）。
+  两列之间与窄屏换行都靠 `flex-wrap`，不靠媒体查询硬切。
+*/
+.home-deck {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-4);
   align-items: stretch;
+}
+
+.home-deck__main {
+  /* 焦点卡：今日待办 */
+  flex: 1.15 1 320px;
+  min-width: 0;
+  display: flex;
+}
+
+.home-deck__side {
+  /* 右栏：数字带 + 最近动态 */
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.home-deck__main > .home-card,
+.home-deck__side > .home-card {
+  flex: 1;
+}
+
+/*
+  数字带：条目统计收成一条横排（原三块统计卡）。
+  `flex: none` + 最小高，让它不参与右栏的纵向伸展——弹性交给最近动态。
+*/
+.home-band {
+  flex: none;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.home-band__t {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.home-band__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+.home-band__note {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+/* 数字带在右栏里不参与纵向伸展——弹性留给下面的最近动态 */
+.home-band--stats {
+  flex: none;
+}
+
+/* 动作带：快捷方式由一张独立卡片收成页内一条横排（原型 height:54px） */
+.home-acts-bar {
+  flex: none;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.home-acts-bar__t {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.home-acts-bar__note {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+/* 卡片头右侧的弱操作（「打开待办视图」）：幽灵按钮，不用主色 */
+.home-card__act {
+  margin-left: auto;
+}
+
+.home-card__link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-micro);
+  color: var(--primary-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.home-card__link:hover {
+  text-decoration: none;
+}
+
+/* 不可点的动作：降透明度 + 不可聚焦（触屏够不到 title，所以另有可见旁注） */
+.home-act[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .home-card {

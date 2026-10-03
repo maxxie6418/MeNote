@@ -68,6 +68,7 @@ function renderPanel(overrides: Partial<Parameters<typeof HomePanel>[0]> = {}) {
   const onOpenView = vi.fn();
   const onOpenFolder = vi.fn();
   const onOpenTag = vi.fn();
+  const onOpenVault = vi.fn();
   const { container } = render(
     <HomePanel
       items={ITEMS}
@@ -82,6 +83,8 @@ function renderPanel(overrides: Partial<Parameters<typeof HomePanel>[0]> = {}) {
       onOpenView={onOpenView}
       onOpenFolder={onOpenFolder}
       onOpenTag={onOpenTag}
+      onOpenVault={onOpenVault}
+      vaultEntry={{ enabled: true, locked: false, reason: null }}
       {...overrides}
     />,
   );
@@ -98,29 +101,46 @@ function renderPanel(overrides: Partial<Parameters<typeof HomePanel>[0]> = {}) {
     onOpenView,
     onOpenFolder,
     onOpenTag,
+    onOpenVault,
   };
 }
 
-describe("概括预览", () => {
+describe("概括预览（甲板：一主两副 · M7）", () => {
   it("统计按类型计数，且**计入加密条目**（含单篇加密）", () => {
     renderPanel();
-    const stats = screen.getByText("条目统计").closest(".home-card") as HTMLElement;
+    const stats = screen.getByText("条目统计").closest(".home-band") as HTMLElement;
 
     // 笔记 2（其中 1 条 enc_self=1）+ 表格 1 + Memo 1
     const numbers = [...stats.querySelectorAll(".home-stat__n")].map((el) => el.textContent);
     expect(numbers).toEqual(["2", "1", "1"]);
-    expect(within(stats).getByText(/不区分锁定状态/)).toBeTruthy();
   });
 
-  it("今日待办列出未完成清单项，点击打开该条目", async () => {
+  it("结构是一主两副：今日待办在焦点卡（主），统计与动态在右栏（副）", () => {
+    const { container } = renderPanel();
+    const deck = container.querySelector(".home-deck") as HTMLElement;
+    const main = deck.querySelector(".home-deck__main") as HTMLElement;
+    const side = deck.querySelector(".home-deck__side") as HTMLElement;
+    // 焦点卡是主，右栏是副
+    expect(within(main).getByText("今日待办")).toBeTruthy();
+    expect(within(side).getByText("条目统计")).toBeTruthy();
+    expect(within(side).getByText("最近动态")).toBeTruthy();
+    // 三块不再等分
+    expect(deck.querySelectorAll(".home-card").length).toBe(2);
+  });
+
+  it("今日待办列出未完成清单项，点击打开该条目；另有「打开待办视图」出口", async () => {
     const user = userEvent.setup();
-    const { onOpenItem } = renderPanel();
+    const { onOpenItem, onOpenView } = renderPanel();
 
     const card = screen.getByText("今日待办").closest(".home-card") as HTMLElement;
     expect(within(card).getByText("交物业费")).toBeTruthy();
 
     await user.click(within(card).getByText("交物业费"));
     expect(onOpenItem).toHaveBeenCalledWith("m1");
+
+    // 原型明写的一条：焦点卡要带一个看全量的出口
+    await user.click(screen.getByRole("button", { name: "打开待办视图" }));
+    expect(onOpenView).toHaveBeenCalledWith("task");
   });
 
   it("最近动态按最近更新列出，Memo 另行提示", () => {
@@ -145,20 +165,20 @@ describe("概括预览", () => {
     expect(screen.queryByText("交物业费")).toBeNull();
   });
 
-  it("空库时各卡片都有空态", () => {
+  it("空库时各块都有空态", () => {
     renderPanel({ items: [], memos: [], folders: [], titles: {} });
 
     expect(screen.getByText("没有未完成的待办。")).toBeTruthy();
     expect(screen.getByText(/还没有笔记/)).toBeTruthy();
-    const numbers = [...screen.getByText("条目统计").closest(".home-card")!.querySelectorAll(".home-stat__n")].map(
+    const numbers = [...screen.getByText("条目统计").closest(".home-band")!.querySelectorAll(".home-stat__n")].map(
       (el) => el.textContent,
     );
     expect(numbers).toEqual(["0", "0", "0"]);
   });
 });
 
-describe("快捷方式", () => {
-  it("新建笔记 / 记录 Memo / 新建待办 / 搜索都走回调；加密空间禁用并说明", async () => {
+describe("快捷方式（动作带 · M7）", () => {
+  it("新建笔记 / 记录 Memo / 新建待办 / 搜索都走回调", async () => {
     const user = userEvent.setup();
     const { onNewNote, onFocusComposer, onFocusSearch } = renderPanel();
 
@@ -173,10 +193,31 @@ describe("快捷方式", () => {
 
     await user.click(screen.getByRole("button", { name: /搜索（Ctrl\+K）/ }));
     expect(onFocusSearch).toHaveBeenCalledTimes(1);
+  });
 
-    const vault = screen.getByRole("button", { name: /打开加密空间/ }) as HTMLButtonElement;
-    expect(vault.disabled).toBe(true);
-    expect(vault.title).toContain("M3");
+  it("不再占一整块独立卡片：动作在一行带里", () => {
+    const { container } = renderPanel();
+    const bar = container.querySelector(".home-acts-bar") as HTMLElement;
+    expect(bar).toBeTruthy();
+    // 五个动作都在这条带里
+    expect(bar.querySelectorAll(".home-act")).toHaveLength(5);
+  });
+
+  it("「打开加密空间」接上真动作了（M7；此前一直是 M2 留下的死按钮）", async () => {
+    const user = userEvent.setup();
+    const { onOpenVault } = renderPanel();
+    await user.click(screen.getByRole("button", { name: /打开加密空间/ }));
+    expect(onOpenVault).toHaveBeenCalledTimes(1);
+  });
+
+  it("隐私锁没启用时置灰，且**必须说明原因**（DESIGN.md §6.1）", () => {
+    renderPanel({
+      vaultEntry: { enabled: false, locked: false, reason: "先在设置 › 隐私锁 启用，才能打开加密空间" },
+    });
+    const vault = screen.getByRole("button", { name: /打开加密空间/ });
+    expect(vault.getAttribute("aria-disabled")).toBe("true");
+    // 触屏够不到 title，所以原因要有**可见**的一份
+    expect(screen.getByText("先在设置 › 隐私锁 启用，才能打开加密空间")).toBeTruthy();
   });
 });
 
@@ -196,11 +237,22 @@ describe("快速导航", () => {
 
     await user.click(screen.getByRole("button", { name: "待办" }));
     expect(onOpenView).toHaveBeenCalledWith("task");
+  });
 
-    // 加密空间在 M2 禁用（不可点的标记渲染为带 data-disabled 的胶囊）
+  it("常用视图里的「加密空间」也接上真动作（M7）", async () => {
+    const user = userEvent.setup();
+    const { onOpenVault } = renderPanel();
+    await user.click(screen.getByRole("button", { name: "加密空间" }));
+    expect(onOpenVault).toHaveBeenCalledTimes(1);
+  });
+
+  it("没启用隐私锁时那颗胶囊置灰并写明原因", () => {
+    renderPanel({
+      vaultEntry: { enabled: false, locked: false, reason: "先在设置 › 隐私锁 启用，才能打开加密空间" },
+    });
     const vaultChip = screen.getByText("加密空间");
     expect(vaultChip.getAttribute("data-disabled")).toBe("true");
-    expect(vaultChip.getAttribute("title")).toContain("M3");
+    expect(vaultChip.getAttribute("title")).toContain("隐私锁");
   });
 
   it("没有文件夹与标签时不渲染那两组（不留空组）", () => {

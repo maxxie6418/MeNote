@@ -193,6 +193,8 @@ export async function softDeleteItem(
   userId: string,
   itemId: string,
   now: number,
+  /** 追加到同一次 batch 的语句（MCP 的审计行与幂等记录）。默认空 = 行为与之前完全一致 */
+  extra?: readonly D1PreparedStatement[],
 ): Promise<TrashResult> {
   await db.batch([
     db
@@ -210,6 +212,7 @@ export async function softDeleteItem(
       .bind(userId, itemId, userId, now),
     // 与前两条同一次 batch：软删与撤销要么都成、要么都不成，中间不留「已删但链接还活」的窗口
     db.prepare(SQL_REVOKE_ITEM_SHARES).bind(now, itemId, userId),
+    ...(extra ?? []),
   ]);
 
   const row = await db

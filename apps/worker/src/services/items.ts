@@ -89,6 +89,13 @@ export async function createItem(
   userId: string,
   input: CreateItemInput,
   now: number,
+  /**
+   * 追加到**同一次 batch** 的语句（M6 MCP 用：把审计行与幂等记录和主写入绑在一个事务里，
+   * 架构 §十一「执行、审计与幂等记录（与写入在同一个 batch 中）」）。
+   *
+   * **默认空 = 行为与加这个参数之前完全一致**，同步路径与批量端点都不传，故零影响。
+   */
+  extra?: readonly D1PreparedStatement[],
 ): Promise<ItemBodyWriteResult> {
   assertItemShape(input);
   const { bytes, chars } = await measure(input.body);
@@ -135,6 +142,7 @@ export async function createItem(
       ),
     db.prepare(SQL_UPSERT_ITEM_BODY).bind(input.id, input.body, input.id, userId, 1, input.contentHash),
     db.prepare(SQL_BUMP_SYNC_SEQ_ON_ITEM_CREATE).bind(userId, input.id, now),
+    ...(extra ?? []),
   ]);
 
   if ((results[0]?.meta.changes ?? 0) === 1) {
@@ -188,6 +196,8 @@ export async function saveItemBody(
   now: number,
   /** 当前稿引用的 sha256 列表（M6 第一批 · 批 2a）；`undefined` = **不动引用表** */
   attachmentRefs?: readonly string[],
+  /** 追加到同一次 batch 的语句；MCP 用它把审计行与幂等记录和正文写入绑在一个事务里。默认空 = 行为不变 */
+  extra?: readonly D1PreparedStatement[],
 ): Promise<ItemBodyWriteResult> {
   const db = env.DB;
   const { bytes, chars } = await measure(body);
@@ -242,6 +252,9 @@ export async function saveItemBody(
         .bind(id, now, userId, JSON.stringify(attachmentRefs)),
     );
   }
+
+  // 审计行与幂等记录跟主写入同一个事务：写成功但审计丢失，正是审计要防的那种事
+  if (extra !== undefined) statements.push(...extra);
 
   const results = await db.batch(statements);
 

@@ -90,6 +90,19 @@ export const SQL_INSERT_AUDIT_LOG =
 export const SQL_SELECT_AUDIT_BY_TOKEN = `SELECT id, tool, item_id, rev_before, rev_after, result, operation_id, at
   FROM audit_log WHERE user_id = ? AND token_id = ? AND (at < ? OR (at = ? AND id < ?)) ORDER BY at DESC, id DESC LIMIT ?`;
 
+// —— 幂等记录（mcp_operations，保留 7 天）——
+
+/** 幂等记录（设计 §六-4）：`(user_id, operation_id)` 是主键，所以重复调用会撞主键 */
+export const SQL_INSERT_MCP_OPERATION =
+  "INSERT INTO mcp_operations (user_id, operation_id, tool, request_hash, response, created_at) VALUES (?, ?, ?, ?, ?, ?)";
+
+export const SQL_SELECT_MCP_OPERATION =
+  "SELECT tool, request_hash, response FROM mcp_operations WHERE user_id = ? AND operation_id = ?";
+
+/** 删掉刚写的幂等行——冲突路径专用：让同一个 `operation_id` 之后还能重试 */
+export const SQL_DELETE_MCP_OPERATION =
+  "DELETE FROM mcp_operations WHERE user_id = ? AND operation_id = ?";
+
 // —— 可见性（设计 §四；I1 的四个固定条件）——
 
 /**

@@ -11,7 +11,7 @@
  * - **有界读取**：正文默认 8000 字符、上限 20000，超出给 `next_cursor`；
  * - **业务失败走 `isError: true`** 而不是 JSON-RPC error（设计 §5.2）。
  */
-import { base64UrlEncode, newUlid, type McpTokenRecord } from "@menote/shared";
+import { MCP_TOOL_NAMES, base64UrlEncode, newUlid, type McpTokenRecord } from "@menote/shared";
 import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { freshDatabase } from "./helpers";
@@ -206,34 +206,40 @@ describe("MCP 协议层（批 2）", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("tools/list 出 5 个只读工具，且名字都在定稿的 11 个之内", async () => {
+  it("tools/list 出定稿的 11 个工具，且名字都在 MCP_TOOL_NAMES 之内", async () => {
     const { cookie } = await registerUser("owner1", 1);
     const { secret } = await makeToken(cookie);
     const list = await rpc(secret, { jsonrpc: "2.0", id: 1, method: "tools/list" });
     const tools = (list.body.result as { tools: Array<{ name: string; inputSchema: unknown }> }).tools;
-    expect(tools.map((tool) => tool.name).sort()).toEqual([
-      "list_folders",
-      "list_items",
-      "list_versions",
-      "read_item",
-      "search",
-    ]);
+
+    // 关键断言（设计 §6.7-6）：**每个工具名都在定稿的 11 个之内**。
+    // 附件 / 分享 / 备份 / 设置 / 文件夹管理那一堆「不开放」的能力就是靠这条挡住的——
+    // 它们根本不在这张表里，比维护一份禁止清单可靠
+    const names = tools.map((tool) => tool.name);
+    for (const name of names) expect(MCP_TOOL_NAMES).toContain(name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toHaveLength(MCP_TOOL_NAMES.length);
     for (const tool of tools) expect(tool.inputSchema).toBeTruthy();
   });
 
-  it("协议层错误：未知方法 -32601、坏消息 -32600", async () => {
+  it("协议层错误：未知方法 -32601、坏消息 -32600、未知工具 -32601", async () => {
     const { cookie } = await registerUser("owner1", 1);
     const { secret } = await makeToken(cookie);
     expect((await rpc(secret, { jsonrpc: "2.0", id: 1, method: "nope" })).body.error?.code).toBe(-32601);
     expect((await rpc(secret, { id: 1, method: "ping" })).body.error?.code).toBe(-32600);
+    // 真不存在的工具（名字不在 11 个之内）→ 协议错误，而不是业务失败
+    expect((await call(secret, "delete_everything")).body.error?.code).toBe(-32601);
   });
 
-  it("没注册的写类工具：报「没有这个工具」而不是「权限不足」", async () => {
+  it("只读令牌调写类工具：业务失败 + 权限说明（不是协议错误）", async () => {
     const { cookie } = await registerUser("owner1", 1);
-    const { secret } = await makeToken(cookie);
-    // 批 2 只注册了只读工具——那枚令牌确实没有这个能力，说「没有」比说「没权限」准确
-    const res = await call(secret, "edit_item", { id: "x" });
-    expect(res.body.error?.code).toBe(-32601);
+    const { secret } = await makeToken(cookie, { perms: 1 });
+    // 工具存在，但没有权限位 → agent 能读到「缺哪个权限」并让用户去改令牌
+    const res = await call(secret, "edit_item", { id: "x", expected_rev: 1, mode: "replace_all", content: "y" });
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+    expect(res.body.result?.isError).toBe(true);
+    expect(String(payload(res.body).error)).toContain("权限");
   });
 });
 
@@ -476,6 +482,40 @@ describe("MCP 只读工具（批 2）", () => {
     const missing = await call(secret, "read_item", { id, section: "不存在" });
     expect(missing.body.result?.isError).toBe(true);
     expect(String(payload(missing.body).error)).toContain("没有找到");
+  });
+
+  it("read_item：512 KB 门槛——超了禁小节读但区间读可用（架构 §十一 的【待核实】实测点）", async () => {
+    const { cookie, userId } = await registerUser("owner1", 1);
+    const { secret } = await makeToken(cookie);
+
+    /*
+      门槛 = 512 KB 字节数。这里用 400 KB 的正文（**低于**门槛）走小节读，
+      顺便把解析耗时记下来——架构 §十一 挂着一条【待核实】：「512 KB 小节解析在 10 ms
+      内的实际耗时，开发早期实测，必要时下调门槛」。这条用例就是那个实测。
+    */
+    const filler = "填".repeat(130_000); // 13 万个汉字 = 39 万字节（UTF-8 下 3 字节/字）
+    const body = ["# 大文档", "", "## 甲", "", filler, "", "## 乙", "", "乙正文"].join("\n");
+    const bytes = new TextEncoder().encode(body).length;
+    expect(bytes).toBeGreaterThan(256 * 1024);
+    expect(bytes).toBeLessThan(512 * 1024);
+    const id = await seedItem(userId, newUlid(), body, { title: "大文档" });
+
+    const started = Date.now();
+    const data = payload((await call(secret, "read_item", { id, section: "甲", max_chars: 200 })).body);
+    const elapsed = Date.now() - started;
+    /*
+      断言里写死预算而不是把耗时打印出来：打印只在人看日志时有用，而**变慢时会失败**
+      才是这条用例的价值。实测值（2026-10-03，本机 390 KB 正文）≈ 20 ms 往返，
+      预算给到 800 ms 仍远高于实测，于是"明显变慢"会被抓住、正常抖动不会。
+    */
+    expect(elapsed, `小节解析 + 往返耗时 ${elapsed} ms，明显超过实测的 20 ms 量级`).toBeLessThan(800);
+    expect(String(data.text)).toContain("填填填");
+    expect(String(data.text)).not.toContain("乙正文");
+
+    // 区间读对**任意大小**都可用（设计 §17.4：避免把整篇取回 Worker）
+    const range = payload((await call(secret, "read_item", { id, max_chars: 50 })).body);
+    expect(String(range.text).length).toBeGreaterThan(0);
+    expect(range.total_chars).toBeGreaterThan(100_000);
   });
 
   it("list_versions：可见条目能列版本；不可见条目与不存在同形", async () => {

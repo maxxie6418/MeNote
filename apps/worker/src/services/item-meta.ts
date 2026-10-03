@@ -28,6 +28,8 @@ export async function patchItemMeta(
   id: string,
   patch: ItemMetaPatch,
   now: number,
+  /** 追加到同一次 batch 的语句（MCP 的审计行与幂等记录）。默认空 = 行为与之前完全一致 */
+  extra?: readonly D1PreparedStatement[],
 ): Promise<{ id: string; meta_rev: number }> {
   const base = await db
     .prepare(SQL_SELECT_ITEM_META_BASE)
@@ -180,6 +182,8 @@ export async function patchItemMeta(
     // 与元数据更新同一次 batch：不会出现「已加密但分享还活着」的窗口
     statements.push(db.prepare(SQL_REVOKE_ITEM_SHARES).bind(now, id, userId));
   }
+  // MCP 把审计行与幂等记录塞进同一次 batch（架构 §十一）。默认空 = 行为与之前完全一致
+  if (extra !== undefined) statements.push(...extra);
   const results = await db.batch(statements);
 
   if ((results[0]?.meta.changes ?? 0) !== 1) {

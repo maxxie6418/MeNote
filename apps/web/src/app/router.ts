@@ -18,8 +18,8 @@ import { useEffect, useState } from "react";
  *
  * **顺序照功能拆解 M18-01 的 11 类定稿**（components.md §7.5 同一份）：
  * 通用 / 账户与安全 / 编辑器 / 隐私锁 / 版本与回收站 / 备份 / 分享 / MCP / 数据管理 / 实例管理 / 关于。
- * 「MCP」那一类还没做，**不进导航**（不占位：点进去是空页面比没有更糟）；
- * 「数据管理」M6 批 2c 起有内容（附件管理页），无条件显示——分类是固定的一级入口，空态由内容页自己处理。
+ * **【v0.6.26 补记】11 类已全部落地**：「MCP」M6 批 4 起有内容（地址、令牌、审计），无条件显示——
+ * 分类是固定的一级入口，空态由内容页自己处理。「数据管理」M6 批 2c 起有内容（附件管理页）。
  */
 export const SETTINGS_PAGES = [
   "general",
@@ -33,6 +33,7 @@ export const SETTINGS_PAGES = [
   "versions",
   "backup",
   "shares",
+  "mcp",
   "data",
   "instance",
   "about",

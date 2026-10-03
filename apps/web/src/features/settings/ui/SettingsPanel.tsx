@@ -17,14 +17,17 @@ import { CardQuickMenu } from "./CardQuickMenu";
 // import { EditorLabPage } from "../../editor-lab/ui/EditorLabPage";
 import { BackupPage } from "../../backup/ui/BackupPage";
 import { MySharesPage } from "../../shares/ui/MySharesPage";
+import { McpSettingsPage } from "../../mcp/ui/McpSettingsPage";
 import { AttachmentManagerPage } from "../../attachments/ui/AttachmentManagerPage";
 import { InstancePage } from "./InstancePage";
 
 /**
  * 分类的标题与一行简述。
  *
- * **只有已实现的分类在这里**（`SETTINGS_PAGES` 是唯一真源）：定稿的 11 类里
- * 「MCP」还没做，**不进导航**（不是灰掉——灰掉会让人以为点了会有什么）。
+ * `SETTINGS_PAGES` 是唯一真源，这里是**另一半**——漏改任一边会直接编译不过
+ * （`Record<SettingsPageId, …>` 的守卫）。
+ *
+ * **【v0.6.26 补记】定稿的 11 类已全部落地**（M6 批 4 补上「MCP」）。
  * 简述不进页面正文，只进页头那个 ⓘ（DESIGN.md §5.4-1：说明性文字不平铺）。
  */
 const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
@@ -33,6 +36,7 @@ const PAGE_META: Record<SettingsPageId, { title: string; summary: string }> = {
   editor: { title: "编辑器", summary: "打开笔记时用哪一档、正文区能切到哪几档" },
   backup: { title: "备份与导出", summary: "把数据导成 zip，或从备份恢复" },
   shares: { title: "分享", summary: "管理生效中的分享链接：复制、改密、改期与撤销" },
+  mcp: { title: "MCP", summary: "让 AI 工具读写你的内容：地址、令牌与调用记录" },
   // 「编辑试验」暂时收起（2026-10-01）：与 `router.ts` 的 `SETTINGS_PAGES` 同步注释。
   // "editor-lab": {
   //   title: "编辑试验",
@@ -452,6 +456,8 @@ export function SettingsPanel({
         {page === "backup" ? <BackupPage /> : null}
 
         {page === "shares" ? <MySharesPage /> : null}
+
+        {page === "mcp" ? <McpSettingsPage /> : null}
 
         {page === "data" ? <AttachmentManagerPage /> : null}
 

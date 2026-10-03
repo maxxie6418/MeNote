@@ -443,15 +443,15 @@ describe("设置壳", () => {
       "备份与导出",
       "隐私锁",
       "版本与回收站",
+      "MCP",
       "实例管理",
       "关于",
     ]) {
       expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
     }
     expect(within(nav).queryByRole("button", { name: "编辑试验" })).toBeNull();
-    // 未实现的分类不进导航（避免点进去空页面）
+    // 「备份」是旧名，现在的分类叫「备份与导出」（2026-10-01 改），不该再出现
     expect(within(nav).queryByRole("button", { name: "备份" })).toBeNull();
-    expect(within(nav).queryByRole("button", { name: "MCP" })).toBeNull();
 
     const light = screen.getByRole("button", { name: "浅色" });
     expect(light.getAttribute("aria-pressed")).toBe("true");
@@ -462,8 +462,9 @@ describe("设置壳", () => {
 
     // 标题与其它屏同级（首页 `.pane-head h1` / 待办 `.tkhead`）——此前这里是 h2
     expect(screen.getByRole("heading", { level: 1, name: "通用" })).toBeTruthy();
-    // 实时计数保持**可见**，不进 ⓘ（DESIGN.md §5.4-2）。9 = 8 + 「分享」（M5-S2，2026-10-02）
-    expect(screen.getByText("共 10 个分类")).toBeTruthy();
+    // 实时计数保持**可见**，不进 ⓘ（DESIGN.md §5.4-2）。11 = 定稿的 11 类，
+    // 「MCP」M6 批 4（v0.6.26）补齐后不再有"没做的分类"
+    expect(screen.getByText("共 11 个分类")).toBeTruthy();
     // 口径说明收进 ⓘ（可点开的按钮），不在正文里平铺
     expect(screen.getByRole("button", { name: "通用分类说明" })).toBeTruthy();
   });

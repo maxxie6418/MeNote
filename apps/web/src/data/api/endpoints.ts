@@ -13,6 +13,10 @@ import {
   ITEM_HASH_HEADER,
   ITEM_META_HEADER,
   ITEM_REFS_HEADER,
+  McpAuditListResponseSchema,
+  McpTokenCreatedSchema,
+  McpTokenListResponseSchema,
+  McpTokenRecordSchema,
   SearchResponseSchema,
   ShareListResponseSchema,
   ShareRecordSchema,
@@ -27,10 +31,11 @@ import {
   type BatchOp,
   type BatchResponse,
   type ChangePasswordResponse,
+  type CreateMcpTokenRequest,
+  type CreateShareRequest,
   type CryptoResetResponse,
   type CryptoState,
   type CryptoWrite,
-  type CreateShareRequest,
   type FolderCreate,
   type FolderPatch,
   type FolderWriteResponse,
@@ -39,6 +44,10 @@ import {
   type ItemMetaWriteResponse,
   type ItemWriteMeta,
   type MeResponse,
+  type McpAuditListResponse,
+  type McpTokenCreated,
+  type McpTokenListResponse,
+  type McpTokenRecord,
   type PatchShareRequest,
   type PreloginResponse,
   type PublicRegistrationState,
@@ -440,5 +449,40 @@ export const sharesApi = {
       method: "DELETE",
     });
     return v.parse(ShareRecordSchema, raw);
+  },
+};
+
+/**
+ * MCP 令牌管理（M6 批 4；服务端在批 1）。
+ * 响应都过一遍共享 schema——不无条件信任服务端返回的形状。
+ *
+ * **完整令牌只在 `create` 的响应里出现一次**（`McpTokenCreated.secret`），
+ * 所以这里**不缓存**它——缓存下来就等于在本地留一份凭据，刷新页面也还在。
+ */
+export const mcpApi = {
+  list: async (): Promise<McpTokenListResponse> => {
+    const raw = await apiRequest<unknown>("/api/mcp/tokens");
+    return v.parse(McpTokenListResponseSchema, raw);
+  },
+
+  create: async (input: CreateMcpTokenRequest): Promise<McpTokenCreated> => {
+    const raw = await apiRequest<unknown>("/api/mcp/tokens", { method: "POST", body: input });
+    return v.parse(McpTokenCreatedSchema, raw);
+  },
+
+  revoke: async (id: string): Promise<McpTokenRecord> => {
+    const raw = await apiRequest<unknown>(`/api/mcp/tokens/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return v.parse(McpTokenRecordSchema, raw);
+  },
+
+  audit: async (id: string, options: { limit?: number; cursor?: string | null } = {}): Promise<McpAuditListResponse> => {
+    const query = new URLSearchParams();
+    if (options.limit !== undefined) query.set("limit", String(options.limit));
+    if (options.cursor) query.set("cursor", options.cursor);
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    const raw = await apiRequest<unknown>(`/api/mcp/tokens/${encodeURIComponent(id)}/audit${suffix}`);
+    return v.parse(McpAuditListResponseSchema, raw);
   },
 };

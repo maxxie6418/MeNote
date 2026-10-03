@@ -9,6 +9,7 @@
  */
 import {
   SHARE_KDF_DEFAULT,
+  base64UrlDecode,
   type SharePasswordMaterial,
 } from "@menote/shared";
 
@@ -44,22 +45,51 @@ export function expiryTimestamp(choice: ShareExpiryChoice, now: number, customDa
   }
 }
 
-/** 派生分享密码材料：明文不出浏览器（服务端只存盐 + 校验值，两侧各算 HMAC 比对） */
+/** 派生分享密码材料（**创建者侧**）：生成新盐并派生校验值，三样一起交给服务端存下。 */
 export async function deriveSharePasswordMaterial(password: string): Promise<SharePasswordMaterial> {
   const salt = crypto.getRandomValues(new Uint8Array(SHARE_KDF_DEFAULT.saltBytes));
+  return {
+    kdf: { alg: "PBKDF2-SHA256", iterations: SHARE_KDF_DEFAULT.iterations },
+    salt: bytesToBase64Url(salt),
+    verifier: await deriveVerifier(password, salt, SHARE_KDF_DEFAULT.iterations),
+  };
+}
+
+/**
+ * 访客侧派生：**必须用状态接口给的盐与 KDF 参数**（`GET /api/public/shares/:sid` 的
+ * `salt` / `kdf`），**绝不能自己再生成一枚新盐**。
+ *
+ * 为什么（2026-10-03 收口点验查出来的真 bug）：服务端存的是**创建者那枚盐**派生出的
+ * 校验值，访客若换一枚盐，PBKDF2 结果必然不同，于是**任何密码都过不了**——带密码的
+ * 分享链接 100% 打不开。契约在 `packages/shared/src/shares.ts` 的 `PublicShareStatus`
+ * （「设了密码才给：访客按它派生校验值」）与 `UnlockRequest`（只交 `verifier`）里已经写死。
+ *
+ * 派生出的字节长度仍取 `SHARE_KDF_DEFAULT.dkLen`——状态接口只回 `alg` 与 `iterations`，
+ * 两侧共用同一个默认值。
+ */
+export async function deriveShareVerifierWithStoredParams(
+  password: string,
+  saltBase64Url: string,
+  iterations: number,
+): Promise<string> {
+  return deriveVerifier(password, base64UrlDecode(saltBase64Url), iterations);
+}
+
+/** PBKDF2-SHA256 的唯一产地：创建者与访客两侧共用，绝不各写一套 */
+async function deriveVerifier(
+  password: string,
+  salt: Uint8Array<ArrayBuffer>,
+  iterations: number,
+): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, [
     "deriveBits",
   ]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations: SHARE_KDF_DEFAULT.iterations },
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
     key,
     SHARE_KDF_DEFAULT.dkLen * 8,
   );
-  return {
-    kdf: { alg: "PBKDF2-SHA256", iterations: SHARE_KDF_DEFAULT.iterations },
-    salt: bytesToBase64Url(salt),
-    verifier: bytesToBase64Url(new Uint8Array(bits)),
-  };
+  return bytesToBase64Url(new Uint8Array(bits));
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {

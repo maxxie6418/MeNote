@@ -104,11 +104,25 @@ export function ShareViewerApp() {
 
   async function submitPassword(): Promise<void> {
     if (!sid) return;
+    // 盐与迭代数必须取**状态接口给的那一组**——创建者派生时用的就是它。
+    // 自己再生成一枚新盐会让任何密码都对不上（2026-10-03 修的真 bug：
+    // 带密码的分享链接 100% 打不开），推导见 `deriveShareVerifierWithStoredParams` 的注释。
+    const current = stage.kind === "password" ? stage : null;
+    if (!current || current.salt === "" || current.iterations <= 0) {
+      setStage((prev) =>
+        prev.kind === "password" ? { ...prev, busy: false, error: "这条分享的密码参数缺失" } : prev,
+      );
+      return;
+    }
     setStage((prev) => (prev.kind === "password" ? { ...prev, busy: true, error: null } : prev));
     try {
-      const { deriveSharePasswordMaterial } = await import("../../shares/model");
-      const material = await deriveSharePasswordMaterial(password);
-      const unlocked = await unlockShare(sid, material.verifier);
+      const { deriveShareVerifierWithStoredParams } = await import("../../shares/model");
+      const verifier = await deriveShareVerifierWithStoredParams(
+        password,
+        current.salt,
+        current.iterations,
+      );
+      const unlocked = await unlockShare(sid, verifier);
       if (unlocked.status === "ok" && unlocked.token) {
         loadContent(unlocked.token);
         return;

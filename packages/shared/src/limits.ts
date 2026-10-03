@@ -43,3 +43,11 @@ export const SESSION_TOUCH_INTERVAL_MS = 86_400_000;
 
 /** 迁移锁的过期时间（架构 §15.4；同时充当迁移失败后的重试节流） */
 export const MIGRATION_LOCK_TTL_MS = 60_000;
+
+/**
+ * MCP 令牌 `last_used_at` 的最长写入间隔：最多每 10 分钟写一次（设计 §17.3「为节省行写入」）。
+ *
+ * 这条与限速的计数更新**合并成同一条 `UPDATE`**（设计 §3.5），所以「省行写入」不是额外的优化，
+ * 而是常态下本来就不多写一行。
+ */
+export const MCP_LAST_USED_TOUCH_INTERVAL_MS = 600_000;

@@ -15,6 +15,7 @@ import { runScheduled } from "./services/jobs";
 import folders from "./routes/folders";
 import health from "./routes/health";
 import items from "./routes/items";
+import mcpTokens from "./routes/mcp-tokens";
 import publicShares from "./routes/public";
 import search from "./routes/search";
 import settings from "./routes/settings";
@@ -57,6 +58,7 @@ app.route("/api", search);
 app.route("/api", crypto);
 app.route("/api", shares);
 app.route("/api", publicShares);
+app.route("/api", mcpTokens);
 
 app.notFound((c) => {
   applySecurityHeaders(c);

@@ -238,6 +238,44 @@ describe("每日维护", () => {
       .first<{ tombstone_floor: number }>();
     expect(floor?.tombstone_floor).toBe(7); // 剩余墓碑的最小序号
   });
+
+  it("清理：审计留 90 天、幂等记录留 7 天，且两段都真会执行（M6 批 1）", async () => {
+    await seedUser();
+    // 两张表的**时间列名不一样**：audit_log 是 `at`，mcp_operations 是 `created_at`。
+    // 原先这两段清理都是死代码（表从未被建出来），其中 audit_log 那段还把 `at` 写成了
+    // `created_at`——建表之后它第一次真跑就抛 "no such column"。所以这里必须**真的造过期行**
+    // 并断言它们被删掉，而不只是断言 detail 里有这个数字。
+    const day = 86_400_000;
+    for (const age of [91, 89]) {
+      await env.DB.prepare(
+        "INSERT INTO audit_log (id, user_id, token_id, tool, item_id, rev_before, rev_after, result, operation_id, at) VALUES (?, 'u1', NULL, 'edit_item', NULL, NULL, NULL, 'ok', NULL, ?)",
+      )
+        .bind(`audit-${age}`, NOW - age * day)
+        .run();
+    }
+    for (const age of [8, 6]) {
+      await env.DB.prepare(
+        "INSERT INTO mcp_operations (user_id, operation_id, tool, request_hash, response, created_at) VALUES ('u1', ?, 'create_item', 'h', '{}', ?)",
+      )
+        .bind(`op-${age}`, NOW - age * day)
+        .run();
+    }
+
+    for (let index = 0; index < MAINTENANCE_STEPS.length - 1; index += 1) {
+      await runMaintenanceStep(env, NOW);
+    }
+    const result = await runMaintenanceStep(env, NOW);
+    expect(result.step).toBe("cleanup");
+    expect(result.detail.audit).toBe(1); // 只删 91 天那一条
+    expect(result.detail.mcp).toBe(1); // 只删 8 天那一条
+
+    const audit = await env.DB.prepare("SELECT id FROM audit_log").all<{ id: string }>();
+    expect(audit.results.map((row) => row.id)).toEqual(["audit-89"]);
+    const ops = await env.DB.prepare("SELECT operation_id FROM mcp_operations").all<{
+      operation_id: string;
+    }>();
+    expect(ops.results.map((row) => row.operation_id)).toEqual(["op-6"]);
+  });
 });
 
 describe("Cron 一轮", () => {

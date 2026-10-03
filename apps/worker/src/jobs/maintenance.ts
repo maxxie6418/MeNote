@@ -322,15 +322,21 @@ async function cleanup(db: D1Database, now: number): Promise<Record<string, numb
   detail.tombstones = tombstones;
 
   if (await tableExists(db, "audit_log")) {
+    // 时间列是 **`at`**，不是 `created_at`（照 DDL 段 `audit_log` 的列名）。
+    // 这段以前是死代码：`audit_log` 没有任何迁移建过，于是 `tableExists` 恒假、从不执行。
+    // 迁移 0006 把表建出来之后它第一次真跑——而列名写错，于是每日维护每天抛
+    // "no such column: created_at"（M6 批 1 的用例当场抓住，不是等到线上才发现）。
     const audit = await db
-      .prepare("DELETE FROM audit_log WHERE created_at + ? * ? <= ?")
+      .prepare("DELETE FROM audit_log WHERE at + ? * ? <= ?")
       .bind(90, DAY_MS, now)
       .run();
     detail.audit = audit.meta.changes ?? 0;
   }
-  if (await tableExists(db, "mcp_idempotency")) {
+  if (await tableExists(db, "mcp_operations")) {
+    // 表名照 DDL 段的 `mcp_operations`。原先这里写的是 `mcp_idempotency`——那张表
+    // 从来没被任何迁移建出来，于是这段清理一直是空转（被 tableExists 守卫着，不报错）。
     const mcp = await db
-      .prepare("DELETE FROM mcp_idempotency WHERE created_at + ? * ? <= ?")
+      .prepare("DELETE FROM mcp_operations WHERE created_at + ? * ? <= ?")
       .bind(7, DAY_MS, now)
       .run();
     detail.mcp = mcp.meta.changes ?? 0;

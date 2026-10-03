@@ -68,6 +68,7 @@ export * from "./folders";
 export * from "./hash";
 export * from "./items";
 export * from "./limits";
+export * from "./mcp";
 export * from "./privacy";
 export * from "./search";
 export * from "./settings";

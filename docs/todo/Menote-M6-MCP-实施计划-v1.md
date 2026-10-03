@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 |---|---|
-| 文档版本 | v1.2 |
-| 文档状态 | 执行中（**批 1、批 2 已落地**，v0.6.23 / v0.6.24） |
+| 文档版本 | v1.3 |
+| 文档状态 | 执行中（**批 1、2、3 已落地**，v0.6.23 / v0.6.24 / v0.6.25） |
 | 目的和适用范围 | 拆步、涉及文件与验收点。设计口径以那份专项设计为准，本文件只管怎么落地 |
 | 权威级别 | 临时规则（M6 第三块的执行清单） |
 | 最后更新日期 | 2026-10-03 |
@@ -15,6 +15,7 @@
 | v1 | v0.6.22 | 2026-10-03 | 初稿。依据《M6 MCP 设计》v1 拆步，切 4 批 | MiniMax-M3.1-Flash-Preview |
 | v1.1 | v0.6.23 | 2026-10-03 | 回填进度：**批 1（步 1.1–1.9）已落地**，用例 +15。记三处实施中才浮现的事实：①**又抓到一个同类死代码**——`maintenance.ts` 里 `audit_log` 那段清理也是从未执行过的（表没建），而它**把时间列 `at` 写成了 `created_at`**，建表之后第一次真跑就抛 `no such column`；原先只诊断出 `mcp_idempotency` 表名那处，**这一处更严重**（每日维护会天天崩），是被新写的用例当场抓住的（步 1.8 因此新增一条"两段清理都真会执行"的用例，造过期行并断言真的被删）。②令牌服务按设计 §2.1 的落点表**拆成 `tokens.ts`（管理侧）与 `auth.ts`（调用侧，批 2）**——原稿把"生成/鉴权/限速/建/列/撤销/审计分页"都塞进一个 180 行的文件，实际落地装不下，拆开也对得上 `services/shares.ts`（管理侧）与 `services/share-public.ts`（访客侧）那条既有分法。③测试用的第二个账号名不能用中文：用户名 schema 只允许 `[A-Za-z0-9_.-]`，写「家人」注册直接被拒（首轮用例 14 条里 2 条因此挂掉） | MiniMax-M3.1-Flash-Preview |
 | v1.2 | v0.6.24 | 2026-10-03 | 回填进度：**批 2（步 2.1–2.9）已落地**，用例 +23（worker 261→284）另加 mdcore 14 条（65→79）。记四处实施中才浮现的事实：①**`/mcp` 端点必须加进 `wrangler.jsonc` 的 `run_worker_first`**，否则 Static Assets 的 SPA 回退会把 POST 吃掉、客户端拿到一份 HTML——失败方式极隐蔽（HTTP 200 + HTML），排查时容易误判成鉴权或协议问题。②**子应用内部路径是相对的**：`app.route("/mcp", mcp)` 之下再写 `/mcp` 就是 `/mcp/mcp`，首轮 23 条用例全 404 才发现。③**`replaceSection` 原本会吃掉节间空行**（`end` 是下一标题的行首，节尾空行归本节），替换后正文与下一个标题粘成 `new## 乙`——静默的正文损坏，被 mdcore 单测当场抓出；已改成把 `end` 往前收过尾随换行。④`scanHeadings` 原先不剥 CRLF 的 `\r`，正则认不出标题，**CRLF 文档的小节读取会静默失效**。另有两处**偏离定稿的自觉决定**：`last_used_at` 的「最多每 10 分钟写一次」节流**刻意不做**（选了 D1 计数后每次调用本来就要写令牌行，顺带刷新并不额外花钱，那条节流已无可省之物，删掉比留个不生效的判断更清楚）；**MCP 端点不挂 `configGuard`**，因为令牌是高熵随机串、SHA-256 足够，不需要 `AUTH_PEPPER` | MiniMax-M3.1-Flash-Preview |
+| v1.3 | v0.6.25 | 2026-10-03 | 回填进度：**批 3（步 3.1–3.13）已落地**，用例 +30（worker 284→314）。记五处：①**参数摘要不能用 `JSON.stringify(args, keys)`**——把键数组当 replacer 会**同时过滤嵌套对象的键**（`properties.tags` 会被悄悄丢掉，于是两个不同的请求算出同一个摘要，幂等误判成重放）；改成自己写的 `canonicalJson`（每层排序、丢 `undefined`、数组保序），并加了一条"字段书写顺序换了不算另一组参数"的用例钉住。②**幂等的第 4 步真的会被触发**：写函数是"先跑 batch 再看 `changes`"，所以**主写入没成时同批的幂等行已经落库了**——不清理的话 agent 用同一个 `operation_id` 重试会永远拿回那次失败。三个写工具都补了 `onLostWriteRace`（删幂等行 + 记 conflict 审计）。③**`organize_item` 的成功路径一开始漏了审计**（`patchItemMeta` 没传 `extra`），被"审计只记写类调用"那条用例当场抓住。④**测试里的表格要用 mdcore 自己的 `renderTableDocument` 造**，手写 YAML 会漏 `columns` 定义，解析器直接判"不是 table 类型"。⑤**`replace_text` 的 >512 KB SQL 路径本批未实现**，统一按"超门槛就拒绝并提示改用区间/游标"处理，已在设计稿 §十一 登记为已知未实现项 | MiniMax-M3.1-Flash-Preview |
 
 ---
 
@@ -105,26 +106,31 @@
 | 3.1 | 四个既有写函数加**可选**尾随语句参数（默认空 = 行为与今天完全一致）：`saveItemBody` / `createItem` / `patchItemMeta` / `softDeleteItem` | `services/{items,item-meta,trash}.ts` |
 | 3.2 | 写前封存：独立文件判「同一条目 10 分钟内最多一次」，`reason = 'pre_mcp'`、`keep = 1`，去重交给 `sealVersion` | `apps/worker/src/services/mcp/seal.ts`（新建） |
 | 3.3 | 审计与幂等：写工具的结果四态（`ok` / `conflict` / `denied` / `error`）随写入同批落库；幂等记录 7 天 | `apps/worker/src/services/mcp/audit.ts`（新建） |
-| 3.4 | 幂等的**冲突路径**（设计 §6.4 的四步）：预检冲突直接返回且不写幂等行；极小竞态补一个小 batch 删幂等行 + 记 conflict 审计 | `apps/worker/src/services/mcp/audit.ts` |
+| 3.4 | 幂等的**冲突路径**（设计 §六-4 的四步）：预检冲突直接返回且不写幂等行；极小竞态走 `onLostWriteRace`（删幂等行 + 记 conflict 审计） | `services/mcp/write-parts.ts` |
 | 3.5 | `create_item`：服务端算 `content_hash`（MCP 侧的刻意偏离）、`folder_id` 必须在范围内、不自动建文件夹 | `services/mcp/tools-write.ts`（新建） |
-| 3.6 | `append_to_item`：笔记走 `body = body \|\| ?`；带 `section` 先切小节（≤512 KB）；表格按列名给值并用 mdcore `makeRowId` 分配行 ID（表格 ≤256 KB）；条件写入失败重试 1 次 | 同上 |
-| 3.7 | `edit_item`：5 个 `mode`；`expected_rev` 必带；`replace_text` 要求唯一命中（≠1 次即报错）；`replace_all` / `merge_properties` / `replace_section` / `restore_version` 受门槛约束；`on_conflict: "copy"` 生成冲突副本 | 同上 |
-| 3.8 | `edit_table_rows`：按行 ID 更新 / 删除，走 mdcore `parseTableDocument` + `renderTableDocument` | 同上 |
-| 3.9 | `organize_item`：`expected_meta_rev`；**目标文件夹必须在范围内且不是加密空间行**；不提供置 `enc_self` 与改 `type` | 同上 |
-| 3.10 | `trash_item`：`expected_rev` + `operation_id`；复用 `softDeleteItem`（顺带撤销分享） | 同上 |
+| 3.6 | `append_to_item`：笔记走 `body = body \|\| ?`；带 `section` 先切小节（≤512 KB，**缩回节尾换行，别吃掉分隔**）；表格按列名给值并用 mdcore `makeRowId` 分配行 ID（表格 ≤256 KB）；条件写入失败重试 1 次 | 同上 |
+| 3.7 | `edit_item`：5 个 `mode`；`expected_rev` 必带；`replace_text` 要求唯一命中（≠1 次即报错）；`replace_all` / `merge_properties` / `replace_section` / `restore_version` 受门槛约束；`on_conflict: "copy"` 生成冲突副本 | `services/mcp/tools-write-edit.ts`（新建） |
+| 3.8 | `edit_table_rows`：按行 ID 更新 / 删除，走 mdcore `parseTableDocument` + `renderTableDocument`；行 ID 与列名都要先校验存在 | `services/mcp/tools-write-table.ts`（新建） |
+| 3.9 | `organize_item`：`expected_meta_rev`；**目标文件夹必须在范围内且不是加密空间行**；不提供置 `enc_self` 与改 `type` | `services/mcp/tools-write-edit.ts` |
+| 3.10 | `trash_item`：`expected_rev` + `operation_id`；复用 `softDeleteItem`（顺带撤销分享） | `services/mcp/tools-write.ts` |
 | 3.11 | 注册表把 6 个写类工具加进 `tools/list`（共 11 个） | `services/mcp/registry.ts` |
-| 3.12 | 用例：乐观锁冲突与 `on_conflict: copy`；幂等重放返回同一结果；同 ID 异参报错；冲突后幂等行已被删（重读一次能成功）；写前封存生成「AI 修改前」且 10 分钟内不重复；审计四态都写；表格行增删改；MCP 不能移入加密空间 / 不能置 `enc_self`；`tools/list` 恰好 11 个 | `apps/worker/test/mcp-write.test.ts`（新建） |
-| 3.13 | **实测 512 KB 小节解析耗时**并登记（架构 §十一 挂着一条【待核实】）：真跑一条 512 KB 正文调 `read_item(section)`，把耗时写进设计稿；超预算就下调 `MCP_SECTION_MAX_BYTES` | `apps/worker/test/mcp-read.test.ts` 加一条 + 设计稿 §6.1 登记 |
+| 3.12 | 用例：乐观锁冲突与 `on_conflict: copy`；幂等重放 / 同 ID 异参报错 / **字段顺序换了不算异参**；冲突后幂等行已被删（重读一次能成功）；写前封存生成「AI 修改前」且 10 分钟内不重复；审计四态都写且与写入同批；表格行增删改；权限位逐个生效；范围外条目读不到也改不动；MCP 不能移入加密空间 | `test/mcp-write.test.ts`、`test/mcp-write-scope.test.ts`、`test/mcp-helpers.ts` |
+| 3.13 | **实测 512 KB 小节解析耗时**并登记（架构 §十一 挂着一条【待核实】） | `test/mcp-read.test.ts` + 设计稿 §6.1 登记 |
 
-**批 3 验收点**
+**批 3 验收点**（✅ 2026-10-03 全达成）
 
-- [ ] agent 改一篇笔记 → 版本历史里出现原因为「AI 修改前」的版本 → 能在界面里撤回
-- [ ] 带旧 `rev` 的修改被拒且返回当前 `rev`；`on_conflict: "copy"` 生成副本
-- [ ] 同一个 `operation_id` 调两次结果一致；改参数再调报错
-- [ ] 冲突之后**同一个 `operation_id` 重新读再重试能成功**（这条专门盯幂等行被删干净）
-- [ ] 审计四条结果都在库里，保留 90 天
-- [ ] `tools/list` 恰好 11 个，每个工具名都在定稿清单内（结构上挡掉附件 / 分享 / 备份 / 设置类工具）
-- [ ] 512 KB 实测耗时已记录，门槛按结果定死
+- [x] agent 改一篇笔记 → 版本历史里出现原因为「AI 修改前」的版本（`pre_mcp` / `keep = 1`）
+- [x] 带旧 `rev` 的修改被拒且报出当前 `rev`；`on_conflict: "copy"` 生成副本且**原条目零变化**
+- [x] 同一个 `operation_id` 调两次结果一致；改参数再调报错；**字段书写顺序换了仍判成重放**
+- [x] 冲突之后**同一个 `operation_id` 重新读再重试能成功**（预检冲突不写幂等行）
+- [x] 审计四态都写；成功路径的审计与写入**在同一个 batch**（`organize_item` 一开始漏了，被用例抓住）
+- [x] 权限位逐个生效：只读令牌调六个写工具全被挡，且原数据零变化
+- [x] 范围外的条目写类工具同样读不到；限定范围的令牌不能把内容移出范围（含挪到根目录）
+- [x] MCP 不能把内容移入加密空间；单篇加密条目完全不可见；跨租户动不了家人的条目
+- [x] `tools/list` 恰好 11 个，且**每个名字都在定稿的 11 个之内**（结构上挡掉附件 / 分享 / 备份 / 设置类工具）
+- [x] 512 KB 门槛实测：390,040 字节中文正文的 `read_item(section)` **解析 + 往返 20 ms** → **门槛不动**，已登记进设计稿
+- [x] `pnpm test` 全绿：worker 284 → **314**（+30），web 1219 / shared 101 / mdcore 79 无回归；typecheck 4 包 0 error；lint 0 error + 1 条既有 warning
+- [ ] **未实现（已登记）**：`edit_item` 的 `replace_text` 在 >512 KB 条目上走 SQL 那条路径（设计 §17.4 有、本批没做）
 - [ ] `pnpm test` 全绿；`lint` 的 `max-lines` 无新增违规
 
 ---

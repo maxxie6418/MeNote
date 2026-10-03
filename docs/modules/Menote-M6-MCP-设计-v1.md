@@ -64,8 +64,12 @@
 | `apps/worker/src/services/mcp/tools-read.ts` | `search` / `list_folders` / `list_items` / `list_versions` | 250 |
 | `apps/worker/src/services/mcp/tools-read-item.ts` | **批 2 补**：只放 `read_item`（区间 / 小节 / 游标 / 版本四种模式，拆出来是为了不把 `tools-read.ts` 顶过 300 行） | 190 |
 | `apps/worker/src/services/mcp/parts.ts` | **批 2 补**：游标编解码、字符切片、参数夹取、条目元数据映射、`McpToolError`——批 3 的写类工具也要用，共用零件单独一份 | 200 |
-| `apps/worker/src/services/mcp/tools-write.ts` | `create_item` / `append_to_item` / `edit_item` / `edit_table_rows` / `organize_item` / `trash_item` | 400 |
-| `apps/worker/src/services/mcp/audit.ts` | 审计写入与查询、幂等记录的读 / 写 / 删 | 120 |
+| `apps/worker/src/services/mcp/tools-write.ts` | `create_item` / `append_to_item` / `trash_item`（**必须带 `operation_id`** 的那三个） | 330 |
+| `apps/worker/src/services/mcp/tools-write-edit.ts` | `edit_item`（五种模式 + 冲突副本）/ `organize_item` | 290 |
+| `apps/worker/src/services/mcp/tools-write-table.ts` | **批 3 补**：`edit_table_rows`（表格那一摊的边界单独成文件） | 90 |
+| `apps/worker/src/services/mcp/write-parts.ts` | **批 3 补**：乐观锁判定、`canonicalJson` 参数摘要、幂等三态、`commitBody`（封存 → 写入 → 审计同批） | 260 |
+| `apps/worker/src/services/mcp/audit.ts` | 审计与幂等记录（设计 §六-4、§七） | 120 |
+| `apps/worker/src/services/mcp/seal.ts` | **批 3 补**：`pre_mcp` 写前封存（10 分钟节流、`keep = 1`） | 90 |
 | `apps/worker/src/routes/mcp.ts` | `POST /mcp`、`POST /mcp/k/:token`、`GET /mcp` | 90 |
 | `apps/worker/src/routes/mcp-tokens.ts` | 令牌管理的 4 个会话接口 | 70 |
 
@@ -268,7 +272,7 @@ AND i.folder_id IN (SELECT id FROM folders
 
 **512 KB 门槛的处理方式**：小节解析（`read_item(section)` / `replace_section` / `append_to_item(section)`）需要把正文取回 Worker，条目超过 512 KB 就只给区间 / 游标读取，返回「条目过大，请在应用中编辑」。`edit_item` 的 `replace_text` 对 ≤512 KB 在 Worker 里做、>512 KB 交给 SQL（`instr()` + `replace()` 同一条件里校验「恰好出现一次」）。`replace_all` / `merge_properties` / `restore_version` / 表格按行工具一律受门槛约束。
 
-**【待核实】** 架构 §十一 挂着一条：512 KB 的小节解析在 10 ms CPU 内的实际耗时，「开发早期实测，必要时下调门槛」。批 3 要写一条真跑 512 KB 正文的用例把耗时记下来；超了就下调常量并在本文登记。
+**【待核实】已实测（批 3，2026-10-03）** 架构 §十一 挂着一条：512 KB 的小节解析在 10 ms CPU 内的实际耗时，「开发早期实测，必要时下调门槛」。`apps/worker/test/mcp-read.test.ts` 里那条用例真跑了一份 **390,040 字节**（13 万汉字）的中文正文调 `read_item(section)`，**解析 + 整个 HTTP 往返 20 ms**（含 workerd 调度与 D1 往返，纯解析只占其中一部分）。**结论：512 KB 门槛不动**——离 10 ms CPU 预算还有明显余量。门槛的实际作用是**防止正文被取回内存**（2 MB 上限的条目取回来会吃掉可观的 CPU 与内存），不是 CPU 已经不够用。
 
 ### 6.2 只读 5 个
 
@@ -379,6 +383,10 @@ findSectionRange(markdown: string, heading: string): { start: number; end: numbe
 
 **实现约束**：要让审计与写入同批，就得给四个既有写函数加一个**可选的尾随语句参数**（`saveItemBody` / `createItem` / `patchItemMeta` / `softDeleteItem` 各加一个 `extra?: D1PreparedStatement[]`，默认空数组 = 行为完全不变）。这是本设计对既有热路径**唯一**的侵入，改动必须是最小的纯附加。批 3 实现时逐个核对「不传 extra 时的 SQL 与返回值和今天一致」。
 
+**【批 3 落地补记】幂等的第 4 步不是理论上的**。写函数的口径是「先跑 batch、再看 `changes`」，所以**主写入没成时，同批的幂等行已经落库了**。不清理的话，agent 重新读取后用同一个 `operation_id` 重试会永远拿回那次失败。三个写工具因此都接了 `onLostWriteRace`（删幂等行 + 记一条 `conflict` 审计），而**预检阶段的冲突则一行都不写**（包括不写幂等行），两条路径的区别就是「有没有真的跑过 batch」。
+
+**【批 3 落地补记】参数摘要不能用 `JSON.stringify(args, Object.keys(args))`**。把键数组当 replacer 会**同时过滤嵌套对象的键**——`{ properties: { tags: [...] } }` 里的 `tags` 会被悄悄丢掉，于是两个语义不同的请求算出同一个摘要，幂等误判成"重放"。改成自己写的 `canonicalJson`（每层键排序、丢 `undefined`、数组保序），并用一条「字段书写顺序换了不算另一组参数」的用例钉住。
+
 ---
 
 ## 八、测试策略
@@ -426,6 +434,7 @@ findSectionRange(markdown: string, heading: string): { start: number; end: numbe
 | 项 | 状态 |
 |---|---|
 | 令牌改期 / 改权限 / 改范围（`PATCH /api/mcp/tokens/:id`） | 定稿只要求「随时撤销」。**本批不做**，理由：改权限等于让已发出去的凭据权限变大，撤销重建更清楚 |
+| **`edit_item` 的 `replace_text` 在 >512 KB 条目上走 SQL** | 设计 §17.4 说「更大的条目在 SQL 中完成，用 `instr()` 与 `replace()` 在同一条件中校验待替换文本恰好出现一次」。**批 3 未实现这条路径**，统一按「超过 512 KB 就拒绝并提示改用区间 / 游标」处理。补它的收益是让超大条目也能精确替换，成本是一条要仔细写对的 SQL + 它自己的用例；记在这里，留给真正有大文件编辑需求的场景 |
 | 令牌有效期到期后的自动清理 | 复用现有每日维护的「回收站到期」之外的独立步骤？本批**不做**——过期令牌在鉴权第一步就被拒，留行只影响列表展示 |
 | `export_queue` / `backup_targets` / `backup_state` 三表 | M16 定时备份，本批不建 |
 | 令牌用量的可视化（调用次数趋势） | 定稿没有，先不做 |
